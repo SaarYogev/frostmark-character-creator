@@ -43,7 +43,6 @@ export const SKILL_RANK_CUMULATIVE_COSTS = {
   5: 9
 };
 
-// Saving throw proficiency purchase costs.
 export const SAVE_PROFICIENCY_COSTS = {
   Brawn: 1,
   Dexterity: 2,

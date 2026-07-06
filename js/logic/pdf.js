@@ -2,7 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants.js';
 import { getFinalCharacteristics, getCharacteristicModifier, getProficiencyBonus, calculateSpentAccomplishmentPoints } from './state.js';
 
-const TEMPLATE_PDF_URL = '/Frostmark_Character_Sheet_v2.4-2.pdf';
+const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
 async function loadTemplate() {
   const response = await fetch(TEMPLATE_PDF_URL);

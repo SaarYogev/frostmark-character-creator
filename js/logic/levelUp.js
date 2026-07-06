@@ -55,7 +55,6 @@ function getPotentialGain(state, level) {
   return table[tag]?.[level] ?? 0;
 }
 
-// Builds the display-friendly summary of a character's level advancement.
 export function buildLevelSummary(state, originData) {
   const profBonus = getProficiencyBonus(state.level);
   const apGainNote = profBonusIncreased(state.level)

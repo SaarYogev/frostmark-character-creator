@@ -1,7 +1,7 @@
 export const BACKGROUNDS = [
   {
     name: 'Artist/Crafter',
-    skills: ['Academics', 'Arts & Craft', 'Perception', 'Manipulation'], // Academics (tinkering or history or art), plus arts & crafts, perception, manipulation
+    skills: ['Academics', 'Arts & Craft', 'Perception', 'Manipulation'],
     gold: 15,
     equipment: 'A set of artisan tools (your choice), a sketch book, common clothes, 15 gp',
     trait: 'Masterpiece',

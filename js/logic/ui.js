@@ -50,7 +50,7 @@ function renderShell() {
   app.innerHTML = `
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img src="./frostmark-logo.png" alt="Frostmark" class="sidebar-logo">
+        <img src="${import.meta.env.BASE_URL}frostmark-logo.png" alt="Frostmark" class="sidebar-logo">
         <p class="sidebar-subtitle">Character Creator</p>
       </div>
       <nav class="step-nav" id="step-nav"></nav>

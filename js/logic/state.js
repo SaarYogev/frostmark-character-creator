@@ -72,7 +72,6 @@ export function getInitialState() {
     goldAmount: 10, // starting gold, either from background or converted from AP
     languages: [],
 
-    // Features and descriptions
     personalityBackstory: '',
     customFeatures: []
   };
@@ -130,7 +129,6 @@ export function getFinalCharacteristics(state, raceData) {
   const race = raceData.find(r => r.name === state.race);
   if (!race) return final;
 
-  // Apply base race modifiers
   if (race.stats) {
     for (const stat in race.stats) {
       if (stat !== 'choice' && stat !== 'flexiblePoints') {
@@ -139,12 +137,10 @@ export function getFinalCharacteristics(state, raceData) {
     }
   }
 
-  // Wood Elf Cunning/Composure decision path
   if (state.race === 'Elf' && state.subrace === 'Wood' && state.woodElfChoice) {
     final[state.woodElfChoice] += 1;
   }
 
-  // Half-Elf flexible +1 attributes path
   if (state.race === 'Half-elf') {
     if (state.halfElfChoice1 && final[state.halfElfChoice1] !== undefined) {
       final[state.halfElfChoice1] += 1;
@@ -154,7 +150,6 @@ export function getFinalCharacteristics(state, raceData) {
     }
   }
 
-  // Apply subrace modifier
   if (state.subrace && race.subraces) {
     const sub = race.subraces.find(s => s.name === state.subrace);
     if (sub && sub.stats) {
@@ -197,7 +192,6 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     else if (rank === 5) totalSkillsBought += 9;
   }
 
-  // Deduct free points from background (4) and extra skills from primary/secondary AOs
   let freeSkills = 4;
   
   // Calculate extra skill points granted by primary/secondary Ability Origins
@@ -234,8 +228,6 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   // (Weapon groups details will be resolved in AP calculator page)
 
   // 5. Money purchases (1 AP = 25 gp)
-  // Determine if starting gold exceeds background default.
-  // If starting gold exceeds background/custom default, excess is bought with AP.
   let bgGold = 10;
   if (state.background === 'Custom') {
     bgGold = state.customBackground.gold;
@@ -261,7 +253,6 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
 export function importCharacterJSON(jsonString) {
   try {
     const parsed = JSON.parse(jsonString);
-    // basic structure check
     if (!parsed.level || !parsed.baseCharacteristics) {
       throw new Error('Missing core character stats');
     }
