@@ -1,0 +1,30 @@
+# Agent workspace (local only)
+.brain/
+
+# Dependencies
+node_modules/
+
+# Vite build output and cache
+dist/
+.vite/
+
+# Local dev artifacts
+pdf-fields.txt
+inspect-pdf.js
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env files
+.env
+.env.local
+.env.*.local
