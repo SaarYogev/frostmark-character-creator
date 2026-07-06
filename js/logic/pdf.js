@@ -1,8 +1,8 @@
-import { PDFDocument, PDFCheckBox } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants.js';
 import { getFinalCharacteristics, getCharacteristicModifier, getProficiencyBonus, calculateSpentAccomplishmentPoints } from './state.js';
 
-const TEMPLATE_PDF_URL = './Frostmark_Character_Sheet_v2.4-2.pdf';
+const TEMPLATE_PDF_URL = '/Frostmark_Character_Sheet_v2.4-2.pdf';
 
 async function loadTemplate() {
   const response = await fetch(TEMPLATE_PDF_URL);
@@ -128,7 +128,6 @@ function fillSavingThrows(form, finalStats, profBonus, state) {
   }
 }
 
-
 const SKILL_PDF_MAP = {
   'Animal Handling': { prefix: 'AH', stat1field: 'AH Cun', stat2field: 'AH Pre' },
   'Perception':      { prefix: 'Perc', stat1field: 'Perc Int', stat2field: 'Perc Com' },
@@ -144,7 +143,6 @@ const SKILL_PDF_MAP = {
   'Medicine':        { prefix: 'Med', stat1field: 'Med Int', stat2field: 'Med Cun' },
   'Occult':          { prefix: 'Occ', stat1field: 'Occ Int', stat2field: 'Occ Cun' }
 };
-
 
 function calcPassivePerception(finalStats, profBonus, skillRanks) {
   const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
@@ -184,7 +182,6 @@ function fillSkills(form, finalStats, profBonus, state) {
     }
   }
 
-
   const acaFields = state.academicsFields ?? [];
   for (let i = 0; i < Math.min(acaFields.length, 3); i++) {
     const field = acaFields[i];
@@ -213,18 +210,15 @@ function fillCombat(form, state, finalStats) {
   safeSetText(form, 'Current HP', maxHP);
   safeSetText(form, 'Temp HP', '');
 
-  const primaryHD = state.primaryAO !== 'Custom' ? state.primaryAOHD : state.customPrimaryAO?.hd ?? 8;
-  safeSetText(form, 'HD', `d${primaryHD ?? 8}`);
+  const primaryHD = state.primaryAOHD ?? 8;
+  safeSetText(form, 'HD', `d${primaryHD}`);
   safeSetText(form, 'Total HD', state.level);
 
-
   safeSetText(form, 'Speed', state.raceSpeed ? `${state.raceSpeed * 5} ft` : '30 ft');
-
 
   const dexMod = getCharacteristicModifier(finalStats.Dexterity ?? 10);
   const armorAC = computeArmorAC(state, finalStats);
   safeSetText(form, 'Armor Class', armorAC);
-
 
   const weapons = state.equipmentList?.filter(i => i.isWeapon) ?? [];
   weapons.slice(0, 4).forEach((w, idx) => {
@@ -234,7 +228,6 @@ function fillCombat(form, state, finalStats) {
     safeSetText(form, `Weapon ${n} Range`, w.range ?? '');
     safeSetText(form, `Weapon ${n} Damage`, w.damage ?? '');
   });
-
 
   const armors = state.equipmentList?.filter(i => i.isArmor) ?? [];
   armors.slice(0, 3).forEach((a, idx) => {
@@ -260,7 +253,6 @@ function fillSpellcasting(form, state, finalStats, profBonus) {
   const spellcasting = state.spellcasting;
   if (!spellcasting || (!spellcasting.cantrips?.length && !spellcasting.spells?.length)) return;
 
-
   const castingAbility = resolveSpellcastingAbility(state);
   const castMod = getCharacteristicModifier(finalStats[castingAbility] ?? 10);
   const spellSaveDC = 8 + profBonus + castMod;
@@ -274,7 +266,6 @@ function fillSpellcasting(form, state, finalStats, profBonus) {
   spellcasting.cantrips?.slice(0, 5).forEach((c, i) => {
     safeSetText(form, `Cantrip ${i + 1}`, typeof c === 'string' ? c : c.name);
   });
-
 
   const byLevel = {};
   (spellcasting.spells ?? []).forEach(sp => {
