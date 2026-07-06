@@ -564,6 +564,10 @@ body::before {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 
+.subrace-details-card {
+  margin-top: 12px;
+}
+
 .card-option {
   background: var(--bg-card);
   border: 1.5px solid var(--border-subtle);

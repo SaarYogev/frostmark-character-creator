@@ -261,12 +261,12 @@ function renderRaceStep(container) {
     <div class="card-selector" id="race-selector">
       ${raceNames.map(name => buildRaceCard(name)).join('')}
     </div>
+    <div id="race-details" class="info-card" style="display: ${state.race && state.race !== 'Custom' ? 'block' : 'none'}">
+      ${selectedRace ? buildRaceDetails(selectedRace) : ''}
+    </div>
     <div id="subrace-section" class="section-block" style="display: ${selectedRace?.subraces ? 'block' : 'none'}"></div>
     <div id="custom-race-section" class="section-block" style="display: ${state.race === 'Custom' ? 'block' : 'none'}">
       ${buildCustomRaceForm()}
-    </div>
-    <div id="race-details" class="info-card" style="display: ${state.race && state.race !== 'Custom' ? 'block' : 'none'}">
-      ${selectedRace ? buildRaceDetails(selectedRace) : ''}
     </div>
   `;
 
@@ -324,6 +324,20 @@ function buildRaceDetails(race) {
   `;
 }
 
+function buildSelectedSubraceDetails(race) {
+  const subrace = race.subraces?.find(sub => sub.name === state.subrace);
+  if (!subrace) return '';
+
+  const traitList = subrace.traits?.map(t => `<li><strong>${t.name}</strong>: ${t.desc}</li>`).join('') ?? '';
+  return `
+    <div class="info-card subrace-details-card">
+      <h3>${subrace.name} Features</h3>
+      <p>Bonus: ${buildStatBonusSummary(subrace.stats)}</p>
+      <ul class="trait-list">${traitList || '<li>No additional features listed.</li>'}</ul>
+    </div>
+  `;
+}
+
 function renderSubraceSection(container, race) {
   const section = container.querySelector('#subrace-section');
   if (!section) return;
@@ -339,6 +353,7 @@ function renderSubraceSection(container, race) {
       `).join('')}
     </div>
     ${buildSubraceChoiceInput(race)}
+    ${buildSelectedSubraceDetails(race)}
   `;
 
   section.querySelectorAll('.subrace-card').forEach(card => {

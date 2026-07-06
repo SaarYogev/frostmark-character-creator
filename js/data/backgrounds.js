@@ -80,6 +80,15 @@ export const BACKGROUNDS = [
     desc: 'You hunt wild game for food and hides.'
   },
   {
+    name: 'Military Engineer',
+    originRestriction: 'Malgrave',
+    skills: ['Academics', 'Arts & Craft'],
+    gold: 10,
+    equipment: 'Memorabilia from the field, two sets of tools, common clothes, 10 gp',
+    trait: 'My Religion is Efficiency',
+    desc: 'When building something, you can decrease material weight, time, or coin cost by 25%. Starts with Academics (Engineering) rank 2, Arts & Craft (choice) rank 2, and 1 extra skill point.'
+  },
+  {
     name: 'Noble',
     skills: ['Academics', 'Persuasion', 'Leadership', 'Manipulation'],
     gold: 25,
@@ -119,6 +128,15 @@ export const BACKGROUNDS = [
     equipment: 'A belaying pin, silk rope, traveler clothes, 10 gp',
     trait: 'Ship\'s Passage',
     desc: 'You worked on ships traversing the elemental seas.'
+  },
+  {
+    name: 'Sacred Arms Agent',
+    originRestriction: 'Crowhill',
+    skills: [],
+    gold: 10,
+    equipment: 'Two tools or kits of your choice, common clothes, traveler\'s clothes, fine clothes, 10 gp',
+    trait: 'Plucked from all Paths of Life',
+    desc: 'Distribute 4 skill points freely for your agent path. While in service, you have comfortable income and jurisdiction in Applegate and Crowhill; permission is required in Armathain, and Beornhelm is hostile.'
   },
   {
     name: 'Soldier',
