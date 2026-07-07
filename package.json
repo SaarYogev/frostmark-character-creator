@@ -1,0 +1,23 @@
+{
+  "name": "character-creator",
+  "version": "1.0.0",
+  "description": "Frostmark RPG Character Creator",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0",
+    "vite": "^5.0.0",
+    "vitest": "^4.1.10"
+  }
+}
