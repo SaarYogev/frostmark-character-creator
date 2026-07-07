@@ -280,6 +280,9 @@ function fillSpellcasting(form, state, finalStats, profBonus) {
     spellsAtLevel.slice(0, maxSlots).forEach((name, i) => {
       safeSetText(form, `Level ${level} Slot ${i + 1}`, name);
     });
+
+    const slotsPurchased = state.spellcasting?.slots?.[level] ?? 0;
+    safeSetText(form, `Level ${level} slot total`, String(slotsPurchased));
   }
 }
 
@@ -292,7 +295,7 @@ function resolveSpellcastingAbility(state) {
   return 'Presence';
 }
 
-function getSpellSlotsForLevel(level) {
+export function getSpellSlotsForLevel(level) {
   const slotCounts = [0, 10, 9, 8, 11, 7, 5, 6, 6, 6];
   return slotCounts[level] ?? 0;
 }

@@ -8,19 +8,21 @@ import { BACKGROUNDS } from '../js/data/backgrounds.js';
 
 
 test('exportToPDF fills fields without throwing runtime errors', async () => {
-  // Read local PDF template
   const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
   expect(fs.existsSync(pdfPath)).toBe(true);
   const pdfBuffer = fs.readFileSync(pdfPath);
 
-  // Stub fetch to return the local PDF file
+  /*
+   * Workaround: Vitest runs in a Node.js environment without a running Vite dev server.
+   * To prevent exportToPDF from failing on the HTTP fetch request for the template PDF,
+   * we stub globalThis.fetch to return the local template file content directly.
+   */
   const originalFetch = globalThis.fetch;
   globalThis.fetch = vi.fn().mockImplementation(async (url) => {
     return {
       ok: true,
       status: 200,
       arrayBuffer: async () => {
-        // Return ArrayBuffer of the file
         return pdfBuffer.buffer.slice(
           pdfBuffer.byteOffset,
           pdfBuffer.byteOffset + pdfBuffer.byteLength
@@ -30,7 +32,6 @@ test('exportToPDF fills fields without throwing runtime errors', async () => {
   });
 
   try {
-    // Generate a mock state
     const state = getInitialState();
     state.characterName = 'Test Character';
     state.playerName = 'Test Player';
@@ -84,14 +85,11 @@ test('exportToPDF fills fields without throwing runtime errors', async () => {
       ]
     };
 
-    // Run exportToPDF
     const pdfBytes = await exportToPDF(state, RACES, BACKGROUNDS);
 
-    // Verify we got a non-empty Uint8Array back
     expect(pdfBytes).toBeInstanceOf(Uint8Array);
     expect(pdfBytes.length).toBeGreaterThan(0);
   } finally {
-    // Restore fetch
     globalThis.fetch = originalFetch;
   }
 });

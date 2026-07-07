@@ -1,4 +1,4 @@
-import { CHARACTERISTICS, SKILLS, ACADEMICS_FIELDS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants.js';
+import { CHARACTERISTICS, SKILLS, ACADEMICS_FIELDS, SKILL_RANK_CUMULATIVE_COSTS, SAVE_PROFICIENCY_COSTS } from '../data/constants.js';
 import { RACES } from '../data/races.js';
 import { BACKGROUNDS } from '../data/backgrounds.js';
 import { ORIGINS } from '../data/origins.js';
@@ -16,9 +16,11 @@ import {
   getCharacteristicModifier,
   calculateSpentAccomplishmentPoints,
   exportCharacterJSON,
-  importCharacterJSON
+  importCharacterJSON,
+  calculatePotentialGained,
+  calculateHPBonus
 } from './state.js';
-import { exportToPDF, downloadPDF } from './pdf.js';
+import { exportToPDF, downloadPDF, getSpellSlotsForLevel } from './pdf.js';
 import { levelUp } from './levelUp.js';
 
 // ── Wizard Step Definitions ─────────────────────────────────────────────────
@@ -268,6 +270,30 @@ function renderRaceStep(container) {
     <div id="custom-race-section" class="section-block" style="display: ${state.race === 'Custom' ? 'block' : 'none'}">
       ${buildCustomRaceForm()}
     </div>
+    
+    <div class="section-block manual-races-block" style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+      <h3 class="section-title">Manual Stat Allocation Override</h3>
+      <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+        <input type="checkbox" id="manual-races-check" ${state.manualRaces ? 'checked' : ''}>
+        <strong>Customize stat bonuses manually (+2 to one stat, +1 to another)</strong>
+      </label>
+      <div id="manual-races-selectors" style="display: ${state.manualRaces ? 'flex' : 'none'}; gap: 1.5rem; margin-top: 1rem;">
+        <div class="form-group" style="flex: 1;">
+          <label style="display: block; margin-bottom: 0.25rem;">+2 Attribute</label>
+          <select id="manual-race-plus2" class="select" style="width: 100%;">
+            <option value="">-- Choose --</option>
+            ${CHARACTERISTICS.map(c => `<option value="${c.key}" ${state.racialStatOverrides?.[c.key] === 2 ? 'selected' : ''}>${c.key}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label style="display: block; margin-bottom: 0.25rem;">+1 Attribute</label>
+          <select id="manual-race-plus1" class="select" style="width: 100%;">
+            <option value="">-- Choose --</option>
+            ${CHARACTERISTICS.map(c => `<option value="${c.key}" ${state.racialStatOverrides?.[c.key] === 1 ? 'selected' : ''}>${c.key}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
   `;
 
   container.querySelectorAll('.race-card').forEach(card => {
@@ -282,6 +308,35 @@ function renderRaceStep(container) {
       updateSummary();
     });
   });
+
+  container.querySelector('#manual-races-check')?.addEventListener('change', e => {
+    state.manualRaces = e.target.checked;
+    renderRaceStep(container);
+    updateSummary();
+  });
+
+  const handleOverrideChange = () => {
+    const p2 = container.querySelector('#manual-race-plus2')?.value || '';
+    const p1 = container.querySelector('#manual-race-plus1')?.value || '';
+    
+    if (p2 && p2 === p1) {
+      showToast('Cannot select the same attribute for both +2 and +1 bonuses.', 'error');
+      // Reset the duplicate choice in the DOM and logic
+      container.querySelector('#manual-race-plus1').value = '';
+      return;
+    }
+
+    const overrides = {
+      Brawn: 0, Dexterity: 0, Vitality: 0, Intelligence: 0, Cunning: 0, Resolve: 0, Presence: 0, Manipulation: 0, Composure: 0
+    };
+    if (p2) overrides[p2] = 2;
+    if (p1) overrides[p1] = 1;
+    state.racialStatOverrides = overrides;
+    updateSummary();
+  };
+
+  container.querySelector('#manual-race-plus2')?.addEventListener('change', handleOverrideChange);
+  container.querySelector('#manual-race-plus1')?.addEventListener('change', handleOverrideChange);
 
   if (selectedRace?.subraces) {
     renderSubraceSection(container, selectedRace);
@@ -816,23 +871,38 @@ function renderSkillsStep(container) {
   const spentSkillPoints = computeSpentSkillPoints();
   const remaining = freeSkillPoints - spentSkillPoints;
 
+  const apLimit = getTotalAccomplishmentPointsLimit(state);
+  const { totalSpent } = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+  const apRemaining = apLimit - totalSpent;
+
+  const bg = BACKGROUNDS.find(b => b.name === state.background);
+  const restrictSkills = bg?.restrictSkills ?? null;
+
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">🎯 Skills</h2>
       <p class="step-desc">Assign skill ranks using Accomplishment Points. Each rank multiplies your proficiency bonus.</p>
     </div>
+    
+    <div class="manual-override-control" style="margin-bottom: 1.5rem;">
+      <label class="checkbox-label" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="manual-skills-check" ${state.manualSkills ? 'checked' : ''}>
+        <strong>Manual Skills Override (Ignore AP limits/allow custom distribution)</strong>
+      </label>
+    </div>
+
     <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}">
       <span>Free Skill Points Used:</span>
       <strong id="skill-points-used">${spentSkillPoints}</strong>
       <span>/ ${freeSkillPoints}</span>
-      <span class="tracker-note">(4 from BG + ${freeSkillPoints - 4} from AO${remaining < 0 ? ' — extra will cost AP' : ''})</span>
+      <span class="tracker-note">(${bg?.freeSkillPoints ?? 4} from BG + ${freeSkillPoints - (bg?.freeSkillPoints ?? 4)} from AO${remaining < 0 ? ' — extra will cost AP' : ''})</span>
     </div>
     <div class="skills-grid" id="skills-grid">
-      ${SKILLS.map(skill => buildSkillRow(skill, finalStats, profBonus)).join('')}
+      ${SKILLS.map(skill => buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, remaining, restrictSkills)).join('')}
     </div>
     <div class="section-divider">Academics (choose up to 3 fields)</div>
     <div id="academics-section">
-      ${buildAcademicsSection(finalStats, profBonus)}
+      ${buildAcademicsSection(finalStats, profBonus, bg, apRemaining, remaining, restrictSkills)}
     </div>
   `;
 
@@ -841,11 +911,23 @@ function renderSkillsStep(container) {
     container.querySelector(`#skill-plus-${skill.key}`)?.addEventListener('click', () => adjustSkill(skill.name, 1, container));
   });
 
-  bindAcademicsEvents(container, finalStats, profBonus);
+  container.querySelector('#manual-skills-check')?.addEventListener('change', e => {
+    state.manualSkills = e.target.checked;
+    renderSkillsStep(container);
+    updateSummary();
+  });
+
+  bindAcademicsEvents(container, finalStats, profBonus, bg);
 }
 
 function computeFreeSkillPoints() {
-  const bgFree = 4;
+  let bgFree = 4;
+  if (state.background === 'Custom') {
+    bgFree = state.customBackground?.skills?.length ?? 4;
+  } else if (state.background) {
+    const bg = BACKGROUNDS.find(b => b.name === state.background);
+    if (bg) bgFree = bg.freeSkillPoints ?? 4;
+  }
   const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
   const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
   const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
@@ -855,19 +937,27 @@ function computeFreeSkillPoints() {
 
 function computeSpentSkillPoints() {
   let total = 0;
+  const bg = BACKGROUNDS.find(b => b.name === state.background);
+  const builtInRanks = bg?.builtInRanks ?? {};
+  const builtInAcademics = bg?.builtInAcademics ?? {};
+
   for (const sk in state.skillRanks) {
     const rank = state.skillRanks[sk] ?? 0;
-    total += SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0;
+    const builtIn = builtInRanks[sk] ?? 0;
+    total += Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
   }
   for (const sk in state.academicsRanks) {
     const rank = state.academicsRanks[sk] ?? 0;
-    total += SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0;
+    const builtIn = builtInAcademics[sk] ?? 0;
+    total += Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
   }
   return total;
 }
 
-function buildSkillRow(skill, finalStats, profBonus) {
+function buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, freeRemaining, restrictSkills) {
   const rank = state.skillRanks?.[skill.name] ?? 0;
+  const builtInRank = bg?.builtInRanks?.[skill.name] ?? 0;
+
   const [stat1, stat2] = skill.stats;
   const mod1 = getCharacteristicModifier(finalStats[stat1] ?? 10);
   const mod2 = stat2 ? getCharacteristicModifier(finalStats[stat2] ?? 10) : null;
@@ -876,21 +966,42 @@ function buildSkillRow(skill, finalStats, profBonus) {
   const total1 = mod1 + rankBonus;
   const total2 = mod2 !== null ? mod2 + rankBonus : null;
 
+  const nextRank = rank + 1;
+  const currentCost = SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0;
+  const nextCost = SKILL_RANK_CUMULATIVE_COSTS[nextRank] ?? 0;
+  const incrementalCost = nextCost - currentCost;
+
+  const isRestrictedSkill = restrictSkills && restrictSkills.includes(skill.name);
+  const costsAP = (restrictSkills && !isRestrictedSkill) || (freeRemaining <= 0);
+
+  const canAfford = !costsAP || (apRemaining >= incrementalCost);
+  const plusDisabled = rank >= 5 || (!canAfford && !state.manualSkills);
+
+  let plusTooltip = '';
+  if (rank >= 5) {
+    plusTooltip = 'Max rank 5 reached';
+  } else if (!canAfford && !state.manualSkills) {
+    plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
+  }
+
   return `
     <div class="skill-row" id="skill-row-${skill.key}">
-      <div class="skill-name">${skill.name}</div>
+      <div class="skill-name">
+        ${skill.name}
+        ${builtInRank > 0 ? `<span class="built-in-badge" style="background: rgba(148,161,255,0.15); color: var(--accent-color); padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem;" title="Starting rank from background">Starting: ${builtInRank}</span>` : ''}
+      </div>
       <div class="skill-stats">
         <span class="stat-tag">${stat1.slice(0, 3)}: ${total1 >= 0 ? '+' : ''}${total1}</span>
         ${total2 !== null ? `<span class="stat-tag">${stat2.slice(0, 3)}: ${total2 >= 0 ? '+' : ''}${total2}</span>` : ''}
       </div>
       <div class="rank-controls">
-        <button class="rank-btn" id="skill-minus-${skill.key}" ${rank <= 0 ? 'disabled' : ''}>−</button>
+        <button class="rank-btn" id="skill-minus-${skill.key}" ${rank <= builtInRank ? 'disabled' : ''}>−</button>
         <div class="rank-pips">
           ${[1,2,3,4,5].map(n => `<div class="pip ${n <= rank ? 'filled' : ''}"></div>`).join('')}
         </div>
-        <button class="rank-btn" id="skill-plus-${skill.key}" ${rank >= 5 ? 'disabled' : ''}>+</button>
+        <button class="rank-btn" id="skill-plus-${skill.key}" ${plusDisabled ? 'disabled' : ''} ${plusTooltip ? `title="${plusTooltip}"` : ''}>+</button>
       </div>
-      <div class="skill-cost">Cost: ${SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0} pts</div>
+      <div class="skill-cost">Cost: ${currentCost} pts</div>
     </div>
   `;
 }
@@ -905,16 +1016,19 @@ function rankBonusValue(profBonus, rank) {
 }
 
 function adjustSkill(skillName, delta, container) {
-  const current = state.skillRanks?.[skillName] ?? 0;
-  const next = Math.max(0, Math.min(5, current + delta));
+  const bg = BACKGROUNDS.find(b => b.name === state.background);
+  const builtInRank = bg?.builtInRanks?.[skillName] ?? 0;
+  const current = state.skillRanks?.[skillName] ?? builtInRank;
+  const next = Math.max(builtInRank, Math.min(5, current + delta));
   state.skillRanks = { ...state.skillRanks, [skillName]: next };
   renderSkillsStep(container);
   updateSummary();
 }
 
-function buildAcademicsSection(finalStats, profBonus) {
+function buildAcademicsSection(finalStats, profBonus, bg, apRemaining, freeRemaining, restrictSkills) {
   const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
   const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
+  const builtInAcademics = bg?.builtInAcademics ?? {};
 
   return `
     <p class="form-hint">Select academic fields and assign ranks. The ranks use the same cost structure as skills.</p>
@@ -922,21 +1036,43 @@ function buildAcademicsSection(finalStats, profBonus) {
       ${ACADEMICS_FIELDS.map(field => {
         const isSelected = (state.academicsFields ?? []).includes(field);
         const rank = state.academicsRanks?.[field] ?? 0;
+        const builtInRank = builtInAcademics[field] ?? 0;
         const rankBonus = rankBonusValue(profBonus, rank);
+
+        const nextRank = rank + 1;
+        const currentCost = SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0;
+        const nextCost = SKILL_RANK_CUMULATIVE_COSTS[nextRank] ?? 0;
+        const incrementalCost = nextCost - currentCost;
+
+        const costsAP = (restrictSkills !== null) || (freeRemaining <= 0);
+        const canAfford = !costsAP || (apRemaining >= incrementalCost);
+        const plusDisabled = rank >= 5 || (!canAfford && !state.manualSkills);
+
+        let plusTooltip = '';
+        if (rank >= 5) {
+          plusTooltip = 'Max rank 5 reached';
+        } else if (!canAfford && !state.manualSkills) {
+          plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
+        }
+
         return `
           <div class="academic-entry ${isSelected ? 'selected' : ''}" id="aca-entry-${field}">
             <div class="academic-header">
               <input type="checkbox" id="aca-check-${field}" ${isSelected ? 'checked' : ''} 
-                     ${!isSelected && (state.academicsFields?.length ?? 0) >= 3 ? 'disabled' : ''}>
-              <label for="aca-check-${field}" class="academic-name">${field}</label>
+                     ${!isSelected && (state.academicsFields?.length ?? 0) >= 3 && builtInRank === 0 ? 'disabled' : ''}
+                     ${builtInRank > 0 ? 'disabled title="Built-in starting field from background"' : ''}>
+              <label for="aca-check-${field}" class="academic-name">
+                ${field}
+                ${builtInRank > 0 ? `<span class="built-in-badge" style="background: rgba(148,161,255,0.15); color: var(--accent-color); padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem;">Starting: ${builtInRank}</span>` : ''}
+              </label>
             </div>
             ${isSelected ? `
               <div class="rank-controls">
-                <button class="rank-btn" id="aca-minus-${field}" ${rank <= 0 ? 'disabled' : ''}>−</button>
+                <button class="rank-btn" id="aca-minus-${field}" ${rank <= builtInRank ? 'disabled' : ''}>−</button>
                 <div class="rank-pips">
                   ${[1,2,3,4,5].map(n => `<div class="pip ${n <= rank ? 'filled' : ''}"></div>`).join('')}
                 </div>
-                <button class="rank-btn" id="aca-plus-${field}" ${rank >= 5 ? 'disabled' : ''}>+</button>
+                <button class="rank-btn" id="aca-plus-${field}" ${plusDisabled ? 'disabled' : ''} ${plusTooltip ? `title="${plusTooltip}"` : ''}>+</button>
               </div>
               <span class="stat-tag">Int: ${intMod + rankBonus >= 0 ? '+' : ''}${intMod + rankBonus} | Cun: ${cunMod + rankBonus >= 0 ? '+' : ''}${cunMod + rankBonus}</span>
             ` : ''}
@@ -947,9 +1083,11 @@ function buildAcademicsSection(finalStats, profBonus) {
   `;
 }
 
-function bindAcademicsEvents(container, finalStats, profBonus) {
+function bindAcademicsEvents(container, finalStats, profBonus, bg) {
   ACADEMICS_FIELDS.forEach(field => {
     container.querySelector(`#aca-check-${field}`)?.addEventListener('change', e => {
+      const builtInAcademics = bg?.builtInAcademics ?? {};
+      const builtInRank = builtInAcademics[field] ?? 0;
       if (e.target.checked) {
         if ((state.academicsFields?.length ?? 0) < 3) {
           state.academicsFields = [...(state.academicsFields ?? []), field];
@@ -980,31 +1118,51 @@ function bindAcademicsEvents(container, finalStats, profBonus) {
 
 function renderProficienciesStep(container) {
   const apLimit = getTotalAccomplishmentPointsLimit(state);
-  const { totalSpent, skillsSpent } = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-  const overFreeSkills = Math.max(0, computeSpentSkillPoints() - computeFreeSkillPoints());
-  const totalAPSpent = totalSpent + overFreeSkills;
-  const remaining = apLimit - totalAPSpent;
+  const { totalSpent } = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+  const remaining = apLimit - totalSpent;
+
+  // Helper to get armor AP cost
+  const getArmorCost = (prof) => {
+    let cost = 0;
+    if (prof.Heavy) cost = 3;
+    else if (prof.Medium) cost = 2;
+    else if (prof.Light) cost = 1;
+    if (prof.Shields) cost += 1;
+    return cost;
+  };
 
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">🛡️ Proficiencies & Accomplishment Points</h2>
       <p class="step-desc">Use AP to buy saving throw proficiencies, armor/weapon proficiencies, and extra gold.</p>
     </div>
-    <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}">
-      <span>AP Remaining:</span>
-      <strong>${remaining}</strong>
-      <span>/ ${apLimit}</span>
+    
+    <div class="manual-override-control" style="margin-bottom: 1.5rem;">
+      <label class="checkbox-label" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="manual-proficiencies-check" ${state.manualProficiencies ? 'checked' : ''}>
+        <strong>Manual Proficiencies Override (Ignore AP limits/allow custom distribution)</strong>
+      </label>
     </div>
 
     <div class="section-block">
       <h3 class="section-title">Saving Throw Proficiencies</h3>
       <div class="proficiency-grid">
-        ${CHARACTERISTICS.map(c => `
-          <label class="prof-toggle ${state.savingThrowsProficient?.[c.key] ? 'active' : ''}" id="save-toggle-${c.key}">
-            <input type="checkbox" id="save-check-${c.key}" ${state.savingThrowsProficient?.[c.key] ? 'checked' : ''}>
-            ${c.key}
-          </label>
-        `).join('')}
+        ${CHARACTERISTICS.map(c => {
+          const isChecked = state.savingThrowsProficient?.[c.key];
+          const incrementalCost = SAVE_PROFICIENCY_COSTS[c.key] || 1;
+          const canAfford = isChecked || (remaining >= incrementalCost);
+          const isDisabled = !isChecked && !canAfford && !state.manualProficiencies;
+          const tooltip = isDisabled ? `Requires ${incrementalCost} AP, but you only have ${remaining} remaining. Set to manual to bypass.` : '';
+          
+          return `
+            <label class="prof-toggle ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" 
+                   id="save-toggle-${c.key}" 
+                   ${tooltip ? `title="${tooltip}"` : ''}>
+              <input type="checkbox" id="save-check-${c.key}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+              ${c.key}
+            </label>
+          `;
+        }).join('')}
       </div>
     </div>
 
@@ -1012,12 +1170,24 @@ function renderProficienciesStep(container) {
       <h3 class="section-title">Armor Proficiencies</h3>
       <p class="form-hint">Light=1 AP, Medium=2 AP, Heavy=3 AP, Shields=1 AP</p>
       <div class="proficiency-grid">
-        ${['Light', 'Medium', 'Heavy', 'Shields'].map(a => `
-          <label class="prof-toggle ${state.armorProficiencies?.[a] ? 'active' : ''}" id="armor-toggle-${a}">
-            <input type="checkbox" id="armor-check-${a}" ${state.armorProficiencies?.[a] ? 'checked' : ''}>
-            ${a}
-          </label>
-        `).join('')}
+        ${['Light', 'Medium', 'Heavy', 'Shields'].map(a => {
+          const isChecked = state.armorProficiencies?.[a];
+          const currentCost = getArmorCost(state.armorProficiencies);
+          const nextCost = getArmorCost({ ...state.armorProficiencies, [a]: true });
+          const incrementalCost = Math.max(0, nextCost - currentCost);
+          const canAfford = isChecked || (remaining >= incrementalCost);
+          const isDisabled = !isChecked && !canAfford && !state.manualProficiencies;
+          const tooltip = isDisabled ? `Requires ${incrementalCost} AP, but you only have ${remaining} remaining. Set to manual to bypass.` : '';
+
+          return `
+            <label class="prof-toggle ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" 
+                   id="armor-toggle-${a}" 
+                   ${tooltip ? `title="${tooltip}"` : ''}>
+              <input type="checkbox" id="armor-check-${a}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+              ${a}
+            </label>
+          `;
+        }).join('')}
       </div>
     </div>
 
@@ -1056,6 +1226,12 @@ function renderProficienciesStep(container) {
     });
   });
 
+  container.querySelector('#manual-proficiencies-check')?.addEventListener('change', e => {
+    state.manualProficiencies = e.target.checked;
+    renderProficienciesStep(container);
+    updateSummary();
+  });
+
   container.querySelector('#extra-languages')?.addEventListener('input', e => {
     state.languages = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
   });
@@ -1069,41 +1245,191 @@ function renderProficienciesStep(container) {
 
 // ── Step: Spellcasting ────────────────────────────────────────────────────────
 
+// ── Step: Spellcasting ────────────────────────────────────────────────────────
+
 function renderSpellcastingStep(container) {
+  if (!state.spellcasting) state.spellcasting = {};
+  state.spellcasting.cantrips = state.spellcasting.cantrips ?? [];
+  state.spellcasting.spells = state.spellcasting.spells ?? [];
+  state.spellcasting.slots = state.spellcasting.slots ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+
+  const selectedCantrips = state.spellcasting.cantrips;
+  const selectedSpells = state.spellcasting.spells;
+
+  // Calculate Potential spent
+  let potentialSpent = selectedCantrips.length * 10;
+  selectedSpells.forEach(s => {
+    potentialSpent += 10 * (s.level ?? 1);
+  });
+  for (let lvl = 1; lvl <= 9; lvl++) {
+    const qty = state.spellcasting.slots[lvl] ?? 0;
+    potentialSpent += qty * 10 * lvl;
+  }
+
+  const potentialLimit = state.potentialGained ?? 0;
+  const potentialRemaining = potentialLimit - potentialSpent;
+
   container.innerHTML = `
     <div class="step-header">
-      <h2 class="step-title">🔮 Spellcasting</h2>
-      <p class="step-desc">Select cantrips and spells you know. You can add custom spells not listed here.</p>
+      <h2 class="step-title">🔮 Spellcasting & Slots</h2>
+      <p class="step-desc">Select cantrips and spells you know. You must spend Potential to buy spell slots.</p>
     </div>
+    
+    <div class="manual-override-control" style="margin-bottom: 1.5rem;">
+      <label class="checkbox-label" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="manual-spells-check" ${state.manualSpells ? 'checked' : ''}>
+        <strong>Manual Spellcasting Override (Ignore Potential limits)</strong>
+      </label>
+    </div>
+
+    <div style="display: flex; gap: 1.5rem; flex-direction: column; margin-bottom: 1.5rem;">
+      <div class="point-buy-tracker ${potentialRemaining < 0 ? 'over-budget' : ''}" style="margin-bottom: 0;">
+        <span>Potential Remaining:</span>
+        <strong>${potentialRemaining}</strong>
+        <span>/ ${potentialLimit}</span>
+      </div>
+
+      <div class="spell-slots-budget" style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 0.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.85rem;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+      ">
+        <div style="text-align: center; border-right: 1px solid var(--border-color);">
+          <div style="font-size: 0.7rem; color: #a0a5c0; text-transform: uppercase;">Cantrips</div>
+          <div style="font-size: 1rem; font-weight: bold; color: ${selectedCantrips.length > 5 ? '#eb5e55' : '#ffffff'};">
+            ${selectedCantrips.length} / 5
+          </div>
+        </div>
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => {
+          const slotsPurchased = state.spellcasting.slots[lvl] ?? 0;
+          const used = selectedSpells.filter(s => (s.level ?? 1) === lvl).length;
+          return `
+            <div style="text-align: center;">
+              <div style="font-size: 0.7rem; color: #a0a5c0;">Level ${lvl} Slots</div>
+              <div style="font-size: 0.9rem; font-weight: bold; color: ${used > slotsPurchased ? '#eb5e55' : '#ffffff'};">
+                ${used} / ${slotsPurchased}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="section-block">
+      <h3 class="section-title">Buy Spell Slots</h3>
+      <p class="form-hint">Cost: 10 Potential * Spell Level. You cannot exceed the physical sheet slot limit.</p>
+      <div class="spell-slots-buying-grid" style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      ">
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => {
+          const limit = getSpellSlotsForLevel(lvl);
+          const current = state.spellcasting.slots[lvl] ?? 0;
+          const cost = 10 * lvl;
+          const plusDisabled = current >= limit || (potentialRemaining < cost && !state.manualSpells);
+          const minusDisabled = current <= 0;
+          
+          let tooltip = '';
+          if (current >= limit) {
+            tooltip = `Max slots (${limit}) reached.`;
+          } else if (potentialRemaining < cost && !state.manualSpells) {
+            tooltip = `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+          }
+          
+          return `
+            <div class="slot-buy-row" style="
+              background: rgba(255,255,255,0.02);
+              border: 1px solid var(--border-color);
+              border-radius: 6px;
+              padding: 0.5rem 0.75rem;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+            }">
+              <div>
+                <strong style="display: block; font-size: 0.9rem;">Level ${lvl} Slot</strong>
+                <span style="font-size: 0.75rem; color: #a0a5c0;">Cost: ${cost} Pot</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <button class="rank-btn slot-minus" data-level="${lvl}" ${minusDisabled ? 'disabled' : ''}>−</button>
+                <span style="font-weight: bold; font-size: 1rem; min-width: 2.5rem; text-align: center;">${current} / ${limit}</span>
+                <button class="rank-btn slot-plus" data-level="${lvl}" ${plusDisabled ? 'disabled' : ''} ${tooltip ? `title="${tooltip}"` : ''}>+</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
     <div class="section-block">
       <h3 class="section-title">Cantrips (up to 5)</h3>
       <div class="spell-list" id="cantrip-list">
-        ${buildSpellList('cantrips', CANTRIPS ?? [])}
+        ${buildSpellList('cantrips', CANTRIPS ?? [], potentialRemaining, selectedSpells, selectedCantrips)}
       </div>
       <button class="btn btn-ghost btn-sm" id="add-custom-cantrip">+ Add Custom Cantrip</button>
     </div>
     <div class="section-block">
       <h3 class="section-title">Spells</h3>
       <div class="spell-list" id="spell-list">
-        ${buildSpellList('spells', SPELLS ?? [])}
+        ${buildSpellList('spells', SPELLS ?? [], potentialRemaining, selectedSpells, selectedCantrips)}
       </div>
       <button class="btn btn-ghost btn-sm" id="add-custom-spell">+ Add Custom Spell</button>
     </div>
   `;
 
-  bindSpellEvents(container);
+  bindSpellEvents(container, potentialRemaining);
 }
 
-function buildSpellList(type, allSpells) {
-  const selected = type === 'cantrips'
-    ? (state.spellcasting?.cantrips ?? []).map(s => typeof s === 'string' ? s : s.name)
-    : (state.spellcasting?.spells ?? []).map(s => s.name ?? s);
+function buildSpellList(type, allSpells, potentialRemaining, selectedSpells, selectedCantrips) {
+  const selectedNames = type === 'cantrips'
+    ? selectedCantrips.map(s => typeof s === 'string' ? s : s.name)
+    : selectedSpells.map(s => s.name ?? s);
 
   return allSpells.map(spell => {
     const name = spell.name ?? spell;
-    const isSelected = selected.includes(name);
+    const isSelected = selectedNames.includes(name);
+    const level = spell.level ?? 0;
+
+    let isDisabled = false;
+    let tooltip = '';
+
+    if (!isSelected) {
+      if (type === 'cantrips') {
+        if (selectedCantrips.length >= 5) {
+          isDisabled = true;
+          tooltip = 'Maximum 5 cantrips allowed by the character sheet.';
+        } else if (potentialRemaining < 10 && !state.manualSpells) {
+          isDisabled = true;
+          tooltip = `Requires 10 Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+        }
+      } else {
+        const slotsLimit = getSpellSlotsForLevel(level);
+        const currentCount = selectedSpells.filter(s => (s.level ?? 1) === level).length;
+        const cost = 10 * level;
+
+        if (currentCount >= slotsLimit) {
+          isDisabled = true;
+          tooltip = `Maximum ${slotsLimit} Level ${level} spells allowed by the character sheet.`;
+        } else if (potentialRemaining < cost && !state.manualSpells) {
+          isDisabled = true;
+          tooltip = `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+        }
+      }
+    }
+
     return `
-      <div class="spell-entry ${isSelected ? 'selected' : ''}" data-spell="${name}" data-type="${type}" id="spell-${type}-${name.replace(/\s/g, '-')}">
+      <div class="spell-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}" 
+           data-spell="${name}" 
+           data-type="${type}" 
+           id="spell-${type}-${name.replace(/\s/g, '-')}"
+           ${tooltip ? `title="${tooltip}"` : ''}
+           style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed; pointer-events: none;' : ''}">
         <span class="spell-name">${name}</span>
         ${spell.level ? `<span class="spell-level-tag">Lv.${spell.level}</span>` : '<span class="spell-level-tag">Cantrip</span>'}
         ${spell.desc ? `<span class="spell-desc">${spell.desc}</span>` : ''}
@@ -1112,7 +1438,7 @@ function buildSpellList(type, allSpells) {
   }).join('');
 }
 
-function bindSpellEvents(container) {
+function bindSpellEvents(container, potentialRemaining) {
   container.querySelectorAll('.spell-entry').forEach(entry => {
     entry.addEventListener('click', () => {
       const name = entry.dataset.spell;
@@ -1122,11 +1448,8 @@ function bindSpellEvents(container) {
         const current = state.spellcasting?.cantrips ?? [];
         if (current.includes(name)) {
           state.spellcasting = { ...state.spellcasting, cantrips: current.filter(c => c !== name) };
-        } else if (current.length < 5) {
-          state.spellcasting = { ...state.spellcasting, cantrips: [...current, name] };
         } else {
-          showToast('Maximum 5 cantrips allowed!', 'error');
-          return;
+          state.spellcasting = { ...state.spellcasting, cantrips: [...current, name] };
         }
       } else {
         const current = state.spellcasting?.spells ?? [];
@@ -1138,17 +1461,51 @@ function bindSpellEvents(container) {
           state.spellcasting = { ...state.spellcasting, spells: [...current, { name, level: spellData?.level ?? 1 }] };
         }
       }
-      entry.classList.toggle('selected');
+      renderSpellcastingStep(container);
+      updateSummary();
     });
   });
 
+  container.querySelectorAll('.slot-plus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lvl = parseInt(btn.dataset.level, 10);
+      const slots = state.spellcasting?.slots ?? {};
+      const current = slots[lvl] ?? 0;
+      state.spellcasting.slots = { ...slots, [lvl]: current + 1 };
+      renderSpellcastingStep(container);
+      updateSummary();
+    });
+  });
+
+  container.querySelectorAll('.slot-minus').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const lvl = parseInt(btn.dataset.level, 10);
+      const slots = state.spellcasting?.slots ?? {};
+      const current = slots[lvl] ?? 0;
+      state.spellcasting.slots = { ...slots, [lvl]: Math.max(0, current - 1) };
+      renderSpellcastingStep(container);
+      updateSummary();
+    });
+  });
+
+  container.querySelector('#manual-spells-check')?.addEventListener('change', e => {
+    state.manualSpells = e.target.checked;
+    renderSpellcastingStep(container);
+    updateSummary();
+  });
+
   container.querySelector('#add-custom-cantrip')?.addEventListener('click', () => {
+    const current = state.spellcasting?.cantrips ?? [];
+    if (current.length >= 5) { showToast('Maximum 5 cantrips allowed by the character sheet.', 'error'); return; }
+    if (potentialRemaining < 10 && !state.manualSpells) {
+      showToast(`Requires 10 Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`, 'error');
+      return;
+    }
     const name = prompt('Enter custom cantrip name:');
     if (!name) return;
-    const current = state.spellcasting?.cantrips ?? [];
-    if (current.length >= 5) { showToast('Maximum 5 cantrips!', 'error'); return; }
     state.spellcasting = { ...state.spellcasting, cantrips: [...current, name] };
     renderSpellcastingStep(container);
+    updateSummary();
   });
 
   container.querySelector('#add-custom-spell')?.addEventListener('click', () => {
@@ -1157,31 +1514,78 @@ function bindSpellEvents(container) {
     const levelStr = prompt('Spell level (1-9):');
     const level = parseInt(levelStr, 10);
     if (!level || level < 1 || level > 9) { showToast('Invalid spell level!', 'error'); return; }
+    
+    const slotsLimit = getSpellSlotsForLevel(level);
     const current = state.spellcasting?.spells ?? [];
+    const currentCount = current.filter(s => (s.level ?? 1) === level).length;
+    
+    if (currentCount >= slotsLimit) {
+      showToast(`Maximum ${slotsLimit} Level ${level} spells allowed by the character sheet.`, 'error');
+      return;
+    }
+    const cost = 10 * level;
+    if (potentialRemaining < cost && !state.manualSpells) {
+      showToast(`Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`, 'error');
+      return;
+    }
     state.spellcasting = { ...state.spellcasting, spells: [...current, { name, level }] };
     renderSpellcastingStep(container);
+    updateSummary();
   });
 }
 
 // ── Step: Equipment ───────────────────────────────────────────────────────────
 
+function getItemGoldCost(item) {
+  if (!item.cost) return 0;
+  const parsed = parseInt(item.cost.replace(/[^\d]/g, ''), 10);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 function renderEquipmentStep(container) {
+  // Calculate gold spent
+  let goldSpent = 0;
+  (state.equipmentList ?? []).forEach(item => {
+    goldSpent += getItemGoldCost(item);
+  });
+  const goldLimit = state.goldAmount ?? 0;
+  const goldRemaining = goldLimit - goldSpent;
+
+  const totalItemsCount = (state.equipmentList ?? []).length;
+  const sheetLimitWarning = totalItemsCount > 21
+    ? `<div class="warning-badge" style="color: #cf721c; margin-top: 1rem; font-size: 0.85rem; font-weight: bold;">⚠️ Note: The physical PDF sheet can only display the first 21 items.</div>`
+    : '';
+
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">⚔️ Equipment</h2>
       <p class="step-desc">Choose starting weapons and armor, or add custom items.</p>
     </div>
+    
+    <div class="manual-override-control" style="margin-bottom: 1.5rem;">
+      <label class="checkbox-label" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="manual-equipment-check" ${state.manualEquipment ? 'checked' : ''}>
+        <strong>Manual Equipment Override (Ignore starting gold cost limits)</strong>
+      </label>
+    </div>
+
+    <div class="point-buy-tracker ${goldRemaining < 0 ? 'over-budget' : ''}" style="margin-bottom: 1.5rem;">
+      <span>Gold Remaining:</span>
+      <strong>${goldRemaining} gp</strong>
+      <span>/ ${goldLimit} gp</span>
+    </div>
+
     <div class="section-block">
       <h3 class="section-title">Weapons</h3>
       <div class="equipment-list" id="weapon-list">
-        ${buildEquipmentList(WEAPONS ?? [], 'weapon')}
+        ${buildEquipmentList(WEAPONS ?? [], 'weapon', goldRemaining)}
       </div>
       <button class="btn btn-ghost btn-sm" id="add-custom-weapon">+ Add Custom Weapon</button>
     </div>
     <div class="section-block">
       <h3 class="section-title">Armor</h3>
       <div class="equipment-list" id="armor-list">
-        ${buildEquipmentList(ARMORS ?? [], 'armor')}
+        ${buildEquipmentList(ARMORS ?? [], 'armor', goldRemaining)}
       </div>
     </div>
     <div class="section-block">
@@ -1190,21 +1594,42 @@ function renderEquipmentStep(container) {
         ${buildOtherItemsList()}
       </div>
       <button class="btn btn-ghost btn-sm" id="add-custom-item">+ Add Item</button>
+      ${sheetLimitWarning}
     </div>
   `;
 
   bindEquipmentEvents(container);
 }
 
-function buildEquipmentList(items, type) {
+function buildEquipmentList(items, type, goldRemaining) {
   const selected = (state.equipmentList ?? []).map(i => i.name);
   return items.map(item => {
     const name = item.name;
     const isSelected = selected.includes(name);
+    const cost = getItemGoldCost(item);
+    const canAfford = isSelected || (goldRemaining >= cost);
+    const isDisabled = !isSelected && !canAfford && !state.manualEquipment;
+
+    let tooltip = '';
+    if (isDisabled) {
+      tooltip = `Cannot afford this item (costs ${cost} gp, but you only have ${goldRemaining} gp remaining). Set to manual to bypass.`;
+    } else {
+      if (type === 'weapon') {
+        tooltip = `Cost: ${item.cost} | Damage: ${item.damage} | Weight: ${item.weight} | Properties: ${item.properties}`;
+      } else {
+        tooltip = `Cost: ${item.cost} | Category: ${item.category} | AV: ${item.av} | Weight: ${item.weight} lbs | Stealth: ${item.stealth}`;
+      }
+    }
+
     return `
-      <div class="equipment-entry ${isSelected ? 'selected' : ''}" data-item="${name}" data-type="${type}" id="equip-${type}-${name.replace(/\s/g,'-')}">
+      <div class="equipment-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}" 
+           data-item="${name}" 
+           data-type="${type}" 
+           id="equip-${type}-${name.replace(/\s/g,'-')}"
+           ${tooltip ? `title="${tooltip}"` : ''}
+           style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed; pointer-events: none;' : ''}">
         <span class="equip-name">${name}</span>
-        <span class="equip-detail">${item.damage ?? item.baseAC ?? ''} ${item.weight ? `· ${item.weight} lbs` : ''}</span>
+        <span class="equip-detail">${item.damage ?? (item.av ? `AV ${item.av}` : '')} ${item.weight ? `· ${item.weight}` : ''}</span>
       </div>
     `;
   }).join('');
@@ -1229,7 +1654,6 @@ function bindEquipmentEvents(container) {
 
       if (existing) {
         state.equipmentList = (state.equipmentList ?? []).filter(i => i.name !== name);
-        entry.classList.remove('selected');
       } else {
         const itemData = type === 'weapon'
           ? (WEAPONS ?? []).find(w => w.name === name)
@@ -1241,10 +1665,16 @@ function bindEquipmentEvents(container) {
           isArmor: type === 'armor',
           quantity: 1
         }];
-        entry.classList.add('selected');
       }
+      renderEquipmentStep(container);
       updateSummary();
     });
+  });
+
+  container.querySelector('#manual-equipment-check')?.addEventListener('change', e => {
+    state.manualEquipment = e.target.checked;
+    renderEquipmentStep(container);
+    updateSummary();
   });
 
   container.querySelector('#add-custom-weapon')?.addEventListener('click', () => {
@@ -1321,6 +1751,10 @@ function renderFinishingStep(container) {
 // ── Character Summary Panel ───────────────────────────────────────────────────
 
 function updateSummary() {
+  const finalStats = getFinalCharacteristics(state, RACES);
+  state.potentialGained = calculatePotentialGained(state, ORIGINS);
+  state.hpBonus = calculateHPBonus(state, ORIGINS, finalStats);
+
   const content = document.getElementById('summary-content');
   if (!content) return;
   content.innerHTML = buildCharacterSummaryHTML();
@@ -1331,9 +1765,23 @@ function buildCharacterSummaryHTML() {
   const profBonus = getProficiencyBonus(state.level);
   const apLimit = getTotalAccomplishmentPointsLimit(state);
   const { totalSpent } = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-  const apRemaining = apLimit - totalSpent - Math.max(0, computeSpentSkillPoints() - computeFreeSkillPoints());
+  const apRemaining = apLimit - totalSpent;
 
   return `
+    <div class="summary-ap-banner ${apRemaining < 0 ? 'over-budget' : ''}" style="
+      background: ${apRemaining < 0 ? 'rgba(235, 94, 85, 0.15)' : 'rgba(148, 161, 255, 0.12)'};
+      border: 1px solid ${apRemaining < 0 ? '#eb5e55' : 'rgba(148, 161, 255, 0.3)'};
+      border-radius: 8px;
+      padding: 0.85rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    ">
+      <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #a0a5c0; margin-bottom: 0.25rem;">Accomplishment Points</div>
+      <div style="font-size: 1.6rem; font-weight: bold; color: ${apRemaining < 0 ? '#eb5e55' : '#ffffff'};">
+        ${apRemaining} <span style="font-size: 0.9rem; font-weight: normal; color: #a0a5c0;">/ ${apLimit} Remaining</span>
+      </div>
+    </div>
+
     <div class="summary-row">
       <span class="summary-label">Name</span>
       <span class="summary-val">${state.characterName || '—'}</span>
@@ -1353,10 +1801,6 @@ function buildCharacterSummaryHTML() {
     <div class="summary-row">
       <span class="summary-label">Level / Prof</span>
       <span class="summary-val">${state.level} / +${profBonus}</span>
-    </div>
-    <div class="summary-row ${apRemaining < 0 ? 'over-budget' : ''}">
-      <span class="summary-label">AP Remaining</span>
-      <span class="summary-val">${apRemaining} / ${apLimit}</span>
     </div>
     <div class="summary-stats">
       ${CHARACTERISTICS.map(c => {

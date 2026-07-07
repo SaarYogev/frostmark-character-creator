@@ -5,7 +5,9 @@ export const BACKGROUNDS = [
     gold: 15,
     equipment: 'A set of artisan tools (your choice), a sketch book, common clothes, 15 gp',
     trait: 'Masterpiece',
-    desc: 'You are skilled at creating art or useful tools.'
+    desc: 'You are skilled at creating art or useful tools.',
+    freeSkillPoints: 3,
+    builtInRanks: { 'Arts & Craft': 2, 'Empathy': 1, 'Persuasion': 1 }
   },
   {
     name: 'Bounty Hunter',
@@ -29,7 +31,9 @@ export const BACKGROUNDS = [
     gold: 15,
     equipment: 'A crowbar, a set of dark common clothes with a hood, 15 gp',
     trait: 'Criminal Contact',
-    desc: 'You have a history of breaking the law.'
+    desc: 'You have a history of breaking the law.',
+    freeSkillPoints: 5,
+    restrictSkills: ['Athletics', 'Deception', 'Perception', 'Subtlety', 'Stealth']
   },
   {
     name: 'Cultist',
@@ -86,7 +90,10 @@ export const BACKGROUNDS = [
     gold: 10,
     equipment: 'Memorabilia from the field, two sets of tools, common clothes, 10 gp',
     trait: 'My Religion is Efficiency',
-    desc: 'When building something, you can decrease material weight, time, or coin cost by 25%. Starts with Academics (Engineering) rank 2, Arts & Craft (choice) rank 2, and 1 extra skill point.'
+    desc: 'When building something, you can decrease material weight, time, or coin cost by 25%. Starts with Academics (Engineering) rank 2, Arts & Craft (choice) rank 2, and 1 extra skill point.',
+    freeSkillPoints: 1,
+    builtInRanks: { 'Arts & Craft': 2 },
+    builtInAcademics: { 'Engineering': 2 }
   },
   {
     name: 'Noble',
