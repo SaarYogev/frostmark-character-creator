@@ -1,4 +1,5 @@
-import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS } from '../data/constants.js';
+import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants.js';
+import { ORIGINS } from '../data/origins.js';
 
 export function getInitialState() {
   return {
@@ -65,7 +66,8 @@ export function getInitialState() {
 
     spellcasting: {
       cantrips: [], // names
-      spells: [] // e.g. [{ name: "Shield", level: 1 }]
+      spells: [], // e.g. [{ name: "Shield", level: 1 }]
+      slots: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 }
     },
 
     equipmentList: [], // list of item objects: { name: "...", weight: X, quantity: Y }
@@ -73,7 +75,24 @@ export function getInitialState() {
     languages: [],
 
     personalityBackstory: '',
-    customFeatures: []
+    customFeatures: [],
+
+    manualSkills: false,
+    manualProficiencies: false,
+    manualRaces: false,
+    manualSpells: false,
+    manualEquipment: false,
+    racialStatOverrides: {
+      Brawn: 0,
+      Dexterity: 0,
+      Vitality: 0,
+      Intelligence: 0,
+      Cunning: 0,
+      Resolve: 0,
+      Presence: 0,
+      Manipulation: 0,
+      Composure: 0
+    }
   };
 }
 
@@ -116,6 +135,15 @@ export function getFinalCharacteristics(state, raceData) {
   const final = { ...state.baseCharacteristics };
   
   if (!state.race) return final;
+
+  if (state.manualRaces) {
+    for (const stat in state.racialStatOverrides) {
+      if (final[stat] !== undefined) {
+        final[stat] += (state.racialStatOverrides[stat] ?? 0);
+      }
+    }
+    return final;
+  }
 
   if (state.race === 'Custom') {
     for (const stat in state.customRace.stats) {
@@ -171,34 +199,64 @@ export function getCharacteristicModifier(score) {
 export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   let spent = 0;
 
-  // 1. Skill Ranks cost
-  // Ranks cost points cumulatively (1: 1, 2: 2, 3: 4, 4: 6, 5: 9).
-  // Background grants 4 free skill points. These are subtracted from total ranks cost.
-  let totalSkillsBought = 0;
-  for (const sk in state.skillRanks) {
-    const rank = state.skillRanks[sk] || 0;
-    if (rank === 1) totalSkillsBought += 1;
-    else if (rank === 2) totalSkillsBought += 2;
-    else if (rank === 3) totalSkillsBought += 4;
-    else if (rank === 4) totalSkillsBought += 6;
-    else if (rank === 5) totalSkillsBought += 9;
-  }
-  for (const sk in state.academicsRanks) {
-    const rank = state.academicsRanks[sk] || 0;
-    if (rank === 1) totalSkillsBought += 1;
-    else if (rank === 2) totalSkillsBought += 2;
-    else if (rank === 3) totalSkillsBought += 4;
-    else if (rank === 4) totalSkillsBought += 6;
-    else if (rank === 5) totalSkillsBought += 9;
+  // Resolve background-specific configurations
+  let bgFree = 4;
+  let builtInRanks = {};
+  let builtInAcademics = {};
+  let restrictSkills = null;
+
+  if (state.background === 'Custom') {
+    bgFree = state.customBackground?.skills?.length ?? 4;
+  } else if (state.background) {
+    const bg = backgroundsData.find(b => b.name === state.background);
+    if (bg) {
+      bgFree = bg.freeSkillPoints ?? 4;
+      builtInRanks = bg.builtInRanks ?? {};
+      builtInAcademics = bg.builtInAcademics ?? {};
+      restrictSkills = bg.restrictSkills ?? null;
+    }
   }
 
-  let freeSkills = 4;
-  
-  // Calculate extra skill points granted by primary/secondary Ability Origins
-  // e.g. Artistry grants 2 extra skill points.
-  // We handle both pre-defined AOs and manual custom AOs.
-  let extraAO = 0;
-  // (We will resolve the actual AO extraSkills in main logic)
+  // Resolve Primary/Secondary AO extra skill points
+  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
+  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
+  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
+  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
+
+  let restrictedSpent = 0;
+  let unrestrictedSpent = 0;
+
+  // Calculate skill rank points spent above built-in ranks
+  for (const sk in state.skillRanks) {
+    const rank = state.skillRanks[sk] ?? 0;
+    const builtIn = builtInRanks[sk] ?? 0;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    if (restrictSkills && restrictSkills.includes(sk)) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
+  }
+
+  for (const field in state.academicsRanks) {
+    const rank = state.academicsRanks[field] ?? 0;
+    const builtIn = builtInAcademics[field] ?? 0;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    unrestrictedSpent += cost;
+  }
+
+  let skillsSpent = 0;
+  if (restrictSkills) {
+    const restrictedDiscount = Math.min(bgFree, restrictedSpent);
+    const excessRestricted = restrictedSpent - restrictedDiscount;
+    const totalUnrestricted = excessRestricted + unrestrictedSpent;
+    const aoFree = primaryExtra + secondaryExtra;
+    skillsSpent = Math.max(0, totalUnrestricted - aoFree);
+  } else {
+    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
+    const totalFreePoints = bgFree + primaryExtra + secondaryExtra;
+    skillsSpent = Math.max(0, totalSpentPoints - totalFreePoints);
+  }
 
   // 2. Saving Throw Proficiencies
   for (const save in state.savingThrowsProficient) {
@@ -208,9 +266,6 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   }
 
   // 3. Armor Proficiencies
-  // Light = 1 pt. Medium = 2 pts (or 1 if upgrading). Heavy = 3 pts (or 1 if upgrading). Shields = 1 pt.
-  // The UI lets players toggle them directly. To remain rules-compliant, we calculate:
-  // if Heavy is check: 3 pts. Else if Medium is checked: 2 pts. Else if Light is checked: 1 pt.
   if (state.armorProficiencies.Heavy) {
     spent += 3;
   } else if (state.armorProficiencies.Medium) {
@@ -222,12 +277,7 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     spent += 1;
   }
 
-  // 4. Weapon Proficiencies
-  // Handpicked 2 weapons = 1 pt.
-  // Group proficiencies range from 1 to 3 pts.
-  // (Weapon groups details will be resolved in AP calculator page)
-
-  // 5. Money purchases (1 AP = 25 gp)
+  // 4. Money purchases (1 AP = 25 gp)
   let bgGold = 10;
   if (state.background === 'Custom') {
     bgGold = state.customBackground.gold;
@@ -242,11 +292,9 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   }
 
   return {
-    totalSkillsBought,
-    freeSkills,
-    skillsSpent: Math.max(0, totalSkillsBought - freeSkills),
+    skillsSpent,
     otherSpent: spent,
-    totalSpent: Math.max(0, totalSkillsBought - freeSkills) + spent
+    totalSpent: skillsSpent + spent
   };
 }
 
@@ -264,4 +312,42 @@ export function importCharacterJSON(jsonString) {
 
 export function exportCharacterJSON(state) {
   return JSON.stringify(state, null, 2);
+}
+
+export function calculatePotentialGained(state, originsData) {
+  const origin = state.primaryAO === 'Custom'
+    ? state.customPrimaryAO
+    : originsData.find(o => o.name === state.primaryAO);
+
+  const tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
+
+  const table = {
+    Minor:    [20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50],
+    Moderate: [40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 70, 70, 70, 70, 70],
+    Major:    [60, 60, 60, 60, 60, 100, 100, 100, 100, 100, 140, 140, 140, 140, 140, 180, 180, 180, 180, 180]
+  };
+
+  const level = state.level ?? 1;
+  let total = 0;
+  for (let i = 1; i <= level; i++) {
+    const gain = table[tag]?.[i - 1] ?? 0;
+    total += gain;
+  }
+  return total;
+}
+
+export function calculateHPBonus(state, originsData, finalStats) {
+  const origin = state.primaryAO === 'Custom'
+    ? state.customPrimaryAO
+    : originsData.find(o => o.name === state.primaryAO);
+  const hd = origin?.hd ?? 8;
+  const vit = finalStats?.Vitality ?? 10;
+  const vitMod = Math.floor((vit - 10) / 2);
+  
+  const level = state.level ?? 1;
+  let total = 0;
+  for (let i = 2; i <= level; i++) {
+    total += Math.max(1, Math.ceil(hd / 2) + vitMod);
+  }
+  return total;
 }

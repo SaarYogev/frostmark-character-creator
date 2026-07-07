@@ -97,5 +97,6 @@ export const ACADEMICS_FIELDS = [
   'Geography',
   'Politics',
   'Tinkering',
-  'Society'
+  'Society',
+  'Engineering'
 ];
