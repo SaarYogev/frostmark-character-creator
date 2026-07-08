@@ -3,7 +3,8 @@ import {
   getInitialState,
   getTotalAccomplishmentPointsLimit,
   calculateSpentAccomplishmentPoints,
-  getFinalCharacteristics
+  getFinalCharacteristics,
+  getMaxSkillRank
 } from '../js/logic/state.js';
 import { BACKGROUNDS } from '../js/data/backgrounds.js';
 import { RACES } from '../js/data/races.js';
@@ -340,3 +341,46 @@ describe('Equipment Gold Budget Checks', () => {
     expect(isEquipmentBudgetExceeded(state, BACKGROUNDS)).toBe(false);
   });
 });
+
+describe('Skill Point Correction and Level-Based Limitations', () => {
+  test('AO extra skills add 4 points per skill', () => {
+    const state = getInitialState();
+    state.background = 'Urchin'; // Urchin grants 4 free skill points
+    state.primaryAO = 'Custom';
+    state.customPrimaryAO = { extraSkills: 1 }; // Should grant 1 * 4 = 4 extra skill points (total 8)
+
+    // We buy Stealth Rank 3 (cost 4) and Perception Rank 3 (cost 4). Total cost = 8.
+    state.skillRanks = {
+      Stealth: 3,
+      Perception: 3
+    };
+
+    const result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+    // With correct logic (8 free points): skillsSpent should be 0.
+    // With current logic (5 free points): skillsSpent is 3.
+    expect(result.skillsSpent).toBe(0);
+  });
+
+  test('Level-based skill rank limitations are correct', () => {
+    expect(getMaxSkillRank(1)).toBe(3);
+    expect(getMaxSkillRank(3)).toBe(3);
+    expect(getMaxSkillRank(4)).toBe(4);
+    expect(getMaxSkillRank(7)).toBe(4);
+    expect(getMaxSkillRank(8)).toBe(5);
+    expect(getMaxSkillRank(20)).toBe(5);
+  });
+
+  test('No background results in 0 free background skill points', () => {
+    const state = getInitialState();
+    state.background = '';
+    state.primaryAO = '';
+
+    state.skillRanks = {
+      Stealth: 1
+    };
+
+    const result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+    expect(result.skillsSpent).toBe(1);
+  });
+});
+
