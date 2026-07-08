@@ -18,7 +18,8 @@ import {
   exportCharacterJSON,
   importCharacterJSON,
   calculatePotentialGained,
-  calculateHPBonus
+  calculateHPBonus,
+  getMaxSkillRank
 } from './state.js';
 import { exportToPDF, downloadPDF, getSpellSlotsForLevel } from './pdf.js';
 import { levelUp } from './levelUp.js';
@@ -243,7 +244,38 @@ function renderIdentityStep(container) {
   bindInput('char-name', v => { state.characterName = v; updateSummary(); });
   bindInput('player-name', v => { state.playerName = v; updateSummary(); });
   bindSelect('power-level', v => { state.campaignPowerLevel = v; updateSummary(); });
-  bindNumber('char-level', v => { state.level = v; updateSummary(); });
+  bindNumber('char-level', v => {
+    state.level = v;
+    if (!state.manualSkills) {
+      // Clamping ranks on level reduction avoids retaining ranks that exceed the new level's caps.
+      const maxRank = getMaxSkillRank(v);
+      let adjusted = false;
+      const bg = BACKGROUNDS.find(b => b.name === state.background);
+      const builtInRanks = bg?.builtInRanks ?? {};
+      const builtInAcademics = bg?.builtInAcademics ?? {};
+
+      for (const sk in state.skillRanks) {
+        const builtIn = builtInRanks[sk] ?? 0;
+        const currentRank = state.skillRanks[sk] ?? 0;
+        if (currentRank > maxRank) {
+          state.skillRanks[sk] = Math.max(builtIn, maxRank);
+          adjusted = true;
+        }
+      }
+      for (const ac in state.academicsRanks) {
+        const builtIn = builtInAcademics[ac] ?? 0;
+        const currentRank = state.academicsRanks[ac] ?? 0;
+        if (currentRank > maxRank) {
+          state.academicsRanks[ac] = Math.max(builtIn, maxRank);
+          adjusted = true;
+        }
+      }
+      if (adjusted) {
+        showToast('Some skill/academic ranks were clamped due to level reduction.', 'info');
+      }
+    }
+    updateSummary();
+  });
   bindInput('app-age', v => { state.appearance = { ...state.appearance, age: v }; });
   bindInput('app-height', v => { state.appearance = { ...state.appearance, height: v }; });
   bindInput('app-weight', v => { state.appearance = { ...state.appearance, weight: v }; });
@@ -589,11 +621,15 @@ function buildBGCard(name) {
 function buildBGDetails() {
   const bg = BACKGROUNDS.find(b => b.name === state.background);
   if (!bg) return '';
+  const bgFree = bg.freeSkillPoints ?? 4;
+  const restrictDesc = bg.skills?.length 
+    ? `Restricted to: ${bg.skills.join(', ')}` 
+    : "Player's choice (any skill)";
   return `
     <h3>${bg.name}</h3>
     <p>${bg.desc ?? ''}</p>
     <p><strong>Starting Gold:</strong> ${bg.gold}gp | <strong>Equipment:</strong> ${bg.equipment ?? 'Varies'}</p>
-    <p><strong>Free Skill:</strong> ${bg.skill ?? 'Player\'s choice'}</p>
+    <p><strong>Free Skill Points:</strong> ${bgFree} (${restrictDesc})</p>
     <p><em>${bg.trait ?? ''}</em></p>
   `;
 }
@@ -741,7 +777,7 @@ function renderOriginsStep(container) {
 
     <div class="section-block" id="secondary-ao-section" style="display:${state.primaryAO ? 'block' : 'none'}">
       <h3 class="section-title">Secondary Ability Origin <span class="optional-tag">Optional</span></h3>
-      <p class="form-hint">Secondary AO cannot be the same as primary. You use the lower HD of the two.</p>
+      <p class="form-hint">Secondary Ability Origin cannot be the same as primary. You use the lower HD of the two.</p>
       <div class="card-selector" id="secondary-ao-selector">
         ${buildSecondaryAOCards()}
       </div>
@@ -876,12 +912,64 @@ function renderSkillsStep(container) {
   const apRemaining = apLimit - totalSpent;
 
   const bg = BACKGROUNDS.find(b => b.name === state.background);
-  const restrictSkills = bg?.restrictSkills ?? null;
+  const bgFallbackList = bg ? [
+    ...(bg.skills ?? []),
+    ...Object.keys(bg.builtInRanks ?? {}),
+    ...Object.keys(bg.builtInAcademics ?? {})
+  ] : [];
+  const restrictSkills = bg?.restrictSkills ?? (bgFallbackList.length ? bgFallbackList : null);
+  const bgFree = state.background === 'Custom' ? (state.customBackground?.skills?.length ?? 4) : (bg?.freeSkillPoints ?? 4);
+
+  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
+  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
+  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
+  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
+  const aoFree = (primaryExtra + secondaryExtra) * 4;
+
+  const builtInRanks = bg?.builtInRanks ?? {};
+  const builtInAcademics = bg?.builtInAcademics ?? {};
+
+  let restrictedSpent = 0;
+  let unrestrictedSpent = 0;
+
+  for (const sk in state.skillRanks) {
+    const rank = state.skillRanks[sk] ?? 0;
+    const builtIn = builtInRanks[sk] ?? 0;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    if (restrictSkills && restrictSkills.includes(sk)) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
+  }
+
+  for (const sk in state.academicsRanks) {
+    const rank = state.academicsRanks[sk] ?? 0;
+    const builtIn = builtInAcademics[sk] ?? 0;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    unrestrictedSpent += cost;
+  }
+
+  let bgSpent = 0;
+  let aoSpent = 0;
+  if (state.background && restrictSkills) {
+    bgSpent = Math.min(bgFree, restrictedSpent);
+    const excessRestricted = restrictedSpent - bgSpent;
+    const totalUnrestricted = excessRestricted + unrestrictedSpent;
+    aoSpent = Math.min(aoFree, totalUnrestricted);
+  } else {
+    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
+    bgSpent = Math.min(state.background ? bgFree : 0, totalSpentPoints);
+    aoSpent = Math.min(aoFree, Math.max(0, totalSpentPoints - bgSpent));
+  }
 
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">🎯 Skills</h2>
       <p class="step-desc">Assign skill ranks using Accomplishment Points. Each rank multiplies your proficiency bonus.</p>
+      <p class="form-hint" style="margin-top: 0.5rem; color: #a0a5c0; font-size: 0.85rem; line-height: 1.4;">
+        <strong>Frostmark Level Limits:</strong> You may possess skills with 1 to 3 ranks at level 1–3. At level 4 you may purchase skills of rank 4. Rank 5 can be purchased at 8th level if you possess a feat/ability allowing it.
+      </p>
     </div>
     
     <div class="manual-override-control" style="margin-bottom: 1.5rem;">
@@ -891,11 +979,23 @@ function renderSkillsStep(container) {
       </label>
     </div>
 
-    <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}">
-      <span>Free Skill Points Used:</span>
-      <strong id="skill-points-used">${spentSkillPoints}</strong>
-      <span>/ ${freeSkillPoints}</span>
-      <span class="tracker-note">(${bg?.freeSkillPoints ?? 4} from BG + ${freeSkillPoints - (bg?.freeSkillPoints ?? 4)} from AO${remaining < 0 ? ' — extra will cost AP' : ''})</span>
+    ${restrictSkills ? `
+      <div class="restriction-notice" style="background: rgba(230, 126, 34, 0.15); color: #e67e22; padding: 0.85rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.85rem; border: 1px solid rgba(230, 126, 34, 0.3);">
+        <strong>⚠️ Background Skill Restriction:</strong> The ${bgFree} free skill points from your background (<strong>${bg?.name}</strong>) can only be spent on the following skills: <strong>${restrictSkills.join(', ')}</strong>.
+      </div>
+    ` : ''}
+
+    <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}" style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; padding: 12px 16px;">
+      <div>
+        <span>Background Free Skill Points Used:</span>
+        <strong id="background-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem;">${bgSpent}</strong>
+        <span>/ ${state.background ? bgFree : 0}</span>
+      </div>
+      <div>
+        <span>Ability Origin Free Skill Points Used:</span>
+        <strong id="ao-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem;">${aoSpent}</strong>
+        <span>/ ${aoFree}</span>
+      </div>
     </div>
     <div class="skills-grid" id="skills-grid">
       ${SKILLS.map(skill => buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, remaining, restrictSkills)).join('')}
@@ -921,7 +1021,7 @@ function renderSkillsStep(container) {
 }
 
 function computeFreeSkillPoints() {
-  let bgFree = 4;
+  let bgFree = 0;
   if (state.background === 'Custom') {
     bgFree = state.customBackground?.skills?.length ?? 4;
   } else if (state.background) {
@@ -932,26 +1032,61 @@ function computeFreeSkillPoints() {
   const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
   const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
   const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
-  return bgFree + primaryExtra + secondaryExtra;
+  // Each AO extra skill represents 4 extra skill points in the character creation rules
+  return bgFree + (primaryExtra + secondaryExtra) * 4;
 }
 
 function computeSpentSkillPoints() {
-  let total = 0;
   const bg = BACKGROUNDS.find(b => b.name === state.background);
   const builtInRanks = bg?.builtInRanks ?? {};
   const builtInAcademics = bg?.builtInAcademics ?? {};
+  const bgFallbackList = bg ? [
+    ...(bg.skills ?? []),
+    ...Object.keys(builtInRanks),
+    ...Object.keys(builtInAcademics)
+  ] : [];
+  const restrictSkills = bg?.restrictSkills ?? (bgFallbackList.length ? bgFallbackList : null);
+
+  let restrictedSpent = 0;
+  let unrestrictedSpent = 0;
 
   for (const sk in state.skillRanks) {
     const rank = state.skillRanks[sk] ?? 0;
     const builtIn = builtInRanks[sk] ?? 0;
-    total += Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    if (restrictSkills && restrictSkills.includes(sk)) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
   }
+
   for (const sk in state.academicsRanks) {
     const rank = state.academicsRanks[sk] ?? 0;
     const builtIn = builtInAcademics[sk] ?? 0;
-    total += Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    unrestrictedSpent += cost;
   }
-  return total;
+
+  const bgFree = state.background === 'Custom' ? (state.customBackground?.skills?.length ?? 4) : (bg?.freeSkillPoints ?? 4);
+  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
+  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
+  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
+  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
+  const aoFree = (primaryExtra + secondaryExtra) * 4;
+
+  if (state.background && restrictSkills) {
+    // Under background restrictions, BG free points can only apply to restricted skills.
+    const restrictedDiscount = Math.min(bgFree, restrictedSpent);
+    const excessRestricted = restrictedSpent - restrictedDiscount;
+    const totalUnrestricted = excessRestricted + unrestrictedSpent;
+    const aoDiscount = Math.min(aoFree, totalUnrestricted);
+    return restrictedDiscount + aoDiscount;
+  } else {
+    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
+    const totalFreePoints = (state.background ? bgFree : 0) + aoFree;
+    return Math.min(totalFreePoints, totalSpentPoints);
+  }
 }
 
 function buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, freeRemaining, restrictSkills) {
@@ -975,11 +1110,19 @@ function buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, freeRemain
   const costsAP = (restrictSkills && !isRestrictedSkill) || (freeRemaining <= 0);
 
   const canAfford = !costsAP || (apRemaining >= incrementalCost);
-  const plusDisabled = rank >= 5 || (!canAfford && !state.manualSkills);
+  const maxSkillRank = getMaxSkillRank(state.level);
+  const isLevelRestricted = rank >= maxSkillRank && !state.manualSkills;
+  const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !state.manualSkills);
 
   let plusTooltip = '';
   if (rank >= 5) {
     plusTooltip = 'Max rank 5 reached';
+  } else if (isLevelRestricted) {
+    if (maxSkillRank === 3) {
+      plusTooltip = `Requires level 4 to advance to rank 4.`;
+    } else if (maxSkillRank === 4) {
+      plusTooltip = `Requires level 8 and a relevant feat/ability to advance to rank 5.`;
+    }
   } else if (!canAfford && !state.manualSkills) {
     plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
   }
@@ -993,6 +1136,9 @@ function buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, freeRemain
       <div class="skill-stats">
         <span class="stat-tag">${stat1.slice(0, 3)}: ${total1 >= 0 ? '+' : ''}${total1}</span>
         ${total2 !== null ? `<span class="stat-tag">${stat2.slice(0, 3)}: ${total2 >= 0 ? '+' : ''}${total2}</span>` : ''}
+        ${restrictSkills && isRestrictedSkill ? (
+          `<span class="restricted-skill-badge" style="background: rgba(46,204,113,0.15); color: #2ecc71; padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem; white-space: nowrap;" title="Background-free points can be used here">Allowed for Background Free Points</span>`
+        ) : ''}
       </div>
       <div class="rank-controls">
         <button class="rank-btn" id="skill-minus-${skill.key}" ${rank <= builtInRank ? 'disabled' : ''}>−</button>
@@ -1019,6 +1165,22 @@ function adjustSkill(skillName, delta, container) {
   const bg = BACKGROUNDS.find(b => b.name === state.background);
   const builtInRank = bg?.builtInRanks?.[skillName] ?? 0;
   const current = state.skillRanks?.[skillName] ?? builtInRank;
+
+  if (delta > 0 && !state.manualSkills) {
+    const maxRank = getMaxSkillRank(state.level);
+    if (current >= maxRank) {
+      if (maxRank === 3) {
+        showToast('Requires level 4 to purchase rank 4.', 'error');
+      } else if (maxRank === 4) {
+        showToast('Requires level 8 and a relevant feat/ability to purchase rank 5.', 'error');
+      }
+      return;
+    }
+    if (current === 4 && state.level >= 8) {
+      showToast('Purchasing Rank 5 requires a feat/ability allowing it.', 'info');
+    }
+  }
+
   const next = Math.max(builtInRank, Math.min(5, current + delta));
   state.skillRanks = { ...state.skillRanks, [skillName]: next };
   renderSkillsStep(container);
@@ -1046,11 +1208,19 @@ function buildAcademicsSection(finalStats, profBonus, bg, apRemaining, freeRemai
 
         const costsAP = (restrictSkills !== null) || (freeRemaining <= 0);
         const canAfford = !costsAP || (apRemaining >= incrementalCost);
-        const plusDisabled = rank >= 5 || (!canAfford && !state.manualSkills);
+        const maxSkillRank = getMaxSkillRank(state.level);
+        const isLevelRestricted = rank >= maxSkillRank && !state.manualSkills;
+        const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !state.manualSkills);
 
         let plusTooltip = '';
         if (rank >= 5) {
           plusTooltip = 'Max rank 5 reached';
+        } else if (isLevelRestricted) {
+          if (maxSkillRank === 3) {
+            plusTooltip = `Requires level 4 to advance to rank 4.`;
+          } else if (maxSkillRank === 4) {
+            plusTooltip = `Requires level 8 and a relevant feat/ability to advance to rank 5.`;
+          }
         } else if (!canAfford && !state.manualSkills) {
           plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
         }
@@ -1108,6 +1278,20 @@ function bindAcademicsEvents(container, finalStats, profBonus, bg) {
 
     container.querySelector(`#aca-plus-${field}`)?.addEventListener('click', () => {
       const rank = state.academicsRanks?.[field] ?? 0;
+      if (!state.manualSkills) {
+        const maxRank = getMaxSkillRank(state.level);
+        if (rank >= maxRank) {
+          if (maxRank === 3) {
+            showToast('Requires level 4 to purchase rank 4.', 'error');
+          } else if (maxRank === 4) {
+            showToast('Requires level 8 and a relevant feat/ability to purchase rank 5.', 'error');
+          }
+          return;
+        }
+        if (rank === 4 && state.level >= 8) {
+          showToast('Purchasing Rank 5 requires a feat/ability allowing it.', 'info');
+        }
+      }
       state.academicsRanks = { ...state.academicsRanks, [field]: Math.min(5, rank + 1) };
       renderSkillsStep(container);
     });
@@ -1795,7 +1979,7 @@ function buildCharacterSummaryHTML() {
       <span class="summary-val">${state.background === 'Custom' ? state.customBackground?.name : state.background || '—'}</span>
     </div>
     <div class="summary-row">
-      <span class="summary-label">Primary AO</span>
+      <span class="summary-label">Primary Ability Origin</span>
       <span class="summary-val">${state.primaryAO === 'Custom' ? state.customPrimaryAO?.name : state.primaryAO || '—'}</span>
     </div>
     <div class="summary-row">

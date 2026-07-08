@@ -200,7 +200,7 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   let spent = 0;
 
   // Resolve background-specific configurations
-  let bgFree = 4;
+  let bgFree = 0;
   let builtInRanks = {};
   let builtInAcademics = {};
   let restrictSkills = null;
@@ -213,7 +213,12 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
       bgFree = bg.freeSkillPoints ?? 4;
       builtInRanks = bg.builtInRanks ?? {};
       builtInAcademics = bg.builtInAcademics ?? {};
-      restrictSkills = bg.restrictSkills ?? null;
+      const fallbackList = [
+        ...(bg.skills ?? []),
+        ...Object.keys(builtInRanks),
+        ...Object.keys(builtInAcademics)
+      ];
+      restrictSkills = bg.restrictSkills ?? (fallbackList.length ? fallbackList : null);
     }
   }
 
@@ -250,11 +255,11 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     const restrictedDiscount = Math.min(bgFree, restrictedSpent);
     const excessRestricted = restrictedSpent - restrictedDiscount;
     const totalUnrestricted = excessRestricted + unrestrictedSpent;
-    const aoFree = primaryExtra + secondaryExtra;
+    const aoFree = (primaryExtra + secondaryExtra) * 4;
     skillsSpent = Math.max(0, totalUnrestricted - aoFree);
   } else {
     const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    const totalFreePoints = bgFree + primaryExtra + secondaryExtra;
+    const totalFreePoints = bgFree + (primaryExtra + secondaryExtra) * 4;
     skillsSpent = Math.max(0, totalSpentPoints - totalFreePoints);
   }
 
@@ -351,3 +356,11 @@ export function calculateHPBonus(state, originsData, finalStats) {
   }
   return total;
 }
+
+export function getMaxSkillRank(level) {
+  // Frostmark character creation limits skill ranks based on character level to prevent premature specialization.
+  if (level < 4) return 3;
+  if (level < 8) return 4;
+  return 5;
+}
+
