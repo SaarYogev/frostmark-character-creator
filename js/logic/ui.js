@@ -33,7 +33,8 @@ const STEPS = [
   { id: 'origins',        title: 'Ability Origins',      icon: '✨' },
   { id: 'skills',         title: 'Skills',               icon: '🎯' },
   { id: 'proficiencies',  title: 'Proficiencies & AP',   icon: '🛡️' },
-  { id: 'spellcasting',   title: 'Spellcasting',         icon: '🔮' },
+  { id: 'spellslots',     title: 'Spell Slots',          icon: '⚡' },
+  { id: 'spellcasting',   title: 'Spell Selection',      icon: '🔮' },
   { id: 'equipment',      title: 'Equipment',            icon: '⚔️' },
   { id: 'finishing',      title: 'Finishing Touches',    icon: '✅' }
 ];
@@ -96,7 +97,7 @@ function renderShell() {
 // Only lock steps where the UI would be completely broken without prior data.
 function getStepLockReason(stepIndex) {
   const stepId = STEPS[stepIndex].id;
-  if (stepId === 'spellcasting' && !state.primaryAO) {
+  if ((stepId === 'spellslots' || stepId === 'spellcasting') && !state.primaryAO) {
     return 'Choose a Primary Ability Origin first to unlock spellcasting options';
   }
   return null;
@@ -186,6 +187,7 @@ function renderStep(index) {
     origins:       renderOriginsStep,
     skills:        renderSkillsStep,
     proficiencies: renderProficienciesStep,
+    spellslots:    renderSpellslotsStep,
     spellcasting:  renderSpellcastingStep,
     equipment:     renderEquipmentStep,
     finishing:     renderFinishingStep
@@ -1429,9 +1431,355 @@ function renderProficienciesStep(container) {
 
 // ── Step: Spellcasting ────────────────────────────────────────────────────────
 
-// ── Step: Spellcasting ────────────────────────────────────────────────────────
+let spellFilters = {
+  schools: [],
+  levels: [],
+  castingTimes: [],
+  damageTypes: [],
+  concentration: false,
+  minRange: 0,
+  maxRange: 36,
+  sortBy: 'name',
+  selectedSpellForDetail: null,
+  searchQuery: '',
+  activeFilters: []
+};
 
-function renderSpellcastingStep(container) {
+function getRangeLabel(val) {
+  if (val === 0) return 'Self/Touch';
+  if (val >= 36) return '36m+';
+  return `${val}m`;
+}
+
+function getSpellByName(name) {
+  let spell = CANTRIPS.find(c => c.name === name) || SPELLS.find(s => s.name === name);
+  if (!spell) {
+    const isCantrip = state.spellcasting?.cantrips?.includes(name);
+    const customSpell = state.spellcasting?.spells?.find(s => s.name === name);
+    const level = isCantrip ? 0 : (customSpell?.level ?? 1);
+    spell = {
+      name,
+      level,
+      school: 'Custom',
+      castingTime: '1 action',
+      range: 0,
+      rangeLabel: 'Self/Touch',
+      damageTypes: [],
+      duration: 'Instantaneous',
+      concentration: false,
+      desc: 'Custom homebrew spell.'
+    };
+  }
+  return spell;
+}
+
+function getFilteredSpells(allSpells) {
+  let list = allSpells.filter(spell => {
+    if (spellFilters.searchQuery) {
+      const query = spellFilters.searchQuery.toLowerCase().trim();
+      const nameMatch = spell.name.toLowerCase().includes(query);
+      const descMatch = spell.desc && spell.desc.toLowerCase().includes(query);
+      if (!nameMatch && !descMatch) {
+        return false;
+      }
+    }
+    if (spellFilters.schools.length > 0 && !spellFilters.schools.includes(spell.school)) {
+      return false;
+    }
+    if (spellFilters.levels.length > 0 && !spellFilters.levels.includes(spell.level)) {
+      return false;
+    }
+    if (spellFilters.castingTimes.length > 0) {
+      const ct = spell.castingTime.toLowerCase();
+      const match = spellFilters.castingTimes.some(filter => {
+        if (filter === 'Action') return ct.includes('action') && !ct.includes('bonus') && !ct.includes('reaction');
+        if (filter === 'Bonus Action') return ct.includes('bonus');
+        if (filter === 'Reaction') return ct.includes('reaction');
+        if (filter === 'Minute+') return ct.includes('minute') || ct.includes('hour');
+        return false;
+      });
+      if (!match) return false;
+    }
+    if (spellFilters.damageTypes.length > 0) {
+      const match = spellFilters.damageTypes.some(dt => 
+        spell.damageTypes && spell.damageTypes.map(d => d.toLowerCase()).includes(dt.toLowerCase())
+      );
+      if (!match) return false;
+    }
+    if (spellFilters.concentration && !spell.concentration) {
+      return false;
+    }
+    const rangeVal = spell.range ?? 0;
+    const minRange = spellFilters.minRange;
+    const maxRange = spellFilters.maxRange;
+    const fitsRange = rangeVal >= minRange && (maxRange >= 36 ? true : rangeVal <= maxRange);
+    if (!fitsRange) {
+      return false;
+    }
+    return true;
+  });
+
+  list.sort((a, b) => {
+    if (spellFilters.sortBy === 'level') {
+      if (a.level !== b.level) return a.level - b.level;
+    } else if (spellFilters.sortBy === 'range') {
+      if (a.range !== b.range) return a.range - b.range;
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  return list;
+}
+
+const FILTER_CATALOG = [
+  { key: 'search', label: 'Search' },
+  { key: 'schools', label: 'Schools' },
+  { key: 'levels', label: 'Levels' },
+  { key: 'concentration', label: 'Concentration' },
+  { key: 'casting', label: 'Casting Times' },
+  { key: 'damage', label: 'Damage Types (Experimental)' },
+  { key: 'range', label: 'Range' },
+  { key: 'sort', label: 'Sort By' }
+];
+
+function filterBodySearch() {
+  return `<input type="text" id="spell-search-input" class="input" placeholder="Search spells…" value="${spellFilters.searchQuery || ''}" style="width: 100%; font-size: 0.9rem;">`;
+}
+
+function filterBodySchools() {
+  return `<div class="filter-pills" id="filter-schools">${['Abjuration','Conjuration','Divination','Enchantment','Evocation','Illusion','Transmutation','Vismancy'].map(school => `<button class="pill-btn ${spellFilters.schools.includes(school) ? 'active' : ''}" data-value="${school}">${school}</button>`).join('')}</div>`;
+}
+
+function filterBodyLevels() {
+  return `<div class="filter-pills" id="filter-levels">${['Cantrip','1','2','3','4','5','6','7','8','9'].map(lvl => { const val = lvl === 'Cantrip' ? 0 : parseInt(lvl, 10); return `<button class="pill-btn ${spellFilters.levels.includes(val) ? 'active' : ''}" data-value="${val}">${lvl}</button>`; }).join('')}</div>`;
+}
+
+function filterBodyConcentration() {
+  return `<label class="toggle-switch-label" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; margin: 0;">
+    <input type="checkbox" id="filter-concentration" ${spellFilters.concentration ? 'checked' : ''}>
+    <span class="toggle-switch-slider"></span>
+    <strong>Concentration only</strong>
+  </label>`;
+}
+
+function filterBodyCasting() {
+  return `<div class="filter-pills" id="filter-casting">${['Action','Bonus Action','Reaction','Minute+'].map(ct => `<button class="pill-btn ${spellFilters.castingTimes.includes(ct) ? 'active' : ''}" data-value="${ct}">${ct}</button>`).join('')}</div>`;
+}
+
+function filterBodyDamage() {
+  return `<div class="filter-pills" id="filter-damage">${['Acid','Cold','Fire','Force','Lightning','Necrotic','Poison','Psychic','Radiant','Thunder','Bludgeoning','Piercing','Slashing'].map(dt => `<button class="pill-btn ${spellFilters.damageTypes.includes(dt.toLowerCase()) ? 'active' : ''}" data-value="${dt.toLowerCase()}">${dt}</button>`).join('')}</div>`;
+}
+
+function filterBodyRange() {
+  return `<div class="range-slider-wrapper">
+    <div class="range-slider-container">
+      <input type="range" id="range-min" min="0" max="36" value="${spellFilters.minRange}" class="slider-thumb">
+      <input type="range" id="range-max" min="0" max="36" value="${spellFilters.maxRange}" class="slider-thumb">
+      <div class="slider-track" style="left: ${(spellFilters.minRange / 36) * 100}%; right: ${100 - (spellFilters.maxRange / 36) * 100}%;"></div>
+    </div>
+    <div class="range-slider-labels"><span>Min: ${getRangeLabel(spellFilters.minRange)}</span><span>Max: ${getRangeLabel(spellFilters.maxRange)}</span></div>
+  </div>`;
+}
+
+function filterBodySort() {
+  return `<select id="sort-spells-select" class="select">
+    <option value="name" ${spellFilters.sortBy === 'name' ? 'selected' : ''}>Name</option>
+    <option value="level" ${spellFilters.sortBy === 'level' ? 'selected' : ''}>Level</option>
+    <option value="range" ${spellFilters.sortBy === 'range' ? 'selected' : ''}>Range</option>
+  </select>`;
+}
+
+const FILTER_BODIES = {
+  search: filterBodySearch,
+  schools: filterBodySchools,
+  levels: filterBodyLevels,
+  concentration: filterBodyConcentration,
+  casting: filterBodyCasting,
+  damage: filterBodyDamage,
+  range: filterBodyRange,
+  sort: filterBodySort
+};
+
+function renderFilterPanel(key) {
+  const meta = FILTER_CATALOG.find(f => f.key === key);
+  if (!meta || !FILTER_BODIES[key]) return '';
+
+  // Compact filters sit side-by-side; long ones take the full row
+  const compact = ['concentration', 'casting', 'levels', 'range'].includes(key);
+  const flexStyle = compact ? (key === 'range' ? 'flex: 0 1 auto; min-width: 220px;' : 'flex: 0 1 auto;') : 'flex: 1 1 100%;';
+
+  return `
+    <div class="filter-item" data-filter-key="${key}" style="
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      background: rgba(255,255,255,0.02);
+      ${flexStyle}
+    ">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+        <strong style="font-size: 0.75rem; color: #a0a5c0; text-transform: uppercase; letter-spacing: 0.04em;">${meta.label}</strong>
+        <button class="remove-filter-btn" data-filter-key="${key}" title="Remove filter" style="background: none; border: none; color: #eb5e55; cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 0 0.25rem;">✕</button>
+      </div>
+      ${FILTER_BODIES[key]()}
+    </div>
+  `;
+}
+
+function renderSpellsFilters() {
+  const active = spellFilters.activeFilters ?? (spellFilters.activeFilters = []);
+
+  // Search + Sort are always on the page (left/right), not filters
+  const searchField = `<input type="text" id="spell-search-input" class="input" placeholder="Search spells…" value="${spellFilters.searchQuery || ''}" style="flex: 1; font-size: 0.9rem;">`;
+  const sortSelect = `<select id="sort-spells-select" class="select" style="flex: 1; font-size: 0.85rem;">
+    <option value="name">Sort: Name</option>
+    <option value="level">Sort: Level</option>
+    <option value="range">Sort: Range</option>
+  </select>`;
+
+  const available = FILTER_CATALOG.filter(f => !active.includes(f.key) && !['search', 'sort'].includes(f.key));
+
+  return `
+    <div class="spells-filters-container">
+      <div class="filter-container" style="display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 1rem;">
+        ${searchField}
+        ${sortSelect}
+      </div>
+
+      <div class="filters-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <strong style="font-size: 0.85rem; color: #a0a5c0; text-transform: uppercase; letter-spacing: 0.05em;">Filters</strong>
+          <select id="add-filter-select" class="select" style="font-size: 0.8rem;">
+            <option value="">+ Add filter</option>
+            ${available.map(f => `<option value="${f.key}">${f.label}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="active-filters-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start;">
+          ${active.filter(key => ['search', 'sort'].indexOf(key) === -1).map(key => renderFilterPanel(key)).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function resetFilterValue(key) {
+  switch (key) {
+    case 'search': spellFilters.searchQuery = ''; break;
+    case 'schools': spellFilters.schools = []; break;
+    case 'levels': spellFilters.levels = []; break;
+    case 'concentration': spellFilters.concentration = false; break;
+    case 'casting': spellFilters.castingTimes = []; break;
+    case 'damage': spellFilters.damageTypes = []; break;
+    case 'range': spellFilters.minRange = 0; spellFilters.maxRange = 36; break;
+    case 'sort': spellFilters.sortBy = 'name'; break;
+  }
+}
+
+function renderSpellDetailPane(potentialRemaining) {
+  const activeName = spellFilters.selectedSpellForDetail;
+  if (!activeName) {
+    return `
+      <div class="spell-detail-empty" style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #a0a5c0;
+        text-align: center;
+        padding: 2rem;
+        border: 2px dashed rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      ">
+        <p>Select a spell from the list to view its complete details, stats, and description.</p>
+      </div>
+    `;
+  }
+
+  const spell = getSpellByName(activeName);
+  const schoolColorClass = `school-${spell.school.toLowerCase()}`;
+
+  const isCantrip = spell.level === 0;
+  const isSelected = isCantrip
+    ? state.spellcasting?.cantrips?.includes(spell.name)
+    : state.spellcasting?.spells?.some(s => s.name === spell.name);
+
+  let isBtnDisabled = false;
+  let btnTooltip = '';
+
+  if (!isSelected) {
+    if (isCantrip) {
+      if ((state.spellcasting?.cantrips ?? []).length >= 5) {
+        isBtnDisabled = true;
+        btnTooltip = 'Maximum 5 cantrips allowed by the character sheet.';
+      } else if (potentialRemaining < 10 && !state.manualSpells) {
+        isBtnDisabled = true;
+        btnTooltip = `Requires 10 Potential.`;
+      }
+    } else {
+      const cost = 10 * spell.level;
+
+      if (potentialRemaining < cost && !state.manualSpells) {
+        isBtnDisabled = true;
+        btnTooltip = `Requires ${cost} Potential.`;
+      }
+    }
+  }
+
+  return `
+    <div class="spell-detail-card ${schoolColorClass}">
+      <div class="spell-detail-header">
+        <h4 class="spell-detail-name">${spell.name}</h4>
+        <div class="spell-detail-tags">
+          <span class="spell-tag level-tag">${spell.level === 0 ? 'Cantrip' : `Level ${spell.level}`}</span>
+          <span class="spell-tag school-tag">${spell.school}</span>
+        </div>
+      </div>
+      <div class="spell-detail-stats">
+        <div class="stat-item">
+          <strong>Casting Time</strong>
+          <span>${spell.castingTime}</span>
+        </div>
+        <div class="stat-item">
+          <strong>Range</strong>
+          <span>${spell.rangeLabel}</span>
+        </div>
+        <div class="stat-item">
+          <strong>Duration</strong>
+          <span>${spell.duration}</span>
+        </div>
+        <div class="stat-item">
+          <strong>Concentration</strong>
+          <span>${spell.concentration ? 'Yes' : 'No'}</span>
+        </div>
+${spell.damageTypes && spell.damageTypes.length > 0 ? `
+           <div class="stat-item full-width">
+             <strong>Damage Types</strong>
+             <span class="damage-types-list">
+               ${spell.damageTypes.map(dt => `<span class="damage-type-pill ${dt.toLowerCase()}">${dt} <strong style="font-size: 0.85rem;">(Experimental)</strong></span>`).join(' ')}
+             </span>
+           </div>
+         ` : ''}
+      </div>
+      <div class="spell-detail-desc">
+        <h5>Description</h5>
+        <p>${spell.desc}</p>
+      </div>
+      <div class="spell-detail-actions" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.05);">
+        <button class="btn ${isSelected ? 'btn-danger' : 'btn-primary'} learn-spell-btn" 
+                data-spell="${spell.name}" 
+                data-type="${isCantrip ? 'cantrips' : 'spells'}"
+                ${isBtnDisabled ? 'disabled' : ''} 
+                ${btnTooltip ? `title="${btnTooltip}"` : ''}
+                style="width: 100%; justify-content: center;">
+          ${isSelected ? 'Forget Spell' : 'Learn Spell'}
+        </button>
+        ${btnTooltip ? `<div class="btn-error-tooltip" style="color: #eb5e55; font-size: 0.8rem; margin-top: 0.5rem; text-align: center;">${btnTooltip}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderSpellslotsStep(container) {
   if (!state.spellcasting) state.spellcasting = {};
   state.spellcasting.cantrips = state.spellcasting.cantrips ?? [];
   state.spellcasting.spells = state.spellcasting.spells ?? [];
@@ -1440,7 +1788,6 @@ function renderSpellcastingStep(container) {
   const selectedCantrips = state.spellcasting.cantrips;
   const selectedSpells = state.spellcasting.spells;
 
-  // Calculate Potential spent
   let potentialSpent = selectedCantrips.length * 10;
   selectedSpells.forEach(s => {
     potentialSpent += 10 * (s.level ?? 1);
@@ -1455,8 +1802,8 @@ function renderSpellcastingStep(container) {
 
   container.innerHTML = `
     <div class="step-header">
-      <h2 class="step-title">🔮 Spellcasting & Slots</h2>
-      <p class="step-desc">Select cantrips and spells you know. You must spend Potential to buy spell slots.</p>
+      <h2 class="step-title">⚡ Spell Slots</h2>
+      <p class="step-desc">Spend your Potential to buy spell slots. You cannot exceed the physical sheet slot limit.</p>
     </div>
     
     <div class="manual-override-control" style="margin-bottom: 1.5rem;">
@@ -1483,19 +1830,18 @@ function renderSpellcastingStep(container) {
         border: 1px solid var(--border-color);
       ">
         <div style="text-align: center; border-right: 1px solid var(--border-color);">
-          <div style="font-size: 0.7rem; color: #a0a5c0; text-transform: uppercase;">Cantrips</div>
+          <div style="font-size: 0.7rem; color: #a0a5c0;">Cantrips</div>
           <div style="font-size: 1rem; font-weight: bold; color: ${selectedCantrips.length > 5 ? '#eb5e55' : '#ffffff'};">
             ${selectedCantrips.length} / 5
           </div>
         </div>
         ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => {
           const slotsPurchased = state.spellcasting.slots[lvl] ?? 0;
-          const used = selectedSpells.filter(s => (s.level ?? 1) === lvl).length;
           return `
             <div style="text-align: center;">
               <div style="font-size: 0.7rem; color: #a0a5c0;">Level ${lvl} Slots</div>
-              <div style="font-size: 0.9rem; font-weight: bold; color: ${used > slotsPurchased ? '#eb5e55' : '#ffffff'};">
-                ${used} / ${slotsPurchased}
+              <div style="font-size: 0.9rem; font-weight: bold; color: #ffffff;">
+                ${slotsPurchased}
               </div>
             </div>
           `;
@@ -1550,105 +1896,7 @@ function renderSpellcastingStep(container) {
         }).join('')}
       </div>
     </div>
-
-    <div class="section-block">
-      <h3 class="section-title">Cantrips (up to 5)</h3>
-      <div class="spell-list" id="cantrip-list">
-        ${buildSpellList('cantrips', CANTRIPS ?? [], potentialRemaining, selectedSpells, selectedCantrips)}
-      </div>
-      <button class="btn btn-ghost btn-sm" id="add-custom-cantrip">+ Add Custom Cantrip</button>
-    </div>
-    <div class="section-block">
-      <h3 class="section-title">Spells</h3>
-      <div class="spell-list" id="spell-list">
-        ${buildSpellList('spells', SPELLS ?? [], potentialRemaining, selectedSpells, selectedCantrips)}
-      </div>
-      <button class="btn btn-ghost btn-sm" id="add-custom-spell">+ Add Custom Spell</button>
-    </div>
   `;
-
-  bindSpellEvents(container, potentialRemaining);
-}
-
-function buildSpellList(type, allSpells, potentialRemaining, selectedSpells, selectedCantrips) {
-  const selectedNames = type === 'cantrips'
-    ? selectedCantrips.map(s => typeof s === 'string' ? s : s.name)
-    : selectedSpells.map(s => s.name ?? s);
-
-  return allSpells.map(spell => {
-    const name = spell.name ?? spell;
-    const isSelected = selectedNames.includes(name);
-    const level = spell.level ?? 0;
-
-    let isDisabled = false;
-    let tooltip = '';
-
-    if (!isSelected) {
-      if (type === 'cantrips') {
-        if (selectedCantrips.length >= 5) {
-          isDisabled = true;
-          tooltip = 'Maximum 5 cantrips allowed by the character sheet.';
-        } else if (potentialRemaining < 10 && !state.manualSpells) {
-          isDisabled = true;
-          tooltip = `Requires 10 Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
-        }
-      } else {
-        const slotsLimit = getSpellSlotsForLevel(level);
-        const currentCount = selectedSpells.filter(s => (s.level ?? 1) === level).length;
-        const cost = 10 * level;
-
-        if (currentCount >= slotsLimit) {
-          isDisabled = true;
-          tooltip = `Maximum ${slotsLimit} Level ${level} spells allowed by the character sheet.`;
-        } else if (potentialRemaining < cost && !state.manualSpells) {
-          isDisabled = true;
-          tooltip = `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
-        }
-      }
-    }
-
-    return `
-      <div class="spell-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}" 
-           data-spell="${name}" 
-           data-type="${type}" 
-           id="spell-${type}-${name.replace(/\s/g, '-')}"
-           ${tooltip ? `title="${tooltip}"` : ''}
-           style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed; pointer-events: none;' : ''}">
-        <span class="spell-name">${name}</span>
-        ${spell.level ? `<span class="spell-level-tag">Lv.${spell.level}</span>` : '<span class="spell-level-tag">Cantrip</span>'}
-        ${spell.desc ? `<span class="spell-desc">${spell.desc}</span>` : ''}
-      </div>
-    `;
-  }).join('');
-}
-
-function bindSpellEvents(container, potentialRemaining) {
-  container.querySelectorAll('.spell-entry').forEach(entry => {
-    entry.addEventListener('click', () => {
-      const name = entry.dataset.spell;
-      const type = entry.dataset.type;
-
-      if (type === 'cantrips') {
-        const current = state.spellcasting?.cantrips ?? [];
-        if (current.includes(name)) {
-          state.spellcasting = { ...state.spellcasting, cantrips: current.filter(c => c !== name) };
-        } else {
-          state.spellcasting = { ...state.spellcasting, cantrips: [...current, name] };
-        }
-      } else {
-        const current = state.spellcasting?.spells ?? [];
-        const existing = current.find(s => (s.name ?? s) === name);
-        if (existing) {
-          state.spellcasting = { ...state.spellcasting, spells: current.filter(s => (s.name ?? s) !== name) };
-        } else {
-          const spellData = SPELLS?.find(s => (s.name ?? s) === name);
-          state.spellcasting = { ...state.spellcasting, spells: [...current, { name, level: spellData?.level ?? 1 }] };
-        }
-      }
-      renderSpellcastingStep(container);
-      updateSummary();
-    });
-  });
 
   container.querySelectorAll('.slot-plus').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1656,7 +1904,7 @@ function bindSpellEvents(container, potentialRemaining) {
       const slots = state.spellcasting?.slots ?? {};
       const current = slots[lvl] ?? 0;
       state.spellcasting.slots = { ...slots, [lvl]: current + 1 };
-      renderSpellcastingStep(container);
+      renderSpellslotsStep(container);
       updateSummary();
     });
   });
@@ -1667,8 +1915,402 @@ function bindSpellEvents(container, potentialRemaining) {
       const slots = state.spellcasting?.slots ?? {};
       const current = slots[lvl] ?? 0;
       state.spellcasting.slots = { ...slots, [lvl]: Math.max(0, current - 1) };
+      renderSpellslotsStep(container);
+      updateSummary();
+    });
+  });
+
+  container.querySelector('#manual-spells-check')?.addEventListener('change', e => {
+    state.manualSpells = e.target.checked;
+    renderSpellslotsStep(container);
+    updateSummary();
+  });
+}
+
+function renderSpellcastingStep(container) {
+  if (!state.spellcasting) state.spellcasting = {};
+  state.spellcasting.cantrips = state.spellcasting.cantrips ?? [];
+  state.spellcasting.spells = state.spellcasting.spells ?? [];
+  state.spellcasting.slots = state.spellcasting.slots ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+
+  const selectedCantrips = state.spellcasting.cantrips;
+  const selectedSpells = state.spellcasting.spells;
+
+  let potentialSpent = selectedCantrips.length * 10;
+  selectedSpells.forEach(s => {
+    potentialSpent += 10 * (s.level ?? 1);
+  });
+  for (let lvl = 1; lvl <= 9; lvl++) {
+    const qty = state.spellcasting.slots[lvl] ?? 0;
+    potentialSpent += qty * 10 * lvl;
+  }
+
+  const potentialLimit = state.potentialGained ?? 0;
+  const potentialRemaining = potentialLimit - potentialSpent;
+
+  container.innerHTML = `
+    <div class="step-header">
+      <h2 class="step-title">🔮 Spell Selection</h2>
+      <p class="step-desc">Filter, inspect, and choose cantrips and spells.</p>
+    </div>
+    
+    <div class="manual-override-control" style="margin-bottom: 1.5rem;">
+      <label class="checkbox-label" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+        <input type="checkbox" id="manual-spells-check" ${state.manualSpells ? 'checked' : ''}>
+        <strong>Manual Spellcasting Override (Ignore Potential limits)</strong>
+      </label>
+    </div>
+
+    <div style="display: flex; gap: 1.5rem; flex-direction: column; margin-bottom: 1.5rem;">
+      <div class="point-buy-tracker ${potentialRemaining < 0 ? 'over-budget' : ''}" style="margin-bottom: 0;">
+        <span>Potential Remaining:</span>
+        <strong>${potentialRemaining}</strong>
+        <span>/ ${potentialLimit}</span>
+      </div>
+
+      <div class="spell-slots-budget" style="
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 0.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.85rem;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+      ">
+        <div style="text-align: center; border-right: 1px solid var(--border-color);">
+          <div style="font-size: 0.7rem; color: #a0a5c0;">Cantrips</div>
+          <div style="font-size: 1rem; font-weight: bold; color: ${selectedCantrips.length > 5 ? '#eb5e55' : '#ffffff'};">
+            ${selectedCantrips.length} / 5
+          </div>
+        </div>
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(lvl => {
+          const slotsPurchased = state.spellcasting.slots[lvl] ?? 0;
+          return `
+            <div style="text-align: center;">
+              <div style="font-size: 0.7rem; color: #a0a5c0;">Level ${lvl} Slots</div>
+              <div style="font-size: 0.9rem; font-weight: bold; color: #ffffff;">
+                ${slotsPurchased}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="section-block spells-filters-section" style="
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    ">
+      <h3 class="section-title" style="margin-top: 0;">Filters & Search</h3>
+      ${renderSpellsFilters()}
+    </div>
+
+    <div class="section-block" style="margin-bottom: 1.5rem;">
+      <h3 class="section-title" style="margin-top: 0;">Selected</h3>
+      <div class="selected-spells-sidebar-container">
+        ${renderSelectedSpellsSidebar(selectedCantrips, selectedSpells)}
+      </div>
+    </div>
+
+    <div class="spells-split-view" style="
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    ">
+      <div class="spells-list-column">
+        <div class="section-block" style="margin-top: 0;">
+          <h3 class="section-title" style="text-transform: none; margin-top: 0;">Spells & Cantrips</h3>
+          <div class="spell-list" id="unified-spell-list">
+            ${buildUnifiedSpellList([...CANTRIPS, ...SPELLS], potentialRemaining, selectedSpells, selectedCantrips)}
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+            <button class="btn btn-ghost btn-sm" id="add-custom-cantrip">+ Add Custom Cantrip</button>
+            <button class="btn btn-ghost btn-sm" id="add-custom-spell">+ Add Custom Spell</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="spells-detail-column" style="position: sticky; top: 1.5rem;">
+        <div class="section-block" style="margin-top: 0;">
+          <h3 class="section-title" style="margin-top: 0;">Active Spell Details</h3>
+          <div class="spell-detail-container">
+            ${renderSpellDetailPane(potentialRemaining)}
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+  `;
+
+  bindSpellEvents(container, potentialRemaining);
+}
+
+function buildUnifiedSpellList(allSpells, potentialRemaining, selectedSpells, selectedCantrips) {
+  const selectedCantripNames = selectedCantrips.map(s => typeof s === 'string' ? s : s.name);
+  const selectedSpellNames = selectedSpells.map(s => s.name ?? s);
+
+  const filtered = getFilteredSpells(allSpells);
+
+  if (filtered.length === 0) {
+    return `<div class="no-spells-found" style="color: #a0a5c0; padding: 1.5rem; text-align: center; font-style: italic; background: rgba(0,0,0,0.1); border-radius: 6px;">No spells match current filters.</div>`;
+  }
+
+  return filtered.map(spell => {
+    const name = spell.name;
+    const level = spell.level ?? 0;
+    const isCantrip = level === 0;
+    const isSelected = isCantrip ? selectedCantripNames.includes(name) : selectedSpellNames.includes(name);
+    const isActiveDetail = spellFilters.selectedSpellForDetail === name;
+
+    let isDisabled = false;
+    let tooltip = '';
+
+    if (!isSelected) {
+      if (isCantrip) {
+        if (selectedCantrips.length >= 5) {
+          isDisabled = true;
+          tooltip = 'Maximum 5 cantrips allowed by the character sheet.';
+        } else if (potentialRemaining < 10 && !state.manualSpells) {
+          isDisabled = true;
+          tooltip = `Requires 10 Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+        }
+      } else {
+        const cost = 10 * level;
+
+        if (potentialRemaining < cost && !state.manualSpells) {
+          isDisabled = true;
+          tooltip = `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+        }
+      }
+    }
+
+    return `
+      <div class="spell-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isActiveDetail ? 'active-detail' : ''}" 
+           data-spell="${name}" 
+           id="spell-${name.replace(/\s/g, '-')}"
+           ${tooltip ? `title="${tooltip}"` : ''}
+           style="${isDisabled ? 'opacity: 0.5; cursor: not-allowed; pointer-events: none;' : ''}">
+        <span class="spell-name">${name}</span>
+        ${spell.level ? `<span class="spell-level-tag">Lv.${spell.level}</span>` : '<span class="spell-level-tag">Cantrip</span>'}
+        ${spell.desc ? `<span class="spell-desc" style="max-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${spell.desc}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderSelectedSpellsSidebar(selectedCantrips, selectedSpells) {
+  return `
+    <div class="selected-spells-box" style="
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1rem;
+    ">
+      <h4 style="margin-top: 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; color: #a0a5c0; font-size: 0.9rem;">
+        Cantrips (${selectedCantrips.length} / 5)
+      </h4>
+      <ul style="list-style: none; padding: 0; margin: 0 0 1.5rem 0; display: flex; flex-direction: column; gap: 0.4rem;">
+        ${selectedCantrips.length === 0 ? '<li style="color: #606580; font-style: italic; font-size: 0.85rem;">None</li>' : selectedCantrips.map(name => `
+          <li style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.85rem;">
+            <span style="font-weight: 500; cursor: pointer; color: var(--text-color);" class="select-spell-detail-trigger" data-spell="${name}">${name}</span>
+            <button class="remove-selected-spell-btn" data-spell="${name}" data-type="cantrips" style="background: none; border: none; color: #eb5e55; cursor: pointer; font-size: 0.95rem; padding: 0 0.25rem;">✕</button>
+          </li>
+        `).join('')}
+      </ul>
+
+      <h4 style="margin-top: 0; margin-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; color: #a0a5c0; font-size: 0.9rem;">
+        Spells
+      </h4>
+      <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem;">
+        ${selectedSpells.length === 0 ? '<li style="color: #606580; font-style: italic; font-size: 0.85rem;">None</li>' : selectedSpells.slice().sort((a,b) => (a.level ?? 1) - (b.level ?? 1)).map(s => {
+          const name = s.name ?? s;
+          const lvl = s.level ?? 1;
+          return `
+            <li style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.85rem;">
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 500; cursor: pointer; color: var(--text-color);" class="select-spell-detail-trigger" data-spell="${name}">${name}</span>
+                <span style="font-size: 0.7rem; color: #a0a5c0;">Level ${lvl}</span>
+              </div>
+              <button class="remove-selected-spell-btn" data-spell="${name}" data-type="spells" style="background: none; border: none; color: #eb5e55; cursor: pointer; font-size: 0.95rem; padding: 0 0.25rem;">✕</button>
+            </li>
+          `;
+        }).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+function bindSpellEvents(container, potentialRemaining) {
+  container.querySelectorAll('.spell-entry').forEach(entry => {
+    entry.addEventListener('click', () => {
+      spellFilters.selectedSpellForDetail = entry.dataset.spell;
+      renderSpellcastingStep(container);
+    });
+  });
+
+  container.querySelectorAll('.select-spell-detail-trigger').forEach(el => {
+    el.addEventListener('click', () => {
+      spellFilters.selectedSpellForDetail = el.dataset.spell;
+      renderSpellcastingStep(container);
+    });
+  });
+
+  container.querySelectorAll('.remove-selected-spell-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.spell;
+      const type = btn.dataset.type;
+      if (type === 'cantrips') {
+        const current = state.spellcasting?.cantrips ?? [];
+        state.spellcasting = { ...state.spellcasting, cantrips: current.filter(c => c !== name) };
+      } else {
+        const current = state.spellcasting?.spells ?? [];
+        state.spellcasting = { ...state.spellcasting, spells: current.filter(s => (s.name ?? s) !== name) };
+      }
       renderSpellcastingStep(container);
       updateSummary();
+    });
+  });
+
+  container.querySelector('.learn-spell-btn')?.addEventListener('click', (e) => {
+    const name = e.target.dataset.spell;
+    const type = e.target.dataset.type;
+
+    if (type === 'cantrips') {
+      const current = state.spellcasting?.cantrips ?? [];
+      if (current.includes(name)) {
+        state.spellcasting = { ...state.spellcasting, cantrips: current.filter(c => c !== name) };
+      } else {
+        state.spellcasting = { ...state.spellcasting, cantrips: [...current, name] };
+      }
+    } else {
+      const current = state.spellcasting?.spells ?? [];
+      const existing = current.find(s => (s.name ?? s) === name);
+      if (existing) {
+        state.spellcasting = { ...state.spellcasting, spells: current.filter(s => (s.name ?? s) !== name) };
+      } else {
+        const spellData = SPELLS?.find(s => (s.name ?? s) === name) || CANTRIPS?.find(c => (c.name ?? c) === name);
+        state.spellcasting = { ...state.spellcasting, spells: [...current, { name, level: spellData?.level ?? 1 }] };
+      }
+    }
+    renderSpellcastingStep(container);
+    updateSummary();
+  });
+
+  container.querySelectorAll('#filter-schools .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.value;
+      if (spellFilters.schools.includes(val)) {
+        spellFilters.schools = spellFilters.schools.filter(x => x !== val);
+      } else {
+        spellFilters.schools.push(val);
+      }
+      renderSpellcastingStep(container);
+    });
+  });
+
+  container.querySelectorAll('#filter-levels .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = parseInt(btn.dataset.value, 10);
+      if (spellFilters.levels.includes(val)) {
+        spellFilters.levels = spellFilters.levels.filter(x => x !== val);
+      } else {
+        spellFilters.levels.push(val);
+      }
+      renderSpellcastingStep(container);
+    });
+  });
+
+  container.querySelectorAll('#filter-casting .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.value;
+      if (spellFilters.castingTimes.includes(val)) {
+        spellFilters.castingTimes = spellFilters.castingTimes.filter(x => x !== val);
+      } else {
+        spellFilters.castingTimes.push(val);
+      }
+      renderSpellcastingStep(container);
+    });
+  });
+
+  container.querySelectorAll('#filter-damage .pill-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.value;
+      if (spellFilters.damageTypes.includes(val)) {
+        spellFilters.damageTypes = spellFilters.damageTypes.filter(x => x !== val);
+      } else {
+        spellFilters.damageTypes.push(val);
+      }
+      renderSpellcastingStep(container);
+    });
+  });
+
+  const minSlider = container.querySelector('#range-min');
+  const maxSlider = container.querySelector('#range-max');
+
+  if (minSlider && maxSlider) {
+    minSlider.addEventListener('input', (e) => {
+      let val = parseInt(e.target.value, 10);
+      if (val > spellFilters.maxRange) {
+        val = spellFilters.maxRange;
+        minSlider.value = val;
+      }
+      spellFilters.minRange = val;
+      container.querySelector('.range-slider-labels span:first-child').textContent = `Min: ${getRangeLabel(val)}`;
+    });
+
+    minSlider.addEventListener('change', () => {
+      renderSpellcastingStep(container);
+    });
+
+    maxSlider.addEventListener('input', (e) => {
+      let val = parseInt(e.target.value, 10);
+      if (val < spellFilters.minRange) {
+        val = spellFilters.minRange;
+        maxSlider.value = val;
+      }
+      spellFilters.maxRange = val;
+      container.querySelector('.range-slider-labels span:last-child').textContent = `Max: ${getRangeLabel(val)}`;
+    });
+
+    maxSlider.addEventListener('change', () => {
+      renderSpellcastingStep(container);
+    });
+  }
+
+  container.querySelector('#filter-concentration')?.addEventListener('change', e => {
+    spellFilters.concentration = e.target.checked;
+    renderSpellcastingStep(container);
+  });
+
+  container.querySelector('#sort-spells-select')?.addEventListener('change', e => {
+    spellFilters.sortBy = e.target.value;
+    renderSpellcastingStep(container);
+  });
+
+  const addFilterSelect = container.querySelector('#add-filter-select');
+  if (addFilterSelect) {
+    addFilterSelect.addEventListener('change', (e) => {
+      const key = e.target.value;
+      if (key) {
+        spellFilters.activeFilters = spellFilters.activeFilters ?? [];
+        if (!spellFilters.activeFilters.includes(key)) {
+          spellFilters.activeFilters.push(key);
+        }
+      }
+      renderSpellcastingStep(container);
+    });
+  }
+
+  container.querySelectorAll('.remove-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.filterKey;
+      spellFilters.activeFilters = (spellFilters.activeFilters ?? []).filter(k => k !== key);
+      resetFilterValue(key);
+      renderSpellcastingStep(container);
     });
   });
 
@@ -1699,14 +2341,7 @@ function bindSpellEvents(container, potentialRemaining) {
     const level = parseInt(levelStr, 10);
     if (!level || level < 1 || level > 9) { showToast('Invalid spell level!', 'error'); return; }
     
-    const slotsLimit = getSpellSlotsForLevel(level);
     const current = state.spellcasting?.spells ?? [];
-    const currentCount = current.filter(s => (s.level ?? 1) === level).length;
-    
-    if (currentCount >= slotsLimit) {
-      showToast(`Maximum ${slotsLimit} Level ${level} spells allowed by the character sheet.`, 'error');
-      return;
-    }
     const cost = 10 * level;
     if (potentialRemaining < cost && !state.manualSpells) {
       showToast(`Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`, 'error');
@@ -1716,6 +2351,21 @@ function bindSpellEvents(container, potentialRemaining) {
     renderSpellcastingStep(container);
     updateSummary();
   });
+
+  const searchInput = container.querySelector('#spell-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', e => {
+      spellFilters.searchQuery = e.target.value;
+      const cursorStart = searchInput.selectionStart;
+      const cursorEnd = searchInput.selectionEnd;
+      renderSpellcastingStep(container);
+      const newSearchInput = container.querySelector('#spell-search-input');
+      if (newSearchInput) {
+        newSearchInput.focus();
+        newSearchInput.setSelectionRange(cursorStart, cursorEnd);
+      }
+    });
+  }
 }
 
 // ── Step: Equipment ───────────────────────────────────────────────────────────
