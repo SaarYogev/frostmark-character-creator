@@ -14,6 +14,10 @@ export function getInitialState() {
     secondaryAO: '',
     level: 1,
 
+    selectedAOs: [],
+    customAOs: [],
+    levelSelections: {},
+
     customRace: { name: '', stats: {}, speed: 6, size: 'Medium', traits: [] },
     customBackground: { name: '', skills: [], gold: 10, equipment: '', trait: '', desc: '' },
     customPrimaryAO: { name: '', hd: 8, extraSkills: 0, spellcasting: 'Minor', desc: '' },
@@ -223,10 +227,39 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
   }
 
   // Resolve Primary/Secondary AO extra skill points
-  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
-  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
-  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
-  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
+  let aoFree = 0;
+  let primaryExtra = 0;
+  let secondaryExtra = 0;
+
+  const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
+  if (hasLevelSelections) {
+    let extraCount = 0;
+    const currentLevel = state.level ?? 1;
+    for (let i = 1; i <= currentLevel; i++) {
+      const selection = state.levelSelections[i];
+      if (selection && selection.primaryAO) {
+        let origin = ORIGINS.find(o => o.name === selection.primaryAO);
+        if (!origin && selection.primaryAO === 'Custom') {
+          origin = state.customPrimaryAO;
+        } else if (!origin && state.customAOs) {
+          origin = state.customAOs.find(o => o.name === selection.primaryAO);
+        }
+        const extraSkills = origin?.extraSkills ?? 0;
+        if (extraSkills > 0) {
+          extraCount++;
+        }
+      }
+    }
+    if (extraCount > 0) {
+      aoFree = 4 + Math.floor((extraCount - 1) / 4) * 2;
+    }
+  } else {
+    const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
+    const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
+    primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
+    secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
+    aoFree = (primaryExtra + secondaryExtra) * 4;
+  }
 
   let restrictedSpent = 0;
   let unrestrictedSpent = 0;
@@ -255,11 +288,10 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     const restrictedDiscount = Math.min(bgFree, restrictedSpent);
     const excessRestricted = restrictedSpent - restrictedDiscount;
     const totalUnrestricted = excessRestricted + unrestrictedSpent;
-    const aoFree = (primaryExtra + secondaryExtra) * 4;
     skillsSpent = Math.max(0, totalUnrestricted - aoFree);
   } else {
     const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    const totalFreePoints = bgFree + (primaryExtra + secondaryExtra) * 4;
+    const totalFreePoints = bgFree + aoFree;
     skillsSpent = Math.max(0, totalSpentPoints - totalFreePoints);
   }
 
@@ -320,12 +352,6 @@ export function exportCharacterJSON(state) {
 }
 
 export function calculatePotentialGained(state, originsData) {
-  const origin = state.primaryAO === 'Custom'
-    ? state.customPrimaryAO
-    : originsData.find(o => o.name === state.primaryAO);
-
-  const tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
-
   const table = {
     Minor:    [20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50],
     Moderate: [40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 70, 70, 70, 70, 70],
@@ -334,7 +360,33 @@ export function calculatePotentialGained(state, originsData) {
 
   const level = state.level ?? 1;
   let total = 0;
+  const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
+
   for (let i = 1; i <= level; i++) {
+    let tag = 'Minor';
+    if (hasLevelSelections) {
+      const selection = state.levelSelections[i];
+      if (selection && selection.primaryAO) {
+        let origin = originsData.find(o => o.name === selection.primaryAO);
+        if (!origin && selection.primaryAO === 'Custom') {
+          origin = state.customPrimaryAO;
+        } else if (!origin && state.customAOs) {
+          origin = state.customAOs.find(o => o.name === selection.primaryAO);
+        }
+        tag = origin?.spellcasting ?? 'Minor';
+      } else {
+        const origin = state.primaryAO === 'Custom'
+          ? state.customPrimaryAO
+          : originsData.find(o => o.name === state.primaryAO);
+        tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
+      }
+    } else {
+      const origin = state.primaryAO === 'Custom'
+        ? state.customPrimaryAO
+        : originsData.find(o => o.name === state.primaryAO);
+      tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
+    }
+
     const gain = table[tag]?.[i - 1] ?? 0;
     total += gain;
   }
@@ -342,16 +394,37 @@ export function calculatePotentialGained(state, originsData) {
 }
 
 export function calculateHPBonus(state, originsData, finalStats) {
-  const origin = state.primaryAO === 'Custom'
-    ? state.customPrimaryAO
-    : originsData.find(o => o.name === state.primaryAO);
-  const hd = origin?.hd ?? 8;
   const vit = finalStats?.Vitality ?? 10;
   const vitMod = Math.floor((vit - 10) / 2);
   
   const level = state.level ?? 1;
   let total = 0;
+  const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
+
   for (let i = 2; i <= level; i++) {
+    let hd = 8;
+    if (hasLevelSelections) {
+      const selection = state.levelSelections[i];
+      if (selection && selection.primaryAO) {
+        let origin = originsData.find(o => o.name === selection.primaryAO);
+        if (!origin && selection.primaryAO === 'Custom') {
+          origin = state.customPrimaryAO;
+        } else if (!origin && state.customAOs) {
+          origin = state.customAOs.find(o => o.name === selection.primaryAO);
+        }
+        hd = origin?.hd ?? 8;
+      } else {
+        const origin = state.primaryAO === 'Custom'
+          ? state.customPrimaryAO
+          : originsData.find(o => o.name === state.primaryAO);
+        hd = origin?.hd ?? 8;
+      }
+    } else {
+      const origin = state.primaryAO === 'Custom'
+        ? state.customPrimaryAO
+        : originsData.find(o => o.name === state.primaryAO);
+      hd = origin?.hd ?? 8;
+    }
     total += Math.max(1, Math.ceil(hd / 2) + vitMod);
   }
   return total;

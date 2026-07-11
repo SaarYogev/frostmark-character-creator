@@ -1,14 +1,16 @@
 import { getProficiencyBonus } from './state.js';
 
-// Proficiency bonus increases at levels 5, 9, 13, and 17, granting +2 AP each time.
 function profBonusIncreased(newLevel) {
   return newLevel === 5 || newLevel === 9 || newLevel === 13 || newLevel === 17;
 }
 
-export function levelUp(state, originData, hpChoice = 'average') {
+export function levelUp(state, originsData, hpChoice = 'average') {
   const newLevel = state.level + 1;
-  const newProfBonus = getProficiencyBonus(newLevel);
-  const origin = originData.find(o => o.name === state.primaryAO) ?? state.customPrimaryAO;
+  const origin = state.levelSelections?.[newLevel]?.primaryAO
+    ? (originsData.find(o => o.name === state.levelSelections[newLevel].primaryAO) ??
+       state.customAOs?.find(o => o.name === state.levelSelections[newLevel].primaryAO) ??
+       state.customPrimaryAO)
+    : (originsData.find(o => o.name === state.primaryAO) ?? state.customPrimaryAO);
   
   const hd = origin?.hd ?? 8;
   const vitMod = Math.floor((computeFinalVit(state) - 10) / 2);
@@ -17,7 +19,7 @@ export function levelUp(state, originData, hpChoice = 'average') {
     ? Math.ceil(hd / 2) + vitMod
     : rollHitDie(hd) + vitMod;
 
-  const potentialGain = getPotentialGain(state, newLevel);
+  const potentialGain = getPotentialGain(state, newLevel, originsData);
 
   const apGain = profBonusIncreased(newLevel) ? 2 : 0;
 
@@ -38,23 +40,21 @@ function computeFinalVit(state) {
   return (state.baseCharacteristics?.Vitality ?? 10) + (state.racialBonusVitality ?? 0);
 }
 
-// Spellcasting potential gained per level depends on the spellcasting tag of primary AO.
-function getPotentialGain(state, level) {
-  const origin = state.primaryAO === 'Custom'
+function getPotentialGain(state, level, originsData) {
+  const levelPrimaryAO = state.levelSelections?.[level]?.primaryAO || state.primaryAO;
+  const origin = levelPrimaryAO === 'Custom'
     ? state.customPrimaryAO
-    : { spellcasting: state.primaryAOSpellcasting };
+    : (originsData.find(o => o.name === levelPrimaryAO) ?? state.customAOs?.find(o => o.name === levelPrimaryAO));
 
   const tag = origin?.spellcasting ?? 'Minor';
 
   const table = {
     Minor:    [20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50],
-    Moderate: [40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 40, 60, 60, 60, 60, 60, 70, 70, 70, 70, 70],
+    Moderate: [40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 70, 70, 70, 70, 70],
     Major:    [60, 60, 60, 60, 60, 100, 100, 100, 100, 100, 140, 140, 140, 140, 140, 180, 180, 180, 180, 180]
   };
 
-  console.log(`{origin}, {spellcasting}`)
-
-  return table[tag]?.[level] ?? 0;
+  return table[tag]?.[level - 1] ?? 0;
 }
 
 export function buildLevelSummary(state, originData) {
@@ -71,3 +71,4 @@ export function buildLevelSummary(state, originData) {
     apNote: apGainNote
   };
 }
+
