@@ -227,6 +227,12 @@ function renderIdentityStep(container) {
         <input type="number" id="char-level" class="input" min="1" max="20" value="${state.level}">
       </div>
     </div>
+    <div class="section-divider">Personality & Backstory</div>
+    <div class="form-group">
+      <label for="personality-backstory">Personality & Backstory</label>
+      <textarea id="personality-backstory" class="textarea" rows="6"
+                placeholder="Describe your character's personality, goals, fears, and history...">${state.personalityBackstory ?? ''}</textarea>
+    </div>
     <div class="section-divider">Appearance (Optional)</div>
     <div class="form-grid form-grid-3">
       <div class="form-group">
@@ -279,6 +285,7 @@ function renderIdentityStep(container) {
     }
     updateSummary();
   });
+  bindInput('personality-backstory', v => { state.personalityBackstory = v; });
   bindInput('app-age', v => { state.appearance = { ...state.appearance, age: v }; });
   bindInput('app-height', v => { state.appearance = { ...state.appearance, height: v }; });
   bindInput('app-weight', v => { state.appearance = { ...state.appearance, weight: v }; });
@@ -2550,12 +2557,7 @@ function renderFinishingStep(container) {
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">✅ Finishing Touches</h2>
-      <p class="step-desc">Finalize your character's backstory, then export your character sheet.</p>
-    </div>
-    <div class="form-group">
-      <label for="personality-backstory">Personality & Backstory</label>
-      <textarea id="personality-backstory" class="textarea" rows="8"
-                placeholder="Describe your character's personality, goals, fears, and history...">${state.personalityBackstory ?? ''}</textarea>
+      <p class="step-desc">Review your character details and export your character sheet.</p>
     </div>
     <div class="form-group">
       <label>Custom Features / Notes</label>
@@ -2570,10 +2572,6 @@ function renderFinishingStep(container) {
       <button class="btn btn-primary" id="btn-final-export-pdf">📄 Export PDF Character Sheet</button>
     </div>
   `;
-
-  container.querySelector('#personality-backstory')?.addEventListener('input', e => {
-    state.personalityBackstory = e.target.value;
-  });
 
   container.querySelector('#custom-features')?.addEventListener('input', e => {
     state.customFeatures = e.target.value.split('\n').filter(Boolean);
