@@ -126,7 +126,8 @@ export const BACKGROUNDS = [
     gold: 10,
     equipment: 'A bottle of black ink, a quill, a small knife, common clothes, a belt pouch containing 10 gp',
     trait: 'Inquiry',
-    desc: 'You spent years scouring manuscripts and studying scrolls.'
+    desc: 'You spent years scouring manuscripts and studying scrolls.',
+    restrictSkills: ['Academics', 'Investigation', 'Medicine', 'Perception']
   },
   {
     name: 'Sailor',

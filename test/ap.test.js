@@ -382,5 +382,19 @@ describe('Skill Point Correction and Level-Based Limitations', () => {
     const result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
     expect(result.skillsSpent).toBe(1);
   });
+
+  test('Custom academic fields consume skill points with free skill points prioritized', () => {
+    const state = getInitialState();
+    state.background = 'Criminal'; // Criminal restricts 5 BG free skill points to ['Athletics', 'Deception', 'Perception', 'Subtlety', 'Stealth']
+    state.academicsEntries = [{ name: 'Archaeology', rank: 2 }]; // Rank 2 costs 2 points
+
+    let result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+    expect(result.skillsSpent).toBe(2);
+
+    state.primaryAO = 'Custom';
+    state.customPrimaryAO = { extraSkills: 1 }; // grants 4 unrestricted free points
+    result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+    expect(result.skillsSpent).toBe(0);
+  });
 });
 

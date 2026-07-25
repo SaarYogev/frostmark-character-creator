@@ -82,21 +82,9 @@ export const SKILLS = [
   { name: 'Subtlety', stats: ['Dexterity', 'Cunning'], key: 'Sub' },
   { name: 'Empathy', stats: ['Manipulation', 'Composure'], key: 'Emp' },
   { name: 'Stealth', stats: ['Dexterity', 'Cunning'], key: 'Stealth' },
-  { name: 'Investigation', stats: ['Cunning', 'Cunning'], key: 'Inv' }, // Investigation uses Cun
+  { name: 'Investigation', stats: ['Cunning', 'Cunning'], key: 'Inv' },
   { name: 'Survival', stats: ['Intelligence', 'Cunning'], key: 'Surv' },
   { name: 'Leadership', stats: ['Presence', 'Manipulation'], key: 'Lead' },
   { name: 'Medicine', stats: ['Intelligence', 'Cunning'], key: 'Med' },
   { name: 'Occult', stats: ['Intelligence', 'Cunning'], key: 'Occ' }
-];
-
-export const ACADEMICS_FIELDS = [
-  'History',
-  'Nature',
-  'Religion',
-  'Magic',
-  'Geography',
-  'Politics',
-  'Tinkering',
-  'Society',
-  'Engineering'
 ];

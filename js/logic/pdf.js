@@ -165,7 +165,8 @@ const SKILL_PDF_MAP = {
   'Survival':        { prefix: 'Surv', stat1field: 'Surv Int', stat2field: 'Surv Cun' },
   'Leadership':      { prefix: 'Lead', stat1field: 'Lead Pre', stat2field: 'Lead Man' },
   'Medicine':        { prefix: 'Med', stat1field: 'Med Int', stat2field: 'Med Cun' },
-  'Occult':          { prefix: 'Occ', stat1field: 'Occ Int', stat2field: 'Occ Cun' }
+  'Occult':          { prefix: 'Occ', stat1field: 'Occ Int', stat2field: 'Occ Cun' },
+  'Arts & Craft':    { prefix: 'Arts', stat1field: 'Arts Dex', stat2field: 'Arts Cun' }
 };
 
 function calcPassivePerception(finalStats, profBonus, skillRanks) {
@@ -206,14 +207,28 @@ function fillSkills(form, finalStats, profBonus, state) {
     }
   }
 
-  const acaFields = state.academicsFields ?? [];
-  for (let i = 0; i < Math.min(acaFields.length, 3); i++) {
-    const field = acaFields[i];
-    const rank = state.academicsRanks?.[field] ?? 0;
+  // Handle Arts & Craft custom entries
+  const artsEntries = state.artsCraftEntries ?? [];
+  if (artsEntries.length > 0) {
+    const primaryArts = artsEntries[0];
+    const rank = primaryArts.rank ?? 0;
+    fillRankCheckboxes(form, 'Arts', rank);
+    const dexMod = getCharacteristicModifier(finalStats.Dexterity ?? 10);
+    const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
+    const rankBonus = SKILL_RANK_BONUS_VALUE(profBonus, rank);
+    safeSetText(form, 'Arts Dex', formatModifier(dexMod + rankBonus));
+    safeSetText(form, 'Arts Cun', formatModifier(cunMod + rankBonus));
+  }
+
+  // Handle Academics custom entries
+  const acaEntries = state.academicsEntries ?? [];
+  for (let i = 0; i < Math.min(acaEntries.length, 3); i++) {
+    const entry = acaEntries[i];
+    const field = typeof entry === 'string' ? entry : entry.name;
+    const rank = typeof entry === 'string' ? (state.academicsRanks?.[field] ?? 0) : (entry.rank ?? 0);
     const n = i + 1;
     safeSetText(form, `Aca ${n} label`, field);
     fillRankCheckboxes(form, `Aca ${n}`, rank);
-    // Academics uses Int for left stat, Cun for right stat
     const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
     const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
     const rankBonus = SKILL_RANK_BONUS_VALUE(profBonus, rank);

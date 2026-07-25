@@ -46,6 +46,8 @@ export function getInitialState() {
     skillRanks: {},
     academicsFields: [], // list of chosen academics custom fields
     academicsRanks: {}, // e.g. { "History": 1 }
+    academicsEntries: [], // e.g. [{ name: "History", rank: 1 }]
+    artsCraftEntries: [], // e.g. [{ name: "Blacksmithing", rank: 2 }]
 
     savingThrowsProficient: {
       Brawn: false,
@@ -200,10 +202,7 @@ export function getCharacteristicModifier(score) {
   return Math.floor((score - 10) / 2);
 }
 
-export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
-  let spent = 0;
-
-  // Resolve background-specific configurations
+export function computeFreeSkillPools(state, backgroundsData) {
   let bgFree = 0;
   let builtInRanks = {};
   let builtInAcademics = {};
@@ -217,20 +216,11 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
       bgFree = bg.freeSkillPoints ?? 4;
       builtInRanks = bg.builtInRanks ?? {};
       builtInAcademics = bg.builtInAcademics ?? {};
-      const fallbackList = [
-        ...(bg.skills ?? []),
-        ...Object.keys(builtInRanks),
-        ...Object.keys(builtInAcademics)
-      ];
-      restrictSkills = bg.restrictSkills ?? (fallbackList.length ? fallbackList : null);
+      restrictSkills = bg.restrictSkills ?? null;
     }
   }
 
-  // Resolve Primary/Secondary AO extra skill points
   let aoFree = 0;
-  let primaryExtra = 0;
-  let secondaryExtra = 0;
-
   const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
   if (hasLevelSelections) {
     let extraCount = 0;
@@ -255,11 +245,23 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     }
   } else {
     const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
-    const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
-    primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
-    secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
-    aoFree = (primaryExtra + secondaryExtra) * 4;
+    const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
+    aoFree = primaryExtra * 4;
   }
+
+  return {
+    bgFree,
+    aoFree,
+    builtInRanks,
+    builtInAcademics,
+    restrictSkills
+  };
+}
+
+export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
+  let spent = 0;
+
+  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, backgroundsData);
 
   let restrictedSpent = 0;
   let unrestrictedSpent = 0;
@@ -276,11 +278,44 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     }
   }
 
-  for (const field in state.academicsRanks) {
-    const rank = state.academicsRanks[field] ?? 0;
-    const builtIn = builtInAcademics[field] ?? 0;
+  // Legacy academicsRanks or academicsEntries
+  const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
+  const acaEntries = state.academicsEntries ?? [];
+  if (acaEntries.length > 0) {
+    for (const entry of acaEntries) {
+      const rank = entry.rank ?? 0;
+      const builtIn = builtInAcademics[entry.name] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  } else {
+    for (const field in state.academicsRanks) {
+      const rank = state.academicsRanks[field] ?? 0;
+      const builtIn = builtInAcademics[field] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(field))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  }
+
+  // Custom Arts & Craft entries
+  const artsEntries = state.artsCraftEntries ?? [];
+  for (const entry of artsEntries) {
+    const rank = entry.rank ?? 0;
+    const builtIn = builtInRanks['Arts & Craft'] ?? 0;
     const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    unrestrictedSpent += cost;
+    if (restrictSkills && restrictSkills.includes('Arts & Craft')) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
   }
 
   let skillsSpent = 0;
@@ -341,10 +376,42 @@ export function importCharacterJSON(jsonString) {
     if (!parsed.level || !parsed.baseCharacteristics) {
       throw new Error('Missing core character stats');
     }
+
+    // Migration: Convert legacy academicsRanks into academicsEntries
+    if (!parsed.academicsEntries || parsed.academicsEntries.length === 0) {
+      const entries = [];
+      if (parsed.academicsRanks) {
+        for (const [name, rank] of Object.entries(parsed.academicsRanks)) {
+          if (rank > 0 || (parsed.academicsFields && parsed.academicsFields.includes(name))) {
+            entries.push({ name, rank: rank || 1 });
+          }
+        }
+      } else if (parsed.academicsFields) {
+        for (const name of parsed.academicsFields) {
+          entries.push({ name, rank: 1 });
+        }
+      }
+      parsed.academicsEntries = entries;
+    }
+
+    // Migration: Convert legacy skillRanks['Arts & Craft'] into artsCraftEntries
+    if (!parsed.artsCraftEntries || parsed.artsCraftEntries.length === 0) {
+      const legacyRank = parsed.skillRanks? importSkillArtsCraftRank(parsed) : 0;
+      if (legacyRank > 0) {
+        parsed.artsCraftEntries = [{ name: 'General Crafting', rank: legacyRank }];
+      } else {
+        parsed.artsCraftEntries = [];
+      }
+    }
+
     return parsed;
   } catch (e) {
     throw new Error('Invalid JSON character sheet: ' + e.message);
   }
+}
+
+function importSkillArtsCraftRank(parsed) {
+  return parsed.skillRanks?.['Arts & Craft'] ?? parsed.skillRanks?.['Arts'] ?? 0;
 }
 
 export function exportCharacterJSON(state) {
