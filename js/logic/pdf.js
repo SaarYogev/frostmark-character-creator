@@ -1,6 +1,8 @@
 import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants.js';
+import { getAbilityById } from '../data/abilities.js';
 import { getFinalCharacteristics, getCharacteristicModifier, getProficiencyBonus, calculateSpentAccomplishmentPoints } from './state.js';
+
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
@@ -10,13 +12,18 @@ async function loadTemplate() {
   return PDFDocument.load(await response.arrayBuffer());
 }
 
-function safeSetText(form, fieldName, value) {
+function safeSetText(form, fieldName, value, fontSize) {
   try {
-    form.getTextField(fieldName).setText(String(value ?? ''));
+    const field = form.getTextField(fieldName);
+    field.setText(String(value ?? ''));
+    if (fontSize != null && field.setFontSize) {
+      field.setFontSize(fontSize);
+    }
   } catch {
     // Field may not exist in all sheet versions; skip silently
   }
 }
+
 
 function safeCheck(form, fieldName, checked) {
   try {
@@ -78,8 +85,9 @@ function fillIdentity(form, state, finalStats) {
   if (state.weaponProficiencies && state.weaponProficiencies.length) {
     profsList.push(`Weapons: ${state.weaponProficiencies.join(', ')}`);
   }
-  safeSetText(form, 'Lang/profs column', profsList.join('\n'));
+  safeSetText(form, 'Lang/profs column', profsList.join('\n'), 9);
 }
+
 
 function buildAOLevelString(state) {
   const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
@@ -352,8 +360,34 @@ function fillEquipment(form, state, backgroundsData) {
 }
 
 function fillMisc(form, state) {
+  const selectedAbilityFeatures = [];
+  if (state.levelSelections) {
+    const currentLevel = state.level ?? 1;
+    for (let l = 1; l <= currentLevel; l++) {
+      const sel = state.levelSelections[l];
+      if (!sel) continue;
+      if (sel.primaryAbility) {
+        const ab = getAbilityById(sel.primaryAbility);
+        if (ab) {
+          const descText = (ab.full_desc || ab.short_desc || '').trim();
+          selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
+        }
+      }
+      if (sel.secondaryAbility) {
+        const ab = getAbilityById(sel.secondaryAbility);
+        if (ab) {
+          const descText = (ab.full_desc || ab.short_desc || '').trim();
+          selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
+        }
+      }
+    }
+  }
+
+
+
 
   const features = [
+    ...selectedAbilityFeatures,
     ...(state.raceTraits ?? []),
     ...(state.customFeatures ?? [])
   ];
@@ -363,6 +397,7 @@ function fillMisc(form, state) {
   const additionalFeatures = features.slice(2).join('\n');
   safeSetText(form, 'Additional Abilities column 1', additionalFeatures);
 }
+
 
 export function downloadPDF(pdfBytes, filename = 'frostmark-character.pdf') {
   const blob = new Blob([pdfBytes], { type: 'application/pdf' });
