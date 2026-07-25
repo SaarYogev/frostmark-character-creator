@@ -4,6 +4,7 @@ import { BACKGROUNDS } from '../data/backgrounds.js';
 import { ORIGINS } from '../data/origins.js';
 import { SPELLS, CANTRIPS } from '../data/spells.js';
 import { WEAPONS, ARMOR as ARMORS } from '../data/equipment.js';
+import { ABILITIES, getAbilitiesForLevel, getAbilityById } from '../data/abilities.js';
 import {
   getInitialState,
   getAbilityPointLimit,
@@ -30,7 +31,7 @@ const STEPS = [
   { id: 'race',           title: 'Race & Subrace',       icon: '🌍' },
   { id: 'background',     title: 'Background',           icon: '📖' },
   { id: 'abilities',      title: 'Ability Scores',       icon: '💪' },
-  { id: 'origins',        title: 'Ability Origins',      icon: '✨' },
+  { id: 'ability-origins', title: 'Ability Origins',      icon: '✨' },
   { id: 'skills',         title: 'Skills',               icon: '🎯' },
   { id: 'proficiencies',  title: 'Proficiencies & AP',   icon: '🛡️' },
   { id: 'spellslots',     title: 'Spell Slots',          icon: '⚡' },
@@ -184,7 +185,7 @@ function renderStep(index) {
     race:          renderRaceStep,
     background:    renderBackgroundStep,
     abilities:     renderAbilitiesStep,
-    origins:       renderOriginsStep,
+    'ability-origins': renderAbilityOriginsStep,
     skills:        renderSkillsStep,
     proficiencies: renderProficienciesStep,
     spellslots:    renderSpellslotsStep,
@@ -2723,3 +2724,357 @@ function bindSelect(id, handler) {
 function bindNumber(id, handler) {
   document.getElementById(id)?.addEventListener('input', e => handler(parseInt(e.target.value, 10) || 1));
 }
+
+// ── Step: Ability Origins (Redesigned) ─────────────────────────────────────────
+
+let selectedAbilityForDetailId = null;
+
+function renderAbilityOriginsStep(container) {
+  const currentLevel = state.level || 1;
+
+  // Initialize selectedAOs if empty
+  if (!state.selectedAOs) state.selectedAOs = [];
+  if (!state.customAOs) state.customAOs = [];
+  if (!state.levelSelections) state.levelSelections = {};
+
+  const availableAOs = [
+    ...ORIGINS.map(o => o.name),
+    ...state.customAOs.map(c => c.name)
+  ];
+
+  // Helper to ensure levelSelections grid has valid entries
+  for (let l = 1; l <= currentLevel; l++) {
+    if (!state.levelSelections[l]) {
+      state.levelSelections[l] = {
+        primaryAO: l === 1 ? (state.primaryAO || state.selectedAOs[0] || '') : (state.levelSelections[l - 1]?.primaryAO || state.selectedAOs[0] || ''),
+        secondaryAO: l <= 3 ? (l === 1 ? (state.secondaryAO || '') : (state.levelSelections[l - 1]?.secondaryAO || '')) : '',
+        primaryAbility: '',
+        secondaryAbility: '',
+        upgradeChoices: {}
+      };
+    }
+  }
+
+  // Sync Level 1 primaryAO and secondaryAO for backward compatibility
+  if (state.levelSelections[1]) {
+    state.primaryAO = state.levelSelections[1].primaryAO || '';
+    state.secondaryAO = state.levelSelections[1].secondaryAO || '';
+    syncPrimaryAOHD();
+  }
+
+  container.innerHTML = `
+    <div class="step-header">
+      <h2 class="step-title">✨ Ability Origins & Level Progression</h2>
+      <p class="step-desc">Select up to 4 general Ability Origins for your character, then configure your Primary & Secondary choices and abilities level-by-level.</p>
+    </div>
+
+    <!-- 1. Pool Selection (Up to 4) -->
+    <div class="section-block">
+      <h3 class="section-title">1. General Ability Origin Pool <span class="optional-tag">Select up to 4</span></h3>
+      <p class="form-hint">Selected: <strong>${state.selectedAOs.length} / 4</strong></p>
+      <div class="card-selector ao-pool-selector">
+        ${ORIGINS.map(o => {
+          const isSelected = state.selectedAOs.includes(o.name);
+          const isDisabled = !isSelected && state.selectedAOs.length >= 4;
+          return `
+            <div class="ao-card card-option ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}"
+                 data-pool-ao="${o.name}">
+              <div class="card-option-name">${o.name}</div>
+              <div class="card-option-sub">d${o.hd} HD · ${o.spellcasting} casting</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- 2. Level-by-Level Configuration & Ability Selection -->
+    ${state.selectedAOs.length === 0 ? `
+      <div class="info-card" style="margin-top: 1.5rem; text-align: center;">
+        <p>⚠️ Please select at least one Ability Origin in your general pool above to configure level choices.</p>
+      </div>
+    ` : `
+      <div class="ao-main-layout">
+        <!-- Left: Level Selections & Available Abilities -->
+        <div class="ao-levels-column">
+          <h3 class="section-title">2. Level Selections (Levels 1 to ${currentLevel})</h3>
+          
+          <div class="ao-levels-accordion">
+            ${Array.from({ length: currentLevel }, (_, idx) => idx + 1).map(lvl => {
+              const sel = state.levelSelections[lvl] || { primaryAO: '', secondaryAO: '', primaryAbility: '', secondaryAbility: '', upgradeChoices: {} };
+              const isSecondaryAllowed = lvl <= 3;
+
+              // Always fetch all Primary & Secondary abilities from all selected AOs in the general pool
+              const primaryAbilities = state.selectedAOs.flatMap(ao => getAbilitiesForLevel(lvl, 'Primary', ao));
+              const secondaryAbilities = isSecondaryAllowed ? state.selectedAOs.flatMap(ao => getAbilitiesForLevel(lvl, 'Secondary', ao)) : [];
+
+              return `
+                <div class="ao-level-card">
+                  <div class="ao-level-header">
+                    <span class="ao-level-number">Level ${lvl}</span>
+                    <div class="ao-level-tags">
+                      <span class="ao-tag primary-tag">Primary Choices</span>
+                      ${isSecondaryAllowed ? '<span class="ao-tag secondary-tag">Secondary Choices (Levels 1–3)</span>' : ''}
+                    </div>
+                  </div>
+
+                  <!-- Abilities for Level -->
+                  <div class="ao-level-abilities-section">
+                    <!-- Primary Ability Choices -->
+                    <div class="ao-ability-group">
+                      <div class="ao-ability-group-title">Primary Ability Choices</div>
+                      <div class="ao-abilities-grid">
+                        ${primaryAbilities.length === 0 ? `
+                          <div class="no-abilities">No primary abilities found for level ${lvl} in pool</div>
+                        ` : primaryAbilities.map(ab => {
+                          const isPicked = sel.primaryAbility === ab.id;
+                          const isInspected = selectedAbilityForDetailId === ab.id;
+
+                          return `
+                            <div class="ability-card ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}" data-ability-id="${ab.id}" data-level="${lvl}" data-slot="primary">
+                              <div class="ability-card-header">
+                                <span class="ability-origin-tag">${ab.origin}</span>
+                                ${isPicked ? '<span class="selected-badge">✓ Selected</span>' : ''}
+                              </div>
+                              <h4 class="ability-card-title">${ab.name}</h4>
+                              <p class="ability-short-desc">${ab.short_desc}</p>
+                            </div>
+                          `;
+                        }).join('')}
+                      </div>
+                    </div>
+
+                    <!-- Secondary Ability Choices -->
+                    ${isSecondaryAllowed ? `
+                      <div class="ao-ability-group" style="margin-top: 1.25rem;">
+                        <div class="ao-ability-group-title">Secondary Ability Choices</div>
+                        <div class="ao-abilities-grid">
+                          ${secondaryAbilities.length === 0 ? `
+                            <div class="no-abilities">No secondary abilities found for level ${lvl} in pool</div>
+                          ` : secondaryAbilities.map(ab => {
+                            const isPicked = sel.secondaryAbility === ab.id;
+                            const isInspected = selectedAbilityForDetailId === ab.id;
+
+                            return `
+                              <div class="ability-card ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}" data-ability-id="${ab.id}" data-level="${lvl}" data-slot="secondary">
+                                <div class="ability-card-header">
+                                  <span class="ability-origin-tag">${ab.origin}</span>
+                                  ${isPicked ? '<span class="selected-badge">✓ Selected</span>' : ''}
+                                </div>
+                                <h4 class="ability-card-title">${ab.name}</h4>
+                                <p class="ability-short-desc">${ab.short_desc}</p>
+                              </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <!-- Right: Sticky Ability Details Panel -->
+        <div class="ao-details-column">
+          <div class="sticky-detail-panel">
+            <h3 class="section-title">Ability Details</h3>
+            ${renderAbilityDetailPane(selectedAbilityForDetailId)}
+          </div>
+        </div>
+      </div>
+    `}
+  `;
+
+  bindAbilityOriginsEvents(container);
+}
+
+function renderAbilityDetailPane(abilityId) {
+  if (!abilityId) {
+    return `
+      <div class="no-ability-selected">
+        <p>Click on any ability card to inspect its full rules, prerequisites, and effects here.</p>
+      </div>
+    `;
+  }
+
+  const ability = getAbilityById(abilityId);
+  if (!ability) {
+    return '<div class="no-ability-selected">Ability details not found.</div>';
+  }
+
+  // Find if this ability is selected in state
+  let selectedLevel = null;
+  let selectedSlot = null;
+  for (const [lvl, sel] of Object.entries(state.levelSelections || {})) {
+    if (sel.primaryAbility === ability.id) {
+      selectedLevel = lvl;
+      selectedSlot = 'Primary';
+      break;
+    }
+    if (sel.secondaryAbility === ability.id) {
+      selectedLevel = lvl;
+      selectedSlot = 'Secondary';
+      break;
+    }
+  }
+
+  const isCurrentlySelected = !!selectedLevel;
+  const choiceValue = selectedLevel ? (state.levelSelections[selectedLevel]?.upgradeChoices?.[ability.id] || '') : '';
+
+  return `
+    <div class="ability-detail-content">
+      <div class="ability-detail-header">
+        <h4>${ability.name}</h4>
+        <div class="ability-meta">
+          <span class="ability-origin">${ability.origin}</span>
+          <span class="ability-level">Level ${ability.level}</span>
+          <span class="ability-selection">${ability.selection}</span>
+        </div>
+      </div>
+
+      <div class="ability-full-desc" style="white-space: pre-line;">${ability.full_desc || ability.short_desc}</div>
+
+      ${ability.name.includes('General Upgrade') || ability.name.includes('Magical Upgrade') || ability.full_desc.includes('Gain one of your choices:') ? `
+        <div class="detail-choice-block" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-elevated); border-radius: 8px; border: 1px solid var(--border-subtle);">
+          <label style="font-size: 0.8rem; font-weight: 600; color: var(--accent-gold); display: block; margin-bottom: 0.4rem;">Select Upgrade Benefit:</label>
+          <select class="select detail-upgrade-select" data-ability-id="${ability.id}" data-level="${selectedLevel || ability.level}">
+            <option value="">-- Choose Option --</option>
+            <option value="Accomplishment Points" ${choiceValue === 'Accomplishment Points' ? 'selected' : ''}>1 Accomplishment Point</option>
+            <option value="Potential" ${choiceValue === 'Potential' ? 'selected' : ''}>10 Potential</option>
+            ${ability.full_desc.includes('skill points') ? `<option value="Skill Points" ${choiceValue === 'Skill Points' ? 'selected' : ''}>Skill Points</option>` : ''}
+            ${ability.full_desc.includes('ability score') ? `<option value="Ability Score +1" ${choiceValue === 'Ability Score +1' ? 'selected' : ''}>Ability Score +1</option>` : ''}
+            ${ability.full_desc.includes('feat') ? `<option value="Feat" ${choiceValue === 'Feat' ? 'selected' : ''}>Feat</option>` : ''}
+          </select>
+        </div>
+      ` : ''}
+
+      <div class="ability-detail-actions" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+        ${isCurrentlySelected ? `
+          <button class="btn btn-secondary toggle-inspect-pick-btn" data-ability-id="${ability.id}" data-action="deselect" style="width: 100%;">
+            Selected at Level ${selectedLevel} (${selectedSlot}) — Click to Deselect
+          </button>
+        ` : `
+          <button class="btn btn-accent toggle-inspect-pick-btn" data-ability-id="${ability.id}" data-action="select" style="width: 100%;">
+            Select Ability for Level ${ability.level}
+          </button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function bindAbilityOriginsEvents(container) {
+  // Pool selector toggles (up to 4)
+  container.querySelectorAll('.ao-card[data-pool-ao]').forEach(card => {
+    card.addEventListener('click', () => {
+      const aoName = card.dataset.poolAo;
+      if (!state.selectedAOs) state.selectedAOs = [];
+
+      if (state.selectedAOs.includes(aoName)) {
+        state.selectedAOs = state.selectedAOs.filter(n => n !== aoName);
+      } else if (state.selectedAOs.length < 4) {
+        state.selectedAOs.push(aoName);
+      } else {
+        showToast('Maximum 4 Ability Origins allowed in your pool.', 'info');
+        return;
+      }
+      renderAbilityOriginsStep(container);
+      renderStepNav();
+      updateSummary();
+    });
+  });
+
+  // Level select dropdowns
+  container.querySelectorAll('.ao-level-select').forEach(select => {
+    select.addEventListener('change', e => {
+      const lvl = parseInt(select.dataset.level, 10);
+      const field = select.dataset.field;
+      const value = select.value;
+
+      if (!state.levelSelections[lvl]) state.levelSelections[lvl] = {};
+      state.levelSelections[lvl][field] = value;
+
+      if (field === 'primaryAO' && state.levelSelections[lvl].secondaryAO === value) {
+        state.levelSelections[lvl].secondaryAO = '';
+      }
+
+      if (lvl === 1) {
+        if (field === 'primaryAO') state.primaryAO = value;
+        if (field === 'secondaryAO') state.secondaryAO = value;
+        syncPrimaryAOHD();
+      }
+
+      renderAbilityOriginsStep(container);
+      renderStepNav();
+      updateSummary();
+    });
+  });
+
+  // Ability cards click -> inspect details
+  container.querySelectorAll('.ability-card').forEach(card => {
+    card.addEventListener('click', e => {
+      const targetCard = e.currentTarget.closest('.ability-card') || card;
+      const abId = targetCard?.dataset?.abilityId;
+      if (abId) {
+        selectedAbilityForDetailId = abId;
+        renderAbilityOriginsStep(container);
+      }
+    });
+  });
+
+  // Upgrade choice select dropdowns on details pane
+  container.querySelectorAll('.detail-upgrade-select').forEach(select => {
+    select.addEventListener('change', e => {
+      const lvl = parseInt(select.dataset.level, 10);
+      const abId = select.dataset.abilityId;
+      const val = select.value;
+
+      if (!state.levelSelections[lvl]) state.levelSelections[lvl] = {};
+      if (!state.levelSelections[lvl].upgradeChoices) state.levelSelections[lvl].upgradeChoices = {};
+
+      state.levelSelections[lvl].upgradeChoices[abId] = val;
+      updateSummary();
+    });
+  });
+
+  // Sticky detail pane action button
+  container.querySelectorAll('.toggle-inspect-pick-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const abId = btn.dataset.abilityId;
+      const action = btn.dataset.action;
+      const ability = getAbilityById(abId);
+      if (!ability) return;
+
+      const lvl = ability.level;
+      if (!state.levelSelections[lvl]) state.levelSelections[lvl] = {};
+
+      const slot = ability.selection.toLowerCase(); // 'primary' or 'secondary'
+      if (action === 'select') {
+        if (slot === 'primary') {
+          state.levelSelections[lvl].primaryAbility = abId;
+          state.levelSelections[lvl].primaryAO = ability.origin;
+        } else {
+          state.levelSelections[lvl].secondaryAbility = abId;
+          state.levelSelections[lvl].secondaryAO = ability.origin;
+        }
+      } else {
+        if (slot === 'primary') {
+          state.levelSelections[lvl].primaryAbility = '';
+        } else {
+          state.levelSelections[lvl].secondaryAbility = '';
+        }
+      }
+
+      if (lvl === 1) {
+        state.primaryAO = state.levelSelections[1].primaryAO || state.selectedAOs[0] || '';
+        state.secondaryAO = state.levelSelections[1].secondaryAO || '';
+        syncPrimaryAOHD();
+      }
+
+      renderAbilityOriginsStep(container);
+      updateSummary();
+    });
+  });
+}
+

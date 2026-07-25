@@ -7,6 +7,7 @@ import {
 } from '../js/logic/state.js';
 import { ORIGINS } from '../js/data/origins.js';
 import { BACKGROUNDS } from '../js/data/backgrounds.js';
+import { getAbilitiesForLevel } from '../js/data/abilities.js';
 
 describe('Level-by-Level Ability Origins Logic', () => {
   test('calculatePotentialGained sums potential level-by-level', () => {
@@ -66,7 +67,24 @@ describe('Level-by-Level Ability Origins Logic', () => {
       Athletics: 2
     };
 
-    const result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(0);
+    const spentAP = calculateSpentAccomplishmentPoints(state, BACKGROUNDS, ORIGINS);
+    expect(spentAP.totalSpent).toBe(0);
+  });
+
+  test('getAbilitiesForLevel returns accurate level abilities without level mismatches', () => {
+
+    const level1Primary = getAbilitiesForLevel(1, 'Primary', 'Occult Student');
+    const level14Primary = getAbilitiesForLevel(14, 'Primary', 'Occult Student');
+
+    const lvl1Names = level1Primary.map(a => a.name);
+    const lvl14Names = level14Primary.map(a => a.name);
+
+    // Protective Ward should be Level 1
+    expect(lvl1Names).toContain('Protective Ward (Abjuration)');
+    // Prismatic Ward should be Level 14
+    expect(lvl14Names).toContain('Prismatic Ward (Abjuration)');
+
+    // Prismatic Ward MUST NOT appear at Level 1 Primary
+    expect(lvl1Names).not.toContain('Prismatic Ward (Abjuration)');
   });
 });
