@@ -71,12 +71,36 @@ function fillIdentity(form, state, finalStats) {
 }
 
 function buildAOLevelString(state) {
-  const primary = state.primaryAO === 'Custom' ? state.customPrimaryAO?.name : state.primaryAO;
-  const secondary = state.secondaryAO === 'Custom' ? state.customSecondaryAO?.name : state.secondaryAO;
-  const level = state.level;
-  let str = `${primary ?? ''} ${level}`;
-  if (secondary) str += ` / ${secondary} ${level}`;
-  return str;
+  const hasLevelSelections = state.levelSelections && Object.keys(state.levelSelections).length > 0;
+  if (hasLevelSelections) {
+    const counts = {};
+    const level = state.level ?? 1;
+    for (let i = 1; i <= level; i++) {
+      const selection = state.levelSelections[i];
+      if (selection && selection.primaryAO) {
+        let name = selection.primaryAO;
+        if (name === 'Custom' && state.customPrimaryAO?.name) {
+          name = state.customPrimaryAO.name;
+        } else if (state.customAOs) {
+          const custom = state.customAOs.find(c => c.name === name);
+          if (custom?.name) name = custom.name;
+        }
+        counts[name] = (counts[name] || 0) + 1;
+      }
+    }
+    const parts = [];
+    for (const name in counts) {
+      parts.push(`${name} ${counts[name]}`);
+    }
+    return parts.join(' / ');
+  } else {
+    const primary = state.primaryAO === 'Custom' ? state.customPrimaryAO?.name : state.primaryAO;
+    const secondary = state.secondaryAO === 'Custom' ? state.customSecondaryAO?.name : state.secondaryAO;
+    const level = state.level;
+    let str = `${primary ?? ''} ${level}`;
+    if (secondary) str += ` / ${secondary} ${level}`;
+    return str;
+  }
 }
 
 function fillAbilityScores(form, finalStats, profBonus, state) {
@@ -287,7 +311,10 @@ function fillSpellcasting(form, state, finalStats, profBonus) {
 }
 
 function resolveSpellcastingAbility(state) {
-  const aoName = state.primaryAO !== 'Custom' ? state.primaryAO : state.customPrimaryAO?.name;
+  const level1Primary = state.levelSelections?.[1]?.primaryAO || state.primaryAO;
+  const aoName = level1Primary !== 'Custom'
+    ? level1Primary
+    : (state.customPrimaryAO?.name || 'Custom');
   const divineOrigins = ['Devotion', 'Divine Oath'];
   const arcaneOrigins = ['Occult Student', 'Unique Ancestry', 'World Magic'];
   if (divineOrigins.includes(aoName)) return 'Resolve';

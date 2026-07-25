@@ -221,15 +221,166 @@ body::before {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .step-container {
   flex: 1;
   padding: 36px 40px;
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* ── Ability Origins New Layout & Sticky Detail Panels ─────────────────────── */
+.ao-main-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.ao-levels-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.ao-details-column, .spell-detail-container {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  align-self: start;
+}
+
+.sticky-detail-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-md);
+}
+
+.ao-level-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.ao-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ao-level-number {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent-gold);
+}
+
+.ao-level-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ao-tag {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.primary-tag { background: rgba(108, 141, 255, 0.15); color: var(--accent-primary); }
+.secondary-tag { background: rgba(167, 139, 250, 0.15); color: var(--accent-secondary); }
+.warn-tag { background: rgba(248, 113, 113, 0.15); color: var(--accent-danger); }
+
+.ao-ability-group-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+}
+
+.ao-abilities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.ability-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ability-card:hover {
+  border-color: var(--border-active);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.ability-card.selected {
+  border-color: var(--accent-gold);
+  background: rgba(240, 192, 96, 0.08);
+}
+
+.ability-card.inspected {
+  box-shadow: 0 0 10px var(--accent-primary-glow);
+  border-color: var(--accent-primary);
+}
+
+.ability-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 0.5rem;
+}
+
+.ability-origin-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+  color: var(--accent-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.selected-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+  background: rgba(240, 192, 96, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.ability-card-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
 }
 
 .step-footer {
@@ -614,6 +765,110 @@ body::before {
 .card-option-sub {
   font-size: 0.72rem;
   color: var(--text-muted);
+}
+
+/* ── Ability Origin Selection Styles ───────────────────────────────────────── */
+.ao-selection-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.ao-abilities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ability-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.ability-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--accent-primary-glow), transparent);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.ability-card:hover {
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+.ability-card:hover::before {
+  opacity: 1;
+}
+
+.ability-card.selected {
+  border-color: var(--accent-primary);
+  background: linear-gradient(135deg, rgba(108, 141, 255, 0.15), var(--bg-card));
+  box-shadow: var(--shadow-sm), 0 0 0 1px var(--accent-primary);
+}
+
+.ability-card h4 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.ability-short-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.ability-detail-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
+
+.ability-meta {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  flex-wrap: wrap;
+}
+
+.ability-origin, .ability-level, .ability-selection {
+  background: var(--bg-elevated);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.ability-full-desc {
+  line-height: 1.6;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.no-ability-selected, .no-abilities {
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+  grid-column: 1 / -1;
+}
+
+.optional-tag {
+  font-size: 0.75em;
+  opacity: 0.7;
 }
 
 /* ── Point Buy Tracker ─────────────────────────────────────────────────────── */
@@ -1415,6 +1670,48 @@ body::before {
 .damage-type-pill.radiant { background: rgba(253, 224, 71, 0.15); color: #fde047; }
 .damage-type-pill.necrotic { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 
+.ability-full-desc {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-line;
+  margin-top: 1rem;
+}
+
+.ability-full-desc p {
+  margin-bottom: 0.75rem;
+}
+
+.ao-rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.ao-rules-table th, .ao-rules-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ao-rules-table th {
+  background: rgba(108, 141, 255, 0.1);
+  color: var(--accent-gold);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.ao-rules-table tr:last-child td {
+  border-bottom: none;
+}
+
 .spell-detail-desc h5 {
   font-size: 0.8rem;
   text-transform: uppercase;
@@ -1437,4 +1734,137 @@ body::before {
 .spell-detail-card.school-illusion { border-left: 4px solid #f472b6; }
 .spell-detail-card.school-transmutation { border-left: 4px solid var(--accent-gold); }
 .spell-detail-card.school-vismancy { border-left: 4px solid #a78bfa; }
+
+/* ── Ability Origins New Layout & Sticky Detail Panels ─────────────────────── */
+.ao-main-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.ao-levels-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.ao-details-column, .spell-detail-container {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.sticky-detail-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-md);
+}
+
+.ao-level-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.ao-level-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ao-level-number {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--accent-gold);
+}
+
+.ao-level-tags {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ao-tag {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.primary-tag { background: rgba(108, 141, 255, 0.15); color: var(--accent-primary); }
+.secondary-tag { background: rgba(167, 139, 250, 0.15); color: var(--accent-secondary); }
+.warn-tag { background: rgba(248, 113, 113, 0.15); color: var(--accent-danger); }
+
+.ao-ability-group-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.ability-card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-bottom: 0.5rem;
+}
+
+.ability-card:hover {
+  border-color: var(--border-active);
+  background: var(--bg-hover);
+}
+
+.ability-card.selected {
+  border-color: var(--accent-gold);
+  background: rgba(240, 192, 96, 0.08);
+}
+
+.ability-card.inspected {
+  box-shadow: 0 0 10px var(--accent-primary-glow);
+  border-color: var(--accent-primary);
+}
+
+.ability-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 0.5rem;
+}
+
+.ability-origin-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+  color: var(--accent-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+.ability-card-header h4 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
 

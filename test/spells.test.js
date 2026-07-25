@@ -76,5 +76,22 @@ describe('Spells and Cantrips Metadata verification', () => {
     const eruptingEarth = SPELLS.find(s => s.name === 'Erupting Earth');
     expect(eruptingEarth).toBeDefined();
     expect(eruptingEarth.damageTypes).toContain('bludgeoning');
+
+    // Ensure spells with explicit direct damage clauses (e.g. "deals X cold damage") have matching damageTypes array
+    const VALID_DAMAGE_TYPES = [
+      'bludgeoning', 'piercing', 'slashing',
+      'acid', 'cold', 'fire', 'force', 'lightning',
+      'necrotic', 'poison', 'psychic', 'radiant', 'thunder'
+    ];
+
+    SPELLS.concat(CANTRIPS).forEach(spell => {
+      if (!spell.desc || spell.name === 'Elemental Armor' || spell.name === 'Resistance') return;
+      VALID_DAMAGE_TYPES.forEach(dt => {
+        const regex = new RegExp(`deals\\s+(?:[0-9d\\+\\s]+)?${dt}\\s+damage\\b`, 'i');
+        if (regex.test(spell.desc)) {
+          expect(spell.damageTypes).toContain(dt);
+        }
+      });
+    });
   });
 });

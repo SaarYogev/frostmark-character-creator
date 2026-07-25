@@ -1,6 +1,7 @@
 {
   "name": "character-creator",
   "version": "1.0.0",
+  "type": "module",
   "description": "Frostmark RPG Character Creator",
   "scripts": {
     "dev": "vite",
@@ -17,6 +18,7 @@
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
+    "cheerio": "^1.2.0",
     "gh-pages": "^6.3.0",
     "rollup-plugin-toml": "^1.0.0",
     "smol-toml": "^1.7.0",
