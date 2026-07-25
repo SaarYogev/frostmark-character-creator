@@ -16,6 +16,7 @@ import {
   getFinalCharacteristics,
   getCharacteristicModifier,
   calculateSpentAccomplishmentPoints,
+  computeFreeSkillPools,
   exportCharacterJSON,
   importCharacterJSON,
   calculatePotentialGained,
@@ -922,22 +923,7 @@ function renderSkillsStep(container) {
   const apRemaining = apLimit - totalSpent;
 
   const bg = BACKGROUNDS.find(b => b.name === state.background);
-  const bgFallbackList = bg ? [
-    ...(bg.skills ?? []),
-    ...Object.keys(bg.builtInRanks ?? {}),
-    ...Object.keys(bg.builtInAcademics ?? {})
-  ] : [];
-  const restrictSkills = bg?.restrictSkills ?? (bgFallbackList.length ? bgFallbackList : null);
-  const bgFree = state.background === 'Custom' ? (state.customBackground?.skills?.length ?? 4) : (bg?.freeSkillPoints ?? 4);
-
-  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
-  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
-  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
-  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
-  const aoFree = (primaryExtra + secondaryExtra) * 4;
-
-  const builtInRanks = bg?.builtInRanks ?? {};
-  const builtInAcademics = bg?.builtInAcademics ?? {};
+  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, BACKGROUNDS);
 
   let restrictedSpent = 0;
   let unrestrictedSpent = 0;
@@ -953,11 +939,42 @@ function renderSkillsStep(container) {
     }
   }
 
-  for (const sk in state.academicsRanks) {
-    const rank = state.academicsRanks[sk] ?? 0;
-    const builtIn = builtInAcademics[sk] ?? 0;
+  const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
+  const acaEntries = state.academicsEntries ?? [];
+  if (acaEntries.length > 0) {
+    for (const entry of acaEntries) {
+      const rank = entry.rank ?? 0;
+      const builtIn = builtInAcademics[entry.name] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  } else {
+    for (const sk in state.academicsRanks) {
+      const rank = state.academicsRanks[sk] ?? 0;
+      const builtIn = builtInAcademics[sk] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(sk))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  }
+
+  const artsEntries = state.artsCraftEntries ?? [];
+  for (const entry of artsEntries) {
+    const rank = entry.rank ?? 0;
+    const builtIn = builtInRanks['Arts & Craft'] ?? 0;
     const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    unrestrictedSpent += cost;
+    if (restrictSkills && restrictSkills.includes('Arts & Craft')) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
   }
 
   let bgSpent = 0;
@@ -995,22 +1012,22 @@ function renderSkillsStep(container) {
       </div>
     ` : ''}
 
-    <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}" style="display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-start; padding: 12px 16px;">
+    <div class="point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}" style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center; padding: 12px 16px; border-left: 4px solid var(--accent-color, #4a90e2); background: rgba(74, 144, 226, 0.08); border-radius: 6px; margin-bottom: 1.5rem;">
       <div>
         <span>Background Free Skill Points Used:</span>
-        <strong id="background-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem;">${bgSpent}</strong>
+        <strong id="background-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem; color: #2ecc71;">${bgSpent}</strong>
         <span>/ ${state.background ? bgFree : 0}</span>
       </div>
       <div>
         <span>Ability Origin Free Skill Points Used:</span>
-        <strong id="ao-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem;">${aoSpent}</strong>
+        <strong id="ao-skill-points-used" style="font-size: 1.1rem; margin-left: 0.25rem; color: #2ecc71;">${aoSpent}</strong>
         <span>/ ${aoFree}</span>
       </div>
     </div>
     <div class="skills-grid" id="skills-grid">
       ${SKILLS.map(skill => buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, remaining, restrictSkills)).join('')}
     </div>
-    <div class="section-divider">Academics (choose up to 3 fields)</div>
+    <div class="section-divider">Academics</div>
     <div id="academics-section">
       ${buildAcademicsSection(finalStats, profBonus, bg, apRemaining, remaining, restrictSkills)}
     </div>
@@ -1031,31 +1048,12 @@ function renderSkillsStep(container) {
 }
 
 function computeFreeSkillPoints() {
-  let bgFree = 0;
-  if (state.background === 'Custom') {
-    bgFree = state.customBackground?.skills?.length ?? 4;
-  } else if (state.background) {
-    const bg = BACKGROUNDS.find(b => b.name === state.background);
-    if (bg) bgFree = bg.freeSkillPoints ?? 4;
-  }
-  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
-  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
-  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
-  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
-  // Each AO extra skill represents 4 extra skill points in the character creation rules
-  return bgFree + (primaryExtra + secondaryExtra) * 4;
+  const { bgFree, aoFree } = computeFreeSkillPools(state, BACKGROUNDS);
+  return bgFree + aoFree;
 }
 
 function computeSpentSkillPoints() {
-  const bg = BACKGROUNDS.find(b => b.name === state.background);
-  const builtInRanks = bg?.builtInRanks ?? {};
-  const builtInAcademics = bg?.builtInAcademics ?? {};
-  const bgFallbackList = bg ? [
-    ...(bg.skills ?? []),
-    ...Object.keys(builtInRanks),
-    ...Object.keys(builtInAcademics)
-  ] : [];
-  const restrictSkills = bg?.restrictSkills ?? (bgFallbackList.length ? bgFallbackList : null);
+  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, BACKGROUNDS);
 
   let restrictedSpent = 0;
   let unrestrictedSpent = 0;
@@ -1071,22 +1069,45 @@ function computeSpentSkillPoints() {
     }
   }
 
-  for (const sk in state.academicsRanks) {
-    const rank = state.academicsRanks[sk] ?? 0;
-    const builtIn = builtInAcademics[sk] ?? 0;
-    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    unrestrictedSpent += cost;
+  const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
+  const acaEntries = state.academicsEntries ?? [];
+  if (acaEntries.length > 0) {
+    for (const entry of acaEntries) {
+      const rank = entry.rank ?? 0;
+      const builtIn = builtInAcademics[entry.name] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  } else {
+    for (const sk in state.academicsRanks) {
+      const rank = state.academicsRanks[sk] ?? 0;
+      const builtIn = builtInAcademics[sk] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(sk))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
   }
 
-  const bgFree = state.background === 'Custom' ? (state.customBackground?.skills?.length ?? 4) : (bg?.freeSkillPoints ?? 4);
-  const primaryOrigin = ORIGINS.find(o => o.name === state.primaryAO);
-  const secondaryOrigin = ORIGINS.find(o => o.name === state.secondaryAO);
-  const primaryExtra = state.primaryAO === 'Custom' ? (state.customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
-  const secondaryExtra = state.secondaryAO === 'Custom' ? (state.customSecondaryAO?.extraSkills ?? 0) : (secondaryOrigin?.extraSkills ?? 0);
-  const aoFree = (primaryExtra + secondaryExtra) * 4;
+  const artsEntries = state.artsCraftEntries ?? [];
+  for (const entry of artsEntries) {
+    const rank = entry.rank ?? 0;
+    const builtIn = builtInRanks['Arts & Craft'] ?? 0;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+    if (restrictSkills && restrictSkills.includes('Arts & Craft')) {
+      restrictedSpent += cost;
+    } else {
+      unrestrictedSpent += cost;
+    }
+  }
 
   if (state.background && restrictSkills) {
-    // Under background restrictions, BG free points can only apply to restricted skills.
     const restrictedDiscount = Math.min(bgFree, restrictedSpent);
     const excessRestricted = restrictedSpent - restrictedDiscount;
     const totalUnrestricted = excessRestricted + unrestrictedSpent;
@@ -1162,6 +1183,33 @@ function buildSkillRow(skill, finalStats, profBonus, bg, apRemaining, freeRemain
   `;
 }
 
+function adjustSkill(skillName, delta, container) {
+  const currentRank = state.skillRanks[skillName] ?? 0;
+  const newRank = currentRank + delta;
+
+  if (delta > 0 && !state.manualSkills) {
+    const maxRank = getMaxSkillRank(state.level);
+    if (newRank > maxRank) {
+      if (maxRank === 3) {
+        showToast('Requires level 4 to purchase rank 4.', 'error');
+      } else if (maxRank === 4) {
+        showToast('Requires level 8 and a relevant feat/ability to purchase rank 5.', 'error');
+      }
+      return;
+    }
+    if (newRank === 5 && state.level >= 8) {
+      showToast('Purchasing Rank 5 requires a feat/ability allowing it.', 'info');
+    }
+  }
+
+  if (newRank < 0) return;
+  if (newRank > 5) return;
+
+  state.skillRanks[skillName] = newRank;
+  renderSkillsStep(container);
+  updateSummary();
+}
+
 function rankBonusValue(profBonus, rank) {
   if (rank === 1) return Math.ceil(profBonus / 2);
   if (rank === 2) return profBonus;
@@ -1171,43 +1219,29 @@ function rankBonusValue(profBonus, rank) {
   return 0;
 }
 
-function adjustSkill(skillName, delta, container) {
-  const bg = BACKGROUNDS.find(b => b.name === state.background);
-  const builtInRank = bg?.builtInRanks?.[skillName] ?? 0;
-  const current = state.skillRanks?.[skillName] ?? builtInRank;
-
-  if (delta > 0 && !state.manualSkills) {
-    const maxRank = getMaxSkillRank(state.level);
-    if (current >= maxRank) {
-      if (maxRank === 3) {
-        showToast('Requires level 4 to purchase rank 4.', 'error');
-      } else if (maxRank === 4) {
-        showToast('Requires level 8 and a relevant feat/ability to purchase rank 5.', 'error');
-      }
-      return;
-    }
-    if (current === 4 && state.level >= 8) {
-      showToast('Purchasing Rank 5 requires a feat/ability allowing it.', 'info');
-    }
-  }
-
-  const next = Math.max(builtInRank, Math.min(5, current + delta));
-  state.skillRanks = { ...state.skillRanks, [skillName]: next };
-  renderSkillsStep(container);
-  updateSummary();
-}
-
 function buildAcademicsSection(finalStats, profBonus, bg, apRemaining, freeRemaining, restrictSkills) {
   const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
   const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
+  const dexMod = getCharacteristicModifier(finalStats.Dexterity ?? 10);
+
+  const acaEntries = state.academicsEntries ?? [];
+  const artsEntries = state.artsCraftEntries ?? [];
   const builtInAcademics = bg?.builtInAcademics ?? {};
+  const builtInRanks = bg?.builtInRanks ?? {};
 
   return `
-    <p class="form-hint">Select academic fields and assign ranks. The ranks use the same cost structure as skills.</p>
-    <div class="academics-fields">
-      ${ACADEMICS_FIELDS.map(field => {
-        const isSelected = (state.academicsFields ?? []).includes(field);
-        const rank = state.academicsRanks?.[field] ?? 0;
+    <p class="form-hint">Specify your custom academic fields and arts & craft disciplines below. Free skill points are applied automatically before AP.</p>
+    
+    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #a0a5c0;">Academics Fields</div>
+    <div class="custom-academic-input-group" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+      <input type="text" id="custom-academic-name-input" class="input" placeholder="Enter academic field (e.g. History, Engineering)..." style="flex: 1;">
+      <button class="btn btn-secondary" id="add-custom-academic-btn" style="white-space: nowrap;">+ Add Field</button>
+    </div>
+
+    <div class="academics-fields" style="margin-bottom: 2rem;">
+      ${acaEntries.map((entry, idx) => {
+        const field = entry.name;
+        const rank = entry.rank ?? 1;
         const builtInRank = builtInAcademics[field] ?? 0;
         const rankBonus = rankBonusValue(profBonus, rank);
 
@@ -1222,40 +1256,76 @@ function buildAcademicsSection(finalStats, profBonus, bg, apRemaining, freeRemai
         const isLevelRestricted = rank >= maxSkillRank && !state.manualSkills;
         const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !state.manualSkills);
 
-        let plusTooltip = '';
-        if (rank >= 5) {
-          plusTooltip = 'Max rank 5 reached';
-        } else if (isLevelRestricted) {
-          if (maxSkillRank === 3) {
-            plusTooltip = `Requires level 4 to advance to rank 4.`;
-          } else if (maxSkillRank === 4) {
-            plusTooltip = `Requires level 8 and a relevant feat/ability to advance to rank 5.`;
-          }
-        } else if (!canAfford && !state.manualSkills) {
-          plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
-        }
+        return `
+          <div class="academic-entry selected" id="aca-entry-${idx}">
+            <div class="academic-header" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span class="academic-name" style="font-weight: 600;">
+                  ${field}
+                  ${builtInRank > 0 ? `<span class="built-in-badge" style="background: rgba(148,161,255,0.15); color: var(--accent-color); padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem;">Starting: ${builtInRank}</span>` : ''}
+                </span>
+              </div>
+              ${!builtInRank ? `<button class="btn-icon remove-academic-entry" data-index="${idx}" title="Remove field" style="color: #e74c3c; background: none; border: none; font-size: 1.1rem; cursor: pointer;">✕</button>` : ''}
+            </div>
+            <div class="rank-controls" style="margin-top: 0.5rem;">
+              <button class="rank-btn aca-minus-btn" data-index="${idx}" ${rank <= Math.max(1, builtInRank) ? 'disabled' : ''}>−</button>
+              <div class="rank-pips">
+                ${[1,2,3,4,5].map(n => `<div class="pip ${n <= rank ? 'filled' : ''}"></div>`).join('')}
+              </div>
+              <button class="rank-btn aca-plus-btn" data-index="${idx}" ${plusDisabled ? 'disabled' : ''}>+</button>
+            </div>
+            <span class="stat-tag">Int: ${intMod + rankBonus >= 0 ? '+' : ''}${intMod + rankBonus} | Cun: ${cunMod + rankBonus >= 0 ? '+' : ''}${cunMod + rankBonus}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    <div class="section-divider">Arts & Craft</div>
+    <p class="form-hint">Specify your specific Arts & Craft skills (e.g. Blacksmithing, Painting, Woodcarving).</p>
+
+    <div class="custom-arts-input-group" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+      <input type="text" id="custom-arts-name-input" class="input" placeholder="Enter craft/art name (e.g. Leatherworking)..." style="flex: 1;">
+      <button class="btn btn-secondary" id="add-custom-arts-btn" style="white-space: nowrap;">+ Add Craft Skill</button>
+    </div>
+
+    <div class="arts-fields">
+      ${artsEntries.map((entry, idx) => {
+        const name = entry.name;
+        const rank = entry.rank ?? 1;
+        const builtInRank = builtInRanks['Arts & Craft'] ?? 0;
+        const rankBonus = rankBonusValue(profBonus, rank);
+
+        const nextRank = rank + 1;
+        const currentCost = SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0;
+        const nextCost = SKILL_RANK_CUMULATIVE_COSTS[nextRank] ?? 0;
+        const incrementalCost = nextCost - currentCost;
+
+        const isRestrictedSkill = restrictSkills && restrictSkills.includes('Arts & Craft');
+        const costsAP = (!isRestrictedSkill && restrictSkills !== null) || (freeRemaining <= 0);
+        const canAfford = !costsAP || (apRemaining >= incrementalCost);
+        const maxSkillRank = getMaxSkillRank(state.level);
+        const isLevelRestricted = rank >= maxSkillRank && !state.manualSkills;
+        const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !state.manualSkills);
 
         return `
-          <div class="academic-entry ${isSelected ? 'selected' : ''}" id="aca-entry-${field}">
-            <div class="academic-header">
-              <input type="checkbox" id="aca-check-${field}" ${isSelected ? 'checked' : ''} 
-                     ${!isSelected && (state.academicsFields?.length ?? 0) >= 3 && builtInRank === 0 ? 'disabled' : ''}
-                     ${builtInRank > 0 ? 'disabled title="Built-in starting field from background"' : ''}>
-              <label for="aca-check-${field}" class="academic-name">
-                ${field}
-                ${builtInRank > 0 ? `<span class="built-in-badge" style="background: rgba(148,161,255,0.15); color: var(--accent-color); padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem;">Starting: ${builtInRank}</span>` : ''}
-              </label>
-            </div>
-            ${isSelected ? `
-              <div class="rank-controls">
-                <button class="rank-btn" id="aca-minus-${field}" ${rank <= builtInRank ? 'disabled' : ''}>−</button>
-                <div class="rank-pips">
-                  ${[1,2,3,4,5].map(n => `<div class="pip ${n <= rank ? 'filled' : ''}"></div>`).join('')}
-                </div>
-                <button class="rank-btn" id="aca-plus-${field}" ${plusDisabled ? 'disabled' : ''} ${plusTooltip ? `title="${plusTooltip}"` : ''}>+</button>
+          <div class="academic-entry selected" id="arts-entry-${idx}">
+            <div class="academic-header" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span class="academic-name" style="font-weight: 600;">
+                  ${name}
+                  ${builtInRank > 0 && idx === 0 ? `<span class="built-in-badge" style="background: rgba(148,161,255,0.15); color: var(--accent-color); padding: 0.1rem 0.4rem; font-size: 0.75rem; border-radius: 4px; margin-left: 0.5rem;">Starting: ${builtInRank}</span>` : ''}
+                </span>
               </div>
-              <span class="stat-tag">Int: ${intMod + rankBonus >= 0 ? '+' : ''}${intMod + rankBonus} | Cun: ${cunMod + rankBonus >= 0 ? '+' : ''}${cunMod + rankBonus}</span>
-            ` : ''}
+              <button class="btn-icon remove-arts-entry" data-index="${idx}" title="Remove craft" style="color: #e74c3c; background: none; border: none; font-size: 1.1rem; cursor: pointer;">✕</button>
+            </div>
+            <div class="rank-controls" style="margin-top: 0.5rem;">
+              <button class="rank-btn arts-minus-btn" data-index="${idx}" ${rank <= (idx === 0 ? builtInRank : 1) ? 'disabled' : ''}>−</button>
+              <div class="rank-pips">
+                ${[1,2,3,4,5].map(n => `<div class="pip ${n <= rank ? 'filled' : ''}"></div>`).join('')}
+              </div>
+              <button class="rank-btn arts-plus-btn" data-index="${idx}" ${plusDisabled ? 'disabled' : ''}>+</button>
+            </div>
+            <span class="stat-tag">Dex: ${dexMod + rankBonus >= 0 ? '+' : ''}${dexMod + rankBonus} | Cun: ${cunMod + rankBonus >= 0 ? '+' : ''}${cunMod + rankBonus}</span>
           </div>
         `;
       }).join('')}
@@ -1264,46 +1334,113 @@ function buildAcademicsSection(finalStats, profBonus, bg, apRemaining, freeRemai
 }
 
 function bindAcademicsEvents(container, finalStats, profBonus, bg) {
-  ACADEMICS_FIELDS.forEach(field => {
-    container.querySelector(`#aca-check-${field}`)?.addEventListener('change', e => {
-      const builtInAcademics = bg?.builtInAcademics ?? {};
-      const builtInRank = builtInAcademics[field] ?? 0;
-      if (e.target.checked) {
-        if ((state.academicsFields?.length ?? 0) < 3) {
-          state.academicsFields = [...(state.academicsFields ?? []), field];
-        }
-      } else {
-        state.academicsFields = (state.academicsFields ?? []).filter(f => f !== field);
-        const { [field]: _, ...rest } = state.academicsRanks ?? {};
-        state.academicsRanks = rest;
-      }
-      renderSkillsStep(container);
-    });
+  // Academics addition & modification
+  const addAcaBtn = container.querySelector('#add-custom-academic-btn');
+  const acaInputEl = container.querySelector('#custom-academic-name-input');
+  
+  const handleAddAcademic = () => {
+    const val = acaInputEl?.value?.trim();
+    if (!val) return;
+    if ((state.academicsEntries ?? []).some(e => e.name.toLowerCase() === val.toLowerCase())) {
+      showToast('Academic field already added.', 'error');
+      return;
+    }
+    state.academicsEntries = [...(state.academicsEntries ?? []), { name: val, rank: 1 }];
+    renderSkillsStep(container);
+    updateSummary();
+  };
 
-    container.querySelector(`#aca-minus-${field}`)?.addEventListener('click', () => {
-      const rank = state.academicsRanks?.[field] ?? 0;
-      state.academicsRanks = { ...state.academicsRanks, [field]: Math.max(0, rank - 1) };
-      renderSkillsStep(container);
-    });
+  addAcaBtn?.addEventListener('click', handleAddAcademic);
+  acaInputEl?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddAcademic();
+    }
+  });
 
-    container.querySelector(`#aca-plus-${field}`)?.addEventListener('click', () => {
-      const rank = state.academicsRanks?.[field] ?? 0;
-      if (!state.manualSkills) {
-        const maxRank = getMaxSkillRank(state.level);
-        if (rank >= maxRank) {
-          if (maxRank === 3) {
-            showToast('Requires level 4 to purchase rank 4.', 'error');
-          } else if (maxRank === 4) {
-            showToast('Requires level 8 and a relevant feat/ability to purchase rank 5.', 'error');
-          }
-          return;
-        }
-        if (rank === 4 && state.level >= 8) {
-          showToast('Purchasing Rank 5 requires a feat/ability allowing it.', 'info');
-        }
-      }
-      state.academicsRanks = { ...state.academicsRanks, [field]: Math.min(5, rank + 1) };
+  container.querySelectorAll('.remove-academic-entry').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      state.academicsEntries.splice(idx, 1);
       renderSkillsStep(container);
+      updateSummary();
+    });
+  });
+
+  container.querySelectorAll('.aca-minus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      if (state.academicsEntries[idx]) {
+        state.academicsEntries[idx].rank = Math.max(1, state.academicsEntries[idx].rank - 1);
+        renderSkillsStep(container);
+        updateSummary();
+      }
+    });
+  });
+
+  container.querySelectorAll('.aca-plus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      if (state.academicsEntries[idx]) {
+        state.academicsEntries[idx].rank = Math.min(5, state.academicsEntries[idx].rank + 1);
+        renderSkillsStep(container);
+        updateSummary();
+      }
+    });
+  });
+
+  // Arts & Craft addition & modification
+  const addArtsBtn = container.querySelector('#add-custom-arts-btn');
+  const artsInputEl = container.querySelector('#custom-arts-name-input');
+
+  const handleAddArts = () => {
+    const val = artsInputEl?.value?.trim();
+    if (!val) return;
+    if ((state.artsCraftEntries ?? []).some(e => e.name.toLowerCase() === val.toLowerCase())) {
+      showToast('Arts & Craft skill already added.', 'error');
+      return;
+    }
+    state.artsCraftEntries = [...(state.artsCraftEntries ?? []), { name: val, rank: 1 }];
+    renderSkillsStep(container);
+    updateSummary();
+  };
+
+  addArtsBtn?.addEventListener('click', handleAddArts);
+  artsInputEl?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddArts();
+    }
+  });
+
+  container.querySelectorAll('.remove-arts-entry').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      state.artsCraftEntries.splice(idx, 1);
+      renderSkillsStep(container);
+      updateSummary();
+    });
+  });
+
+  container.querySelectorAll('.arts-minus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      if (state.artsCraftEntries[idx]) {
+        state.artsCraftEntries[idx].rank = Math.max(1, state.artsCraftEntries[idx].rank - 1);
+        renderSkillsStep(container);
+        updateSummary();
+      }
+    });
+  });
+
+  container.querySelectorAll('.arts-plus-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index, 10);
+      if (state.artsCraftEntries[idx]) {
+        state.artsCraftEntries[idx].rank = Math.min(5, state.artsCraftEntries[idx].rank + 1);
+        renderSkillsStep(container);
+        updateSummary();
+      }
     });
   });
 }
