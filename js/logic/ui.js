@@ -60,7 +60,7 @@ function renderShell() {
       </div>
       <nav class="step-nav" id="step-nav"></nav>
       <div class="sidebar-actions">
-        <button class="btn btn-ghost" id="btn-import">📂 Import JSON</button>
+        <button class="btn btn-ghost" id="btn-import">📂 Load Data</button>
         <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
     </aside>
@@ -76,8 +76,8 @@ function renderShell() {
       <h2 class="summary-title">Character Summary</h2>
       <div id="summary-content"></div>
       <div class="summary-actions">
-        <button class="btn btn-accent" id="btn-export-json">💾 Save JSON</button>
-        <button class="btn btn-accent" id="btn-export-pdf">📄 Export PDF</button>
+        <button class="btn btn-accent" id="btn-export-json">💾 Save Data</button>
+        <button class="btn btn-accent" id="btn-export-pdf">📄 Save Character Sheet</button>
       </div>
     </aside>
   `;
@@ -235,11 +235,11 @@ function renderIdentityStep(container) {
       </div>
       <div class="form-group">
         <label for="app-height">Height</label>
-        <input type="text" id="app-height" class="input" placeholder="e.g. 5'10&quot;" value="${state.appearance?.height ?? ''}">
+        <input type="text" id="app-height" class="input" placeholder="e.g. 178 cm" value="${state.appearance?.height ?? ''}">
       </div>
       <div class="form-group">
         <label for="app-weight">Weight</label>
-        <input type="text" id="app-weight" class="input" placeholder="e.g. 170 lbs" value="${state.appearance?.weight ?? ''}">
+        <input type="text" id="app-weight" class="input" placeholder="e.g. 75 kg" value="${state.appearance?.weight ?? ''}">
       </div>
     </div>
   `;
@@ -1754,9 +1754,9 @@ function renderSpellDetailPane(potentialRemaining) {
         </div>
 ${spell.damageTypes && spell.damageTypes.length > 0 ? `
            <div class="stat-item full-width">
-             <strong>Damage Types</strong>
+             <strong>Damage Types <span style="font-size: 0.75rem; font-weight: normal; color: var(--text-muted); margin-left: 0.25rem;">(Experimental)</span></strong>
              <span class="damage-types-list">
-               ${spell.damageTypes.map(dt => `<span class="damage-type-pill ${dt.toLowerCase()}">${dt} <strong style="font-size: 0.85rem;">(Experimental)</strong></span>`).join(' ')}
+               ${spell.damageTypes.map(dt => `<span class="damage-type-pill ${dt.toLowerCase()}">${dt}</span>`).join(' ')}
              </span>
            </div>
          ` : ''}
@@ -2452,7 +2452,7 @@ function buildEquipmentList(items, type, goldRemaining) {
       if (type === 'weapon') {
         tooltip = `Cost: ${item.cost} | Damage: ${item.damage} | Weight: ${item.weight} | Properties: ${item.properties}`;
       } else {
-        tooltip = `Cost: ${item.cost} | Category: ${item.category} | AV: ${item.av} | Weight: ${item.weight} lbs | Stealth: ${item.stealth}`;
+        tooltip = `Cost: ${item.cost} | Category: ${item.category} | AV: ${item.av} | Weight: ${item.weight} kg | Stealth: ${item.stealth}`;
       }
     }
 
@@ -2525,7 +2525,7 @@ function bindEquipmentEvents(container) {
   container.querySelector('#add-custom-item')?.addEventListener('click', () => {
     const name = prompt('Item name:');
     if (!name) return;
-    const weight = parseFloat(prompt('Weight (lbs, 0 if unknown):') ?? '0');
+    const weight = parseFloat(prompt('Weight (kg, 0 if unknown):') ?? '0');
     const qty = parseInt(prompt('Quantity:') ?? '1', 10);
     state.equipmentList = [...(state.equipmentList ?? []), { name, weight, quantity: qty || 1 }];
     renderEquipmentStep(container);
@@ -2566,8 +2566,8 @@ function renderFinishingStep(container) {
       ${buildCharacterSummaryHTML()}
     </div>
     <div class="export-actions">
-      <button class="btn btn-accent" id="btn-final-export-json">💾 Save Character JSON</button>
-      <button class="btn btn-primary" id="btn-final-export-pdf">📄 Export PDF Character Sheet</button>
+      <button class="btn btn-accent" id="btn-final-export-json">💾 Save Character Data</button>
+      <button class="btn btn-primary" id="btn-final-export-pdf">📄 Save Character Sheet</button>
     </div>
   `;
 
@@ -2664,9 +2664,9 @@ function handleImport(e) {
       renderStep(currentStep);
       renderStepNav();
       updateSummary();
-      showToast('Character imported successfully!', 'success');
+      showToast('Character loaded successfully!', 'success');
     } catch (err) {
-      showToast(`Import failed: ${err.message}`, 'error');
+      showToast(`Load failed: ${err.message}`, 'error');
     }
   };
   reader.readAsText(file);
@@ -2682,7 +2682,7 @@ function handleExportJSON() {
   a.download = `${state.characterName || 'frostmark-character'}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Character saved as JSON!', 'success');
+  showToast('Character data saved!', 'success');
 }
 
 async function handleExportPDF() {
