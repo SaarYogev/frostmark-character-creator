@@ -1,4 +1,4 @@
-import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants.js';
+import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants.js';
 import { ORIGINS } from '../data/origins.js';
 
 export function getInitialState() {
@@ -314,7 +314,20 @@ export function calculateSpentAccomplishmentPoints(state, backgroundsData) {
     spent += 1;
   }
 
-  // 4. Money purchases (1 AP = 25 gp)
+  // 4. Weapon Proficiencies
+  if (state.weaponProficiencies && Array.isArray(state.weaponProficiencies)) {
+    for (const group of state.weaponProficiencies) {
+      if (WEAPON_PROFICIENCY_COSTS.Groups1pt.includes(group)) {
+        spent += 1;
+      } else if (WEAPON_PROFICIENCY_COSTS.Groups2pt.includes(group)) {
+        spent += 2;
+      } else if (WEAPON_PROFICIENCY_COSTS.Groups3pt.includes(group)) {
+        spent += 3;
+      }
+    }
+  }
+
+  // 5. Money purchases (1 AP = 25 gp)
   let bgGold = 10;
   if (state.background === 'Custom') {
     bgGold = state.customBackground.gold;

@@ -1,4 +1,4 @@
-import { CHARACTERISTICS, SKILLS, ACADEMICS_FIELDS, SKILL_RANK_CUMULATIVE_COSTS, SAVE_PROFICIENCY_COSTS } from '../data/constants.js';
+import { CHARACTERISTICS, SKILLS, ACADEMICS_FIELDS, SKILL_RANK_CUMULATIVE_COSTS, SAVE_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS } from '../data/constants.js';
 import { RACES } from '../data/races.js';
 import { BACKGROUNDS } from '../data/backgrounds.js';
 import { ORIGINS } from '../data/origins.js';
@@ -1318,10 +1318,18 @@ function renderProficienciesStep(container) {
     return cost;
   };
 
+  const currentSavesCount = Object.values(state.savingThrowsProficient || {}).filter(Boolean).length;
+  const allWeaponGroups = [
+    { name: 'Handpicked 2 Weapons', cost: 1, type: 'Handpicked2' },
+    ...WEAPON_PROFICIENCY_COSTS.Groups1pt.map(g => ({ name: g, cost: 1 })),
+    ...WEAPON_PROFICIENCY_COSTS.Groups2pt.map(g => ({ name: g, cost: 2 })),
+    ...WEAPON_PROFICIENCY_COSTS.Groups3pt.map(g => ({ name: g, cost: 3 }))
+  ];
+
   container.innerHTML = `
     <div class="step-header">
       <h2 class="step-title">🛡️ Proficiencies & Accomplishment Points</h2>
-      <p class="step-desc">Use AP to buy saving throw proficiencies, armor/weapon proficiencies, and extra gold.</p>
+      <p class="step-desc">Use AP to buy saving throw proficiencies (max 3), armor & weapon proficiencies, and extra gold.</p>
     </div>
     
     <div class="manual-override-control" style="margin-bottom: 1.5rem;">
@@ -1332,21 +1340,22 @@ function renderProficienciesStep(container) {
     </div>
 
     <div class="section-block">
-      <h3 class="section-title">Saving Throw Proficiencies</h3>
+      <h3 class="section-title">Saving Throw Proficiencies <span style="font-size: 0.85rem; font-weight: normal; color: #a0a5c0;">(${currentSavesCount} / 3 selected)</span></h3>
       <div class="proficiency-grid">
         ${CHARACTERISTICS.map(c => {
           const isChecked = state.savingThrowsProficient?.[c.key];
           const incrementalCost = SAVE_PROFICIENCY_COSTS[c.key] || 1;
           const canAfford = isChecked || (remaining >= incrementalCost);
-          const isDisabled = !isChecked && !canAfford && !state.manualProficiencies;
-          const tooltip = isDisabled ? `Requires ${incrementalCost} AP, but you only have ${remaining} remaining. Set to manual to bypass.` : '';
+          const limitReached = !isChecked && currentSavesCount >= 3 && !state.manualProficiencies;
+          const isDisabled = (!isChecked && !canAfford && !state.manualProficiencies) || limitReached;
+          const tooltip = limitReached ? 'Maximum 3 saving throw proficiencies allowed.' : (isDisabled ? `Requires ${incrementalCost} AP, but you only have ${remaining} remaining. Set to manual to bypass.` : '');
           
           return `
             <label class="prof-toggle ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" 
                    id="save-toggle-${c.key}" 
                    ${tooltip ? `title="${tooltip}"` : ''}>
               <input type="checkbox" id="save-check-${c.key}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
-              ${c.key}
+              ${c.key} (${incrementalCost} AP)
             </label>
           `;
         }).join('')}
@@ -1379,6 +1388,28 @@ function renderProficienciesStep(container) {
     </div>
 
     <div class="section-block">
+      <h3 class="section-title">Weapon Proficiencies</h3>
+      <p class="form-hint">Select weapon categories or groups to purchase proficiency with AP.</p>
+      <div class="proficiency-grid">
+        ${allWeaponGroups.map(wg => {
+          const isChecked = (state.weaponProficiencies || []).includes(wg.name);
+          const canAfford = isChecked || (remaining >= wg.cost);
+          const isDisabled = !isChecked && !canAfford && !state.manualProficiencies;
+          const tooltip = isDisabled ? `Requires ${wg.cost} AP, but you only have ${remaining} remaining. Set to manual to bypass.` : '';
+
+          return `
+            <label class="prof-toggle ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}" 
+                   id="weapon-toggle-${wg.name.replace(/\s+/g, '-')}" 
+                   ${tooltip ? `title="${tooltip}"` : ''}>
+              <input type="checkbox" id="weapon-check-${wg.name.replace(/\s+/g, '-')}" ${isChecked ? 'checked' : ''} ${isDisabled ? 'disabled' : ''}>
+              ${wg.name} (${wg.cost} AP)
+            </label>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="section-block">
       <h3 class="section-title">Languages</h3>
       <div class="form-group">
         <label>Additional Languages (comma-separated)</label>
@@ -1399,6 +1430,13 @@ function renderProficienciesStep(container) {
 
   CHARACTERISTICS.forEach(c => {
     container.querySelector(`#save-check-${c.key}`)?.addEventListener('change', e => {
+      if (e.target.checked && !state.manualProficiencies) {
+        const selectedCount = Object.values(state.savingThrowsProficient || {}).filter(Boolean).length;
+        if (selectedCount >= 3) {
+          e.target.checked = false;
+          return;
+        }
+      }
       state.savingThrowsProficient = { ...state.savingThrowsProficient, [c.key]: e.target.checked };
       renderProficienciesStep(container);
       updateSummary();
@@ -1408,6 +1446,22 @@ function renderProficienciesStep(container) {
   ['Light', 'Medium', 'Heavy', 'Shields'].forEach(a => {
     container.querySelector(`#armor-check-${a}`)?.addEventListener('change', e => {
       state.armorProficiencies = { ...state.armorProficiencies, [a]: e.target.checked };
+      renderProficienciesStep(container);
+      updateSummary();
+    });
+  });
+
+  allWeaponGroups.forEach(wg => {
+    const sanitizeId = wg.name.replace(/\s+/g, '-');
+    container.querySelector(`#weapon-check-${sanitizeId}`)?.addEventListener('change', e => {
+      const currentList = state.weaponProficiencies || [];
+      if (e.target.checked) {
+        if (!currentList.includes(wg.name)) {
+          state.weaponProficiencies = [...currentList, wg.name];
+        }
+      } else {
+        state.weaponProficiencies = currentList.filter(name => name !== wg.name);
+      }
       renderProficienciesStep(container);
       updateSummary();
     });

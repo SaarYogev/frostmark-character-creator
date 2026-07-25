@@ -114,6 +114,14 @@ describe('Accomplishment Points (AP) Math', () => {
     expect(result.otherSpent).toBe(3);
   });
 
+  test('Weapon proficiency AP cost calculation is correct', () => {
+    const state = getInitialState();
+    state.weaponProficiencies = ['Axes', 'Finesse', 'Blades'];
+    const result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+    // Axes = 1, Finesse = 2, Blades = 3 -> Total = 6 AP
+    expect(result.otherSpent).toBe(6);
+  });
+
   test('AP spent on purchasing extra starting gold is correct', () => {
     const state = getInitialState();
     state.background = 'Bounty Hunter';

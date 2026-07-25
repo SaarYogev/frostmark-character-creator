@@ -67,7 +67,18 @@ function fillIdentity(form, state, finalStats) {
   safeSetText(form, 'Appearance Weight', state.appearance?.weight ?? '');
   safeSetText(form, 'Appearance Additional', state.appearance?.notes ?? '');
   safeSetText(form, 'Personality and Backstory', state.personalityBackstory);
-  safeSetText(form, 'Lang/profs column', (state.languages ?? []).join(', '));
+  const profsList = [];
+  if (state.languages && state.languages.length) {
+    profsList.push(`Languages: ${state.languages.join(', ')}`);
+  }
+  const armorProfs = Object.entries(state.armorProficiencies || {}).filter(([_, v]) => v).map(([k]) => k);
+  if (armorProfs.length) {
+    profsList.push(`Armor: ${armorProfs.join(', ')}`);
+  }
+  if (state.weaponProficiencies && state.weaponProficiencies.length) {
+    profsList.push(`Weapons: ${state.weaponProficiencies.join(', ')}`);
+  }
+  safeSetText(form, 'Lang/profs column', profsList.join('\n'));
 }
 
 function buildAOLevelString(state) {
