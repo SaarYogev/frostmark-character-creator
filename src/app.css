@@ -83,6 +83,15 @@ body::before {
   z-index: 1;
 }
 
+/* React app layout */
+.app-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr var(--summary-width);
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
 /* ── Sidebar ───────────────────────────────────────────────────────────────── */
 .sidebar {
   background: var(--glass-bg);
