@@ -183,8 +183,8 @@ describe('RaceSelector', () => {
     const halfElfCard = screen.getByText('Half-elf');
     fireEvent.click(halfElfCard);
 
-    // Half-elf has subraces, so it should show subrace selection
-    expect(screen.getByText('Choose Subrace')).toBeInTheDocument();
+    // Half-elf shows stat choices section
+    expect(screen.getByText('Half-Elf Stat Choices')).toBeInTheDocument();
   });
 
   it('initializes with provided initialState', () => {

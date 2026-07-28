@@ -240,8 +240,11 @@ const ManualRacesSection: React.FC<{
             <select
               className="select"
               style={{ width: '100%' }}
-              value={Object.entries(racialStatOverrides).find(([_, v]) => v === 2)?.[0] ?? ''}
-              onChange={(e) => handleOverrideChange(e.target.value, Object.entries(racialStatOverrides).find(([_, v]) => v === 1)?.[0] ?? '')}
+               value={Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? ''}
+              onChange={(e) => {
+                const plus1 = Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? '';
+                handleOverrideChange(e.target.value, plus1);
+              }}
             >
               <option value="">-- Choose --</option>
               {CHARACTERISTICS.map(c => (
@@ -254,8 +257,11 @@ const ManualRacesSection: React.FC<{
             <select
               className="select"
               style={{ width: '100%' }}
-              value={Object.entries(racialStatOverrides).find(([_, v]) => v === 1)?.[0] ?? ''}
-              onChange={(e) => handleOverrideChange(Object.entries(racialStatOverrides).find(([_, v]) => v === 2)?.[0] ?? '', e.target.value)}
+               value={Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? ''}
+              onChange={(e) => {
+                const plus2 = Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? '';
+                handleOverrideChange(plus2, e.target.value);
+              }}
             >
               <option value="">-- Choose --</option>
               {CHARACTERISTICS.map(c => (
@@ -341,11 +347,11 @@ export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
         })}
       </div>
 
-      {state.race && state.race !== 'Custom' && selectedRace && (
-        <div id="race-details" className="info-card">
-          <RaceDetails race={selectedRace} />
-        </div>
-      )}
+       {state.race && state.race !== 'Custom' && selectedRace && (
+         <div id="race-details">
+           <RaceDetails race={selectedRace} />
+         </div>
+       )}
 
        {selectedRace?.subraces && selectedRace.subraces.length > 0 && (
          <div id="subrace-section" className="section-block">
@@ -379,48 +385,42 @@ export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
              <SubraceDetails race={selectedRace} subraceName={state.subrace} />
            )}
          </div>
-       )}
-       {state.race === 'Half-elf' && (
-         <div className="section-block">
-           <h3 className="section-title">Half-Elf Stat Choices</h3>
-           <div className="form-grid form-grid-2">
-             <div className="form-group">
-               <label>+1 to stat 1</label>
-               <select
-                 id="half-elf-choice1"
-                 className="select"
-                 value={state.halfElfChoice1}
-                 onChange={(e) => handleHalfElfChoice('halfElfChoice1', e.target.value)}
-               >
-                 <option value="">– choose –</option>
-                 {CHARACTERISTICS.filter(c => c !== 'Presence').map(k => (
-                   <option key={k} value={k}>{k}</option>
-                 ))}
-               </select>
-             </div>
-             <div className="form-group">
-               <label>+1 to stat 2</label>
-               <select
-                 id="half-elf-choice2"
-                 className="select"
-                 value={state.halfElfChoice2}
-                 onChange={(e) => handleHalfElfChoice('halfElfChoice2', e.target.value)}
-               >
-                 <option value="">– choose –</option>
-                 {CHARACTERISTICS.filter(c => c !== 'Presence').map(k => (
-                   <option key={k} value={k}>{k}</option>
-                 ))}
-               </select>
-             </div>
-           </div>
-         </div>
-       )}
-
-          {state.subrace && selectedRace && (
-            <SubraceDetails race={selectedRace} subraceName={state.subrace} />
-          )}
-        </div>
-      )}
+        )}
+        {state.race === 'Half-elf' && (
+          <div className="section-block">
+            <h3 className="section-title">Half-Elf Stat Choices</h3>
+            <div className="form-grid form-grid-2">
+              <div className="form-group">
+                <label>+1 to stat 1</label>
+                <select
+                  id="half-elf-choice1"
+                  className="select"
+                  value={state.halfElfChoice1}
+                  onChange={(e) => handleHalfElfChoice('halfElfChoice1', e.target.value)}
+                >
+                  <option value="">– choose –</option>
+                  {CHARACTERISTICS.filter(c => c !== 'Presence').map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>+1 to stat 2</label>
+                <select
+                  id="half-elf-choice2"
+                  className="select"
+                  value={state.halfElfChoice2}
+                  onChange={(e) => handleHalfElfChoice('halfElfChoice2', e.target.value)}
+                >
+                  <option value="">– choose –</option>
+                  {CHARACTERISTICS.filter(c => c !== 'Presence').map(k => (
+                    <option key={k} value={k}>{k}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
 
       {state.race === 'Custom' && (
         <CustomRaceForm
