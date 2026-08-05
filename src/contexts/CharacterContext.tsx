@@ -8,8 +8,8 @@ interface CharacterContextType {
 
 const CharacterContext = createContext<CharacterContextType | undefined>(undefined);
 
-export function CharacterProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(characterReducer, DEFAULT_CHARACTER);
+export function CharacterProvider({ children, initialState }: { children: ReactNode; initialState?: Partial<CharacterState> }) {
+  const [state, dispatch] = useReducer(characterReducer, { ...DEFAULT_CHARACTER, ...initialState });
 
   return (
     <CharacterContext.Provider value={{ state, dispatch }}>

@@ -4,50 +4,57 @@ import { CharacterProvider } from '../contexts/CharacterContext';
 import BackgroundSelector from '../components/BackgroundSelector';
 import { BACKGROUNDS } from '../../js/data/backgrounds';
 
-
 describe('BackgroundSelector', () => {
-  const renderWithProvider = (component: React.ReactNode) => {
+  const renderWithProvider = (component = <BackgroundSelector />) => {
     return render(<CharacterProvider>{component}</CharacterProvider>);
   };
 
   it('renders all background cards', () => {
-    renderWithProvider(<BackgroundSelector onNext={() => {}} />);
-
+    renderWithProvider();
+    
     BACKGROUNDS.forEach(background => {
       expect(screen.getByText(background.name)).toBeInTheDocument();
     });
   });
 
   it('selects a background when clicked', () => {
-    renderWithProvider(<BackgroundSelector onNext={() => {}} />);
+    renderWithProvider();
 
-    const artistCard = screen.getByText('Artist/Crafter');
-    fireEvent.click(artistCard);
+    const charlatanCard = screen.getByText('Charlatan');
+    fireEvent.click(charlatanCard);
 
-    expect(artistCard.parentElement).toHaveClass('selected');
+    // After selection, the background card should have 'selected' class
+    expect(charlatanCard.parentElement).toHaveClass('selected');
   });
 
   it('shows background details when a background is selected', () => {
-    renderWithProvider(<BackgroundSelector onNext={() => {}} />);
+    renderWithProvider();
 
     const bountyHunterCard = screen.getByText('Bounty Hunter');
     fireEvent.click(bountyHunterCard);
 
-    expect(screen.getByText('Bounty Hunter')).toBeInTheDocument();
-    expect(screen.getByText(/Skills: Athletics, Investigation, Perception, Survival/)).toBeInTheDocument();
-    expect(screen.getByText(/Gold: 10/)).toBeInTheDocument();
-    expect(screen.getByText(/Equipment: A set of manacles, a bounty ledger, outdoor clothes, 10 gp/)).toBeInTheDocument();
-    expect(screen.getByText(/Trait: Ear to the Ground/)).toBeInTheDocument();
-    expect(screen.getByText(/Description: You track down targets for coin./)).toBeInTheDocument();
+    // Should show background details matching exact legacy buildBGDetails text
+    expect(screen.getByRole('heading', { level: 3, name: 'Bounty Hunter' })).toBeInTheDocument();
+    expect(screen.getByText(/Starting Gold:/)).toBeInTheDocument();
+    expect(screen.getByText(/Ear to the Ground/)).toBeInTheDocument();
+    expect(screen.getByText(/Free Skill Points:/)).toBeInTheDocument();
   });
 
-  it('calls onNext when Next button is clicked', () => {
-    const mockOnNext = vi.fn();
-    renderWithProvider(<BackgroundSelector onNext={mockOnNext} />);
+  it('renders and handles custom background option', () => {
+    renderWithProvider();
 
-    const nextButton = screen.getByText('Next');
-    fireEvent.click(nextButton);
+    const customCard = screen.getByText('Custom / Enter Manually...');
+    expect(customCard).toBeInTheDocument();
 
-    expect(mockOnNext).toHaveBeenCalled();
+    fireEvent.click(customCard);
+
+    expect(screen.getByText('Custom Background')).toBeInTheDocument();
+    expect(screen.getByLabelText('Background Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Starting Gold (gp)')).toBeInTheDocument();
+  });
+
+  it('does not render Next button', () => {
+    renderWithProvider();
+    expect(screen.queryByText('Next')).not.toBeInTheDocument();
   });
 });

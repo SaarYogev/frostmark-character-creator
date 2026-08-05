@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { STEPS, StepId } from '../types/Steps';
+import { useCharacter } from '../contexts/CharacterContext';
 
 interface LayoutProps {
   currentStep: number;
@@ -49,7 +50,27 @@ const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
   );
 };
 
+import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
+
 const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
+  const { state, dispatch } = useCharacter();
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const loadedState = JSON.parse(ev.target?.result as string);
+        dispatch({ type: 'LOAD_STATE', payload: loadedState });
+        alert('Character data loaded successfully!');
+      } catch (err: any) {
+        alert('Failed to parse JSON file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <aside className="sidebar" id="sidebar">
       <div className="sidebar-header">
@@ -57,35 +78,11 @@ const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
         <p className="sidebar-subtitle">Character Creator</p>
       </div>
       <StepNav currentStep={currentStep} onNavigate={onNavigate} />
-      <div className="sidebar-actions">
-        <button className="btn btn-ghost" id="btn-import">
-          📂 Load Data
-        </button>
-        <input type="file" id="import-file" accept=".json" style={{ display: 'none' }} />
-      </div>
     </aside>
   );
 };
 
-const CharacterSummary: React.FC = () => {
-  return (
-    <aside className="character-summary" id="character-summary">
-      <h2 className="summary-title">Character Summary</h2>
-      <div id="summary-content">
-        {/* Summary content will be added here */}
-        <p>Character summary will appear here</p>
-      </div>
-      <div className="summary-actions">
-        <button className="btn btn-accent" id="btn-export-json">
-          💾 Save Data
-        </button>
-        <button className="btn btn-accent" id="btn-export-pdf">
-          📄 Save Character Sheet
-        </button>
-      </div>
-    </aside>
-  );
-};
+import { CharacterSummaryPanel } from './CharacterSummaryPanel';
 
 const StepFooter: React.FC<{ currentStep: number; onNavigate: (step: number) => void; totalSteps: number }> = ({ currentStep, onNavigate, totalSteps }) => {
   return (
@@ -124,7 +121,7 @@ export const Layout: React.FC<LayoutProps> = ({ currentStep, children, onNavigat
           totalSteps={STEPS.length}
         />
       </main>
-      <CharacterSummary />
+      <CharacterSummaryPanel />
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
     </>

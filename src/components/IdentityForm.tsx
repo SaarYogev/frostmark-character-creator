@@ -27,7 +27,11 @@ export default function IdentityForm({ initialState = {} }: IdentityFormProps) {
   };
 
   const handleSelectChange = (field: keyof IdentityState) => (e: React.ChangeEvent<HTMLSelectElement>) => {
-    dispatch({ type: 'SET_IDENTITY', payload: { [field]: e.target.value as CampaignPowerLevel } });
+    const val = e.target.value as CampaignPowerLevel;
+    dispatch({ type: 'SET_IDENTITY', payload: { [field]: val } });
+    if (field === 'campaignPowerLevel') {
+      dispatch({ type: 'SET_CAMPAIGN_POWER_LEVEL', payload: val });
+    }
   };
 
   const handleNumberChange = (field: keyof IdentityState) => (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -210,6 +210,7 @@ export function computeFreeSkillPools(state, backgroundsData) {
 
   if (state.background === 'Custom') {
     bgFree = state.customBackground?.skills?.length ?? 4;
+    restrictSkills = state.customBackground?.skills ?? null;
   } else if (state.background) {
     const bg = backgroundsData.find(b => b.name === state.background);
     if (bg) {

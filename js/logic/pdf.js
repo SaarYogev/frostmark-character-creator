@@ -64,10 +64,35 @@ export async function exportToPDF(state, racesData, backgroundsData) {
 }
 
 function fillIdentity(form, state, finalStats) {
-  safeSetText(form, 'CHARACTER NAME', state.characterName);
-  safeSetText(form, 'PLAYER NAME', state.playerName);
-  safeSetText(form, 'RACE', state.race === 'Custom' ? state.customRace?.name : state.race);
-  safeSetText(form, 'BACKGROUND', state.background === 'Custom' ? state.customBackground?.name : state.background);
+  const charName = state.characterName ?? state.identity?.characterName ?? '';
+  const playerName = state.playerName ?? state.identity?.playerName ?? '';
+
+  let raceStr = '—';
+  if (typeof state.race === 'string') {
+    raceStr = state.race === 'Custom' ? (state.customRace?.name || 'Custom') : state.race;
+  } else if (state.race?.race === 'Custom') {
+    raceStr = state.customRace?.name || state.race?.customRace?.name || 'Custom';
+  } else if (state.race?.race) {
+    raceStr = state.race.race;
+  }
+  const subraceName = typeof state.subrace === 'string' ? state.subrace : state.race?.subrace;
+  if (subraceName) {
+    raceStr += ` (${subraceName})`;
+  }
+
+  let bgStr = '—';
+  if (typeof state.background === 'string') {
+    bgStr = state.background === 'Custom' ? (state.customBackground?.name || 'Custom') : state.background;
+  } else if (state.background?.name === 'Custom') {
+    bgStr = state.customBackground?.name || state.background?.customBackground?.name || 'Custom';
+  } else if (state.background?.name) {
+    bgStr = state.background.name;
+  }
+
+  safeSetText(form, 'CHARACTER NAME', charName);
+  safeSetText(form, 'PLAYER NAME', playerName);
+  safeSetText(form, 'RACE', raceStr);
+  safeSetText(form, 'BACKGROUND', bgStr);
   safeSetText(form, 'AOs  LEVEL', buildAOLevelString(state));
   safeSetText(form, 'Appearance Age', state.appearance?.age ?? '');
   safeSetText(form, 'Appearance Height', state.appearance?.height ?? '');
@@ -278,7 +303,8 @@ function fillCombat(form, state, finalStats) {
   const armorAC = computeArmorAC(state, finalStats);
   safeSetText(form, 'Armor Class', armorAC);
 
-  const weapons = state.equipmentList?.filter(i => i.isWeapon) ?? [];
+  const equipList = state.equipmentList ?? state.equipment?.equipmentList ?? [];
+  const weapons = equipList.filter(i => i.isWeapon);
   weapons.slice(0, 4).forEach((w, idx) => {
     const n = idx + 1;
     safeSetText(form, `Weapon ${n}`, w.name);
@@ -287,7 +313,7 @@ function fillCombat(form, state, finalStats) {
     safeSetText(form, `Weapon ${n} Damage`, w.damage ?? '');
   });
 
-  const armors = state.equipmentList?.filter(i => i.isArmor) ?? [];
+  const armors = equipList.filter(i => i.isArmor);
   armors.slice(0, 3).forEach((a, idx) => {
     safeSetText(form, `Defenses ${idx + 1}`, a.name);
   });
@@ -302,7 +328,8 @@ function computeMaxHP(state, finalStats) {
 
 function computeArmorAC(state, finalStats) {
   const dexMod = getCharacteristicModifier(finalStats.Dexterity ?? 10);
-  const equipped = state.equipmentList?.find(i => i.isArmor && i.equipped);
+  const equipList = state.equipmentList ?? state.equipment?.equipmentList ?? [];
+  const equipped = equipList.find(i => i.isArmor && i.equipped);
   if (!equipped) return 10 + dexMod;
   return (equipped.baseAC ?? 10) + (equipped.addsDexMod ? Math.min(dexMod, equipped.maxDexBonus ?? 99) : 0);
 }
@@ -362,7 +389,7 @@ export function getSpellSlotsForLevel(level) {
 }
 
 function fillEquipment(form, state, backgroundsData) {
-  const items = state.equipmentList ?? [];
+  const items = state.equipmentList ?? state.equipment?.equipmentList ?? [];
   items.slice(0, 21).forEach((item, i) => {
     const n = i + 1;
     safeSetText(form, `Item ${n}`, item.name ?? '');
