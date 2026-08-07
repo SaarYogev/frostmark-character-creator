@@ -12,7 +12,7 @@ import {
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
-export const CharacterSummaryPanel: React.FC = () => {
+export const CharacterSummaryPanel: React.FC<{ onNavigateHome?: () => void }> = ({ onNavigateHome }) => {
   const { state, dispatch } = useCharacter();
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,16 +161,17 @@ export const CharacterSummaryPanel: React.FC = () => {
 
       <div className="summary-actions" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <button className="btn btn-secondary" id="btn-import" onClick={() => document.getElementById('right-import-file')?.click()}>
-          📂 Load Data
+          📂 Load Data File
         </button>
         <button className="btn btn-accent" id="btn-export-json" onClick={() => handleExportJSON(state)}>
-          💾 Save Data
+          💾 Save Data File
         </button>
         <button className="btn btn-primary" id="btn-export-pdf" onClick={() => handleExportPDF(state)}>
-          📄 Save Character Sheet
+          📄 Download Character Sheet
         </button>
         <input type="file" id="right-import-file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
       </div>
     </aside>
   );
 };
+
