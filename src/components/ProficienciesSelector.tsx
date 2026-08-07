@@ -1,7 +1,6 @@
 import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { CHARACTERISTICS } from '../../js/data/constants';
-import { WEAPON_PROFICIENCY_COSTS, SAVE_PROFICIENCY_COSTS } from '../../js/data/constants';
+import { CHARACTERISTICS, WEAPON_PROFICIENCY_COSTS, SAVE_PROFICIENCY_COSTS } from '../data/constants';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const ProficienciesSelector: React.FC = () => {

@@ -1,11 +1,21 @@
-import tomlData from './abilities.toml';
+import tomlData from './toml/abilities.toml';
+
+export interface AbilityItem {
+  id: string;
+  name: string;
+  origin: string;
+  level: number;
+  selection: string;
+  short_desc: string;
+  full_desc: string;
+}
 
 // Vite's TOML loader wraps array-of-tables ([[abilities]]) as { abilities: [...] }
-const rawAbilities = Array.isArray(tomlData) ? tomlData : (tomlData.abilities ?? []);
+const rawAbilities = Array.isArray(tomlData) ? tomlData : ((tomlData as any).abilities ?? []);
 
 // Export sorted list of abilities with unique IDs
-export const ABILITIES = rawAbilities
-  .map((ability, idx) => ({
+export const ABILITIES: AbilityItem[] = (rawAbilities as any[])
+  .map((ability) => ({
     id: `${ability.origin}-${ability.level}-${ability.selection}-${ability.name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     name: ability.name,
     origin: ability.origin,
@@ -21,32 +31,31 @@ export const ABILITIES = rawAbilities
     return a.name.localeCompare(b.name);
   });
 
-// Export helper functions
-export function getAbilitiesByOrigin(origin) {
+export function getAbilitiesByOrigin(origin: string): AbilityItem[] {
   return ABILITIES.filter(a => a.origin === origin);
 }
 
-export function getAbilitiesByLevel(level) {
+export function getAbilitiesByLevel(level: number): AbilityItem[] {
   return ABILITIES.filter(a => a.level === level);
 }
 
-export function getAbilitiesByOriginAndLevel(origin, level) {
+export function getAbilitiesByOriginAndLevel(origin: string, level: number): AbilityItem[] {
   return ABILITIES.filter(a => a.origin === origin && a.level === level);
 }
 
-export function getAbilitiesBySelection(level, selectionType) {
+export function getAbilitiesBySelection(level: number, selectionType: string): AbilityItem[] {
   return ABILITIES.filter(a => a.level === level && a.selection === selectionType);
 }
 
-export function getAbilityByName(name) {
+export function getAbilityByName(name: string): AbilityItem | undefined {
   return ABILITIES.find(a => a.name === name);
 }
 
-export function getAbilityById(id) {
+export function getAbilityById(id: string): AbilityItem | undefined {
   return ABILITIES.find(a => a.id === id);
 }
 
-export function getAbilitiesForLevel(level, selectionType, origin) {
+export function getAbilitiesForLevel(level: number, selectionType: string, origin: string): AbilityItem[] {
   return ABILITIES.filter(a => 
     a.level === level && 
     a.selection === selectionType && 

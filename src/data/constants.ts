@@ -1,6 +1,6 @@
 // Point-buy cost map for characteristics.
 // Starts at 10 (0 points cost). Increments and decrements follow Frostmark rules.
-export const POINT_BUY_COSTS = {
+export const POINT_BUY_COSTS: Record<number, number> = {
   6: -5,
   7: -3,
   8: -2,
@@ -15,7 +15,14 @@ export const POINT_BUY_COSTS = {
   17: 9
 };
 
-export const CHARACTERISTICS = [
+export interface CharacteristicInfo {
+  key: string;
+  short: string;
+  type: 'Physical' | 'Mental' | 'Social';
+  desc: string;
+}
+
+export const CHARACTERISTICS: CharacteristicInfo[] = [
   { key: 'Brawn', short: 'Br', type: 'Physical', desc: 'Offensive physical strength' },
   { key: 'Dexterity', short: 'Dex', type: 'Physical', desc: 'Finesse physical control' },
   { key: 'Vitality', short: 'Vit', type: 'Physical', desc: 'Defensive physical endurance' },
@@ -27,15 +34,15 @@ export const CHARACTERISTICS = [
   { key: 'Composure', short: 'Com', type: 'Social', desc: 'Defensive social stability' }
 ];
 
-export const SKILL_RANK_BONUSES = {
-  1: (prof) => Math.ceil(prof / 2),
-  2: (prof) => prof,
-  3: (prof) => Math.ceil(prof * 1.5),
-  4: (prof) => prof * 2,
-  5: (prof) => Math.ceil(prof * 2.5)
+export const SKILL_RANK_BONUSES: Record<number, (prof: number) => number> = {
+  1: (prof: number) => Math.ceil(prof / 2),
+  2: (prof: number) => prof,
+  3: (prof: number) => Math.ceil(prof * 1.5),
+  4: (prof: number) => prof * 2,
+  5: (prof: number) => Math.ceil(prof * 2.5)
 };
 
-export const SKILL_RANK_CUMULATIVE_COSTS = {
+export const SKILL_RANK_CUMULATIVE_COSTS: Record<number, number> = {
   1: 1,
   2: 2,
   3: 4,
@@ -43,7 +50,7 @@ export const SKILL_RANK_CUMULATIVE_COSTS = {
   5: 9
 };
 
-export const SAVE_PROFICIENCY_COSTS = {
+export const SAVE_PROFICIENCY_COSTS: Record<string, number> = {
   Brawn: 1,
   Dexterity: 2,
   Vitality: 2,
@@ -55,7 +62,7 @@ export const SAVE_PROFICIENCY_COSTS = {
   Composure: 2
 };
 
-export const ARMOR_PROFICIENCY_COSTS = {
+export const ARMOR_PROFICIENCY_COSTS: Record<string, number> = {
   Light: 1,
   Medium: 2, // 1 to upgrade from Light
   Heavy: 3,  // 1 to upgrade from Medium
@@ -73,7 +80,13 @@ export const MONEY_AP_COST = {
   goldPerAP: 25
 };
 
-export const SKILLS = [
+export interface SkillInfo {
+  name: string;
+  stats: [string, string];
+  key: string;
+}
+
+export const SKILLS: SkillInfo[] = [
   { name: 'Animal Handling', stats: ['Cunning', 'Presence'], key: 'AH' },
   { name: 'Perception', stats: ['Intelligence', 'Composure'], key: 'Perc' },
   { name: 'Athletics', stats: ['Brawn', 'Dexterity'], key: 'Ath' },

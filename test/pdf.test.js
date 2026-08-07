@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { exportToPDF } from '../js/logic/pdf.js';
-import { getInitialState } from '../js/logic/state.js';
-import { RACES } from '../js/data/races.js';
-import { BACKGROUNDS } from '../js/data/backgrounds.js';
+import { exportToPDF } from '../src/logic/pdf';
+import { getInitialState } from '../src/logic/state';
+import { RACES } from '../src/data/races';
+import { BACKGROUNDS } from '../src/data/backgrounds';
 
 
 test('exportToPDF fills fields without throwing runtime errors', async () => {

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { CANTRIPS, SPELLS } from '../../js/data/spells';
-import { ORIGINS } from '../../js/data/origins';
-import { calculatePotentialGained } from '../../js/logic/state';
+import { CANTRIPS, SPELLS } from '../data/spells';
+import { ORIGINS } from '../data/origins';
+import { calculatePotentialGained } from '../logic/state';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 interface SpellEntry {

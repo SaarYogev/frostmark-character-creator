@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { ORIGINS } from '../../js/data/origins';
-import { calculatePotentialGained } from '../../js/logic/state';
-import { getSpellSlotsForLevel } from '../../js/logic/pdf';
+import { ORIGINS } from '../data/origins';
+import { calculatePotentialGained } from '../logic/state';
+import { getSpellSlotsForLevel } from '../logic/pdf';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const SpellSlotsSelector: React.FC = () => {

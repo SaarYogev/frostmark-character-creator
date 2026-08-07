@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { RACES } from '../../js/data/races';
+import { RACES } from '../data/races';
 import { RaceData, CustomRace, Characteristic, CHARACTERISTICS, StatBonuses, Trait, RaceState, DEFAULT_RACE_STATE } from '../types/Race';
 import { useCharacter } from '../contexts/CharacterContext';
 

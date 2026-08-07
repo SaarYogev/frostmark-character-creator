@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import AbilityScoreSelector from '../components/AbilityScoreSelector';
-import { CHARACTERISTICS } from '../../js/data/constants';
+import { CHARACTERISTICS } from '../data/constants';
 
 describe('AbilityScoreSelector', () => {
   const renderWithProvider = (component = <AbilityScoreSelector />) => {

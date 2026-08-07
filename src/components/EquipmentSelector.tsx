@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { WEAPONS, ARMOR as ARMORS } from '../../js/data/equipment';
+import { WEAPONS, ARMOR as ARMORS } from '../data/equipment';
 
 export interface EquipmentItem {
   name: string;

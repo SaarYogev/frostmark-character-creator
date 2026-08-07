@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { BACKGROUNDS } from '../../js/data/backgrounds';
+import { BACKGROUNDS } from '../data/backgrounds';
 import { Background, DEFAULT_BACKGROUND } from '../types/Background';
 
 const BackgroundDetails: React.FC<{ background: Background }> = ({ background }) => {

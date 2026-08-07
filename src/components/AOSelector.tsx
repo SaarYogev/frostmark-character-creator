@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { ORIGINS } from '../../js/data/origins';
-import { getAbilitiesForLevel, getAbilityById, ABILITIES } from '../../js/data/abilities';
+import { ORIGINS } from '../data/origins';
+import { getAbilitiesForLevel, getAbilityById, ABILITIES } from '../data/abilities';
 import { CustomOrigin, AbilityItem } from '../types/AO';
 
 const AOSelector: React.FC = () => {

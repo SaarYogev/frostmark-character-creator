@@ -4,10 +4,10 @@ import {
   calculatePotentialGained,
   calculateHPBonus,
   calculateSpentAccomplishmentPoints
-} from '../js/logic/state.js';
-import { ORIGINS } from '../js/data/origins.js';
-import { BACKGROUNDS } from '../js/data/backgrounds.js';
-import { getAbilitiesForLevel } from '../js/data/abilities.js';
+} from '../src/logic/state';
+import { ORIGINS } from '../src/data/origins';
+import { BACKGROUNDS } from '../src/data/backgrounds';
+import { getAbilitiesForLevel } from '../src/data/abilities';
 
 describe('Level-by-Level Ability Origins Logic', () => {
   test('calculatePotentialGained sums potential level-by-level', () => {

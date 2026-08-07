@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SPELLS_JS_PATH = path.join(__dirname, '../js/data/spells.js');
-const SPELLS_TOML_PATH = path.join(__dirname, '../js/data/spells.toml');
+const SPELLS_TOML_PATH = path.join(__dirname, '../src/data/toml/spells.toml');
 
 // Duplicate of heuristic fallback logic from spells.js (to enrich missing spells)
 export function getHeuristicSpell(name, level, school) {

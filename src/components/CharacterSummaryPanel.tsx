@@ -1,14 +1,14 @@
 import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { RACES } from '../../js/data/races';
-import { ORIGINS } from '../../js/data/origins';
-import { BACKGROUNDS } from '../../js/data/backgrounds';
-import { CHARACTERISTICS } from '../../js/data/constants';
+import { RACES } from '../data/races';
+import { ORIGINS } from '../data/origins';
+import { BACKGROUNDS } from '../data/backgrounds';
+import { CHARACTERISTICS } from '../data/constants';
 import {
   getFinalCharacteristics,
   getProficiencyBonus,
   getCharacteristicModifier,
-} from '../../js/logic/state';
+} from '../logic/state';
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 

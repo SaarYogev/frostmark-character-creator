@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import { SPELLS, CANTRIPS } from '../js/data/spells.js';
+import { SPELLS, CANTRIPS } from '../src/data/spells';
 
 describe('Spells and Cantrips Metadata verification', () => {
   test('Verify metadata structure and value types for all cantrips', () => {

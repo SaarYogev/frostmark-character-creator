@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import BackgroundSelector from '../components/BackgroundSelector';
-import { BACKGROUNDS } from '../../js/data/backgrounds';
+import { BACKGROUNDS } from '../data/backgrounds';
 
 describe('BackgroundSelector', () => {
   const renderWithProvider = (component = <BackgroundSelector />) => {

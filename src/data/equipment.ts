@@ -1,4 +1,24 @@
-export const WEAPONS = [
+export interface WeaponData {
+  name: string;
+  cost: string;
+  damage: string;
+  weight: string;
+  properties: string;
+}
+
+export interface ArmorData {
+  name: string;
+  category: 'Light' | 'Medium' | 'Heavy' | 'Shield';
+  cost: string;
+  av: number;
+  mod: 'Dex' | null;
+  maxMod: number | null;
+  stealth: 'Normal' | 'Disadvantage';
+  weight: number;
+  brawnMin?: number;
+}
+
+export const WEAPONS: WeaponData[] = [
   { name: 'Dagger', cost: '2 gp', damage: '1d4 piercing', weight: '0.5 kg', properties: 'Finesse, light, thrown (range 6/18m)' },
   { name: 'Shortsword', cost: '10 gp', damage: '1d6 slashing', weight: '1 kg', properties: 'Finesse, light' },
   { name: 'Longsword', cost: '15 gp', damage: '1d8 slashing', weight: '1.5 kg', properties: 'Versatile (1d10)' },
@@ -16,7 +36,7 @@ export const WEAPONS = [
   { name: 'Hand Crossbow', cost: '75 gp', damage: '1d6 piercing', weight: '1.5 kg', properties: 'Ammunition (range 9/36m), light, loading' }
 ];
 
-export const ARMOR = [
+export const ARMOR: ArmorData[] = [
   { name: 'Padded', category: 'Light', cost: '5 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Disadvantage', weight: 4 },
   { name: 'Leather', category: 'Light', cost: '10 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 5 },
   { name: 'Reinforced Leather', category: 'Light', cost: '45 gp', av: 12, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 7 },

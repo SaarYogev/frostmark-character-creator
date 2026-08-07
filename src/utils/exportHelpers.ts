@@ -1,6 +1,6 @@
-import { exportToPDF, downloadPDF } from '../../js/logic/pdf';
-import { RACES } from '../../js/data/races';
-import { BACKGROUNDS } from '../../js/data/backgrounds';
+import { exportToPDF, downloadPDF } from '../logic/pdf';
+import { RACES } from '../data/races';
+import { BACKGROUNDS } from '../data/backgrounds';
 import { CharacterState } from '../types/Character';
 
 export function handleExportJSON(state: CharacterState) {

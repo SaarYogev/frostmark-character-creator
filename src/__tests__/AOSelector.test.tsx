@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import AOSelector from '../components/AOSelector';
-import { ORIGINS } from '../../js/data/origins';
+import { ORIGINS } from '../data/origins';
 
 describe('AOSelector', () => {
   const renderWithProvider = (component = <AOSelector />) => {

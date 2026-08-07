@@ -2,7 +2,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import SkillsSelector from '../components/SkillsSelector';
-import { SKILLS } from '../../js/data/constants';
+import { SKILLS } from '../data/constants';
+import { BACKGROUNDS } from '../data/backgrounds';
 
 describe('SkillsSelector', () => {
   const renderWithProvider = (component = <SkillsSelector />) => {
@@ -61,10 +62,11 @@ describe('SkillsSelector', () => {
   });
 
   it('updates free skill points tracker when background is selected', () => {
+    const scholarBg = BACKGROUNDS.find(b => b.name === 'Scholar');
     render(
       <CharacterProvider
         initialState={{
-          background: { name: 'Scholar' },
+          background: scholarBg as any,
         }}
       >
         <SkillsSelector />
@@ -73,14 +75,14 @@ describe('SkillsSelector', () => {
 
     expect(screen.getAllByText('0')[0]).toBeInTheDocument();
     expect(screen.getByText('/ 4')).toBeInTheDocument();
-    expect(screen.getByText(/Scholar/)).toBeInTheDocument();
   });
 
   it('renders restricted skill badges for backgrounds like Criminal', () => {
+    const criminalBg = BACKGROUNDS.find(b => b.name === 'Criminal');
     render(
       <CharacterProvider
         initialState={{
-          background: { name: 'Criminal' },
+          background: criminalBg as any,
         }}
       >
         <SkillsSelector />

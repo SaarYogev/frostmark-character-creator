@@ -6,8 +6,8 @@ import { fetchSpellDetails } from './enrich_spells.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SPELLS_TOML_PATH = path.join(__dirname, '../js/data/spells.toml');
-const OVERRIDE_TOML_PATH = path.join(__dirname, '../js/data/spells_override.toml');
+const SPELLS_TOML_PATH = path.join(__dirname, '../src/data/toml/spells.toml');
+const OVERRIDE_TOML_PATH = path.join(__dirname, '../src/data/toml/spells_override.toml');
 
 const DAMAGE_TYPES = [
   'bludgeoning', 'piercing', 'slashing',

@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { CharacterProvider } from '../contexts/CharacterContext';
 import RaceSelector from '../components/RaceSelector';
-import { RACES } from '../../js/data/races';
+import { RACES } from '../data/races';
 
 describe('RaceSelector', () => {
   const renderWithProvider = (component: React.ReactNode) => {

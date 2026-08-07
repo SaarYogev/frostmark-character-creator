@@ -1,6 +1,7 @@
 import { IdentityState, DEFAULT_IDENTITY } from './Identity';
 import { RaceState, DEFAULT_RACE_STATE } from './Race';
 import { Background, DEFAULT_BACKGROUND } from './Background';
+import { BACKGROUNDS } from '../data/backgrounds';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
 import { AOState, DEFAULT_AO_STATE } from './AO';
 import { SkillsState, DEFAULT_SKILLS_STATE } from './Skills';
@@ -79,11 +80,12 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           manualRaces: p.manualRaces ?? p.race?.manualRaces ?? state.race?.manualRaces ?? false,
           racialStatOverrides: p.racialStatOverrides ?? p.race?.racialStatOverrides ?? state.race?.racialStatOverrides ?? {},
         },
-        background: {
-          ...(typeof state.background === 'object' ? state.background : {}),
-          name: bgName,
-          customBackground: p.customBackground ?? p.background?.customBackground ?? state.customBackground,
-        } as any,
+        background: (typeof p.background === 'object' && p.background?.freeSkillPoints !== undefined)
+          ? p.background
+          : BACKGROUNDS.find(b => b.name === bgName) ?? {
+              ...DEFAULT_BACKGROUND,
+              name: bgName,
+            },
         customBackground: p.customBackground ?? p.background?.customBackground ?? state.customBackground,
         baseCharacteristics: p.baseCharacteristics ?? state.baseCharacteristics ?? DEFAULT_BASE_CHARACTERISTICS,
         ao: {
@@ -99,7 +101,15 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         skills: {
           ...state.skills,
           skillRanks: p.skillRanks ?? p.skills?.skillRanks ?? state.skills?.skillRanks ?? {},
-          academicsEntries: p.academicsEntries ?? p.academicsFields ?? p.skills?.academicsEntries ?? state.skills?.academicsEntries ?? [],
+          academicsEntries: (p.academicsEntries && p.academicsEntries.length > 0)
+            ? p.academicsEntries
+            : (p.skills?.academicsEntries && p.skills.academicsEntries.length > 0)
+            ? p.skills.academicsEntries
+            : (p.academicsRanks && Object.keys(p.academicsRanks).length > 0)
+            ? Object.entries(p.academicsRanks).map(([name, rank]) => ({ name, rank: Number(rank) }))
+            : (p.academicsFields && Array.isArray(p.academicsFields))
+            ? p.academicsFields.map((name: string) => ({ name, rank: 1 }))
+            : state.skills?.academicsEntries ?? [],
           artsCraftEntries: p.artsCraftEntries ?? p.skills?.artsCraftEntries ?? state.skills?.artsCraftEntries ?? [],
           manualSkills: p.manualSkills ?? p.skills?.manualSkills ?? state.skills?.manualSkills ?? false,
         },
@@ -173,14 +183,18 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           ...action.payload,
         },
       };
-    case 'SET_SKILLS':
+    case 'SET_SKILLS': {
+      const updatedSkills = {
+        ...state.skills,
+        ...action.payload,
+      };
       return {
         ...state,
-        skills: {
-          ...state.skills,
-          ...action.payload,
-        },
+        skills: updatedSkills,
+        skillRanks: updatedSkills.skillRanks,
+        manualSkills: updatedSkills.manualSkills,
       };
+    }
     case 'SET_PROFICIENCIES':
       return {
         ...state,

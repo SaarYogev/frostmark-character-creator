@@ -1,14 +1,14 @@
 import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { CHARACTERISTICS } from '../../js/data/constants';
-import { RACES } from '../../js/data/races';
+import { CHARACTERISTICS } from '../data/constants';
+import { RACES } from '../data/races';
 import {
   getAbilityPointLimit,
   calculateSpentAbilityPoints,
   getFinalCharacteristics,
   getCharacteristicModifier,
   getAttributePointCost,
-} from '../../js/logic/state';
+} from '../logic/state';
 import { CharacteristicName } from '../types/Ability';
 
 const AbilityScoreSelector: React.FC = () => {

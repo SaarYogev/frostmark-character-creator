@@ -1,4 +1,12 @@
-export const ORIGINS = [
+export interface OriginData {
+  name: string;
+  hd: number;
+  extraSkills: number;
+  spellcasting: 'Minor' | 'Moderate' | 'Major';
+  desc: string;
+}
+
+export const ORIGINS: OriginData[] = [
   {
     name: 'Artistry',
     hd: 8,
@@ -58,43 +66,29 @@ export const ORIGINS = [
   {
     name: 'Predator',
     hd: 10,
-    extraSkills: 0,
-    spellcasting: 'Moderate',
-    desc: 'You rely on primal instincts, tracking beasts and casting nature spells.'
-  },
-  {
-    name: 'Soul Oath',
-    hd: 12,
-    extraSkills: 0,
+    extraSkills: 1,
     spellcasting: 'Minor',
-    desc: 'A grim warrior bound by a blood or soul pact to destroy their sworn enemies.'
+    desc: 'You hunt prey using instinct, track craft, and primal survival skills.'
   },
   {
-    name: 'Soul Weapon',
-    hd: 10,
-    extraSkills: 0,
+    name: 'Stewardship',
+    hd: 8,
+    extraSkills: 1,
     spellcasting: 'Moderate',
-    desc: 'You manifest your soul as a weapon of pure magical force.'
+    desc: 'You act as a guardian of nature or communities, balancing magic and duty.'
   },
   {
     name: 'Tactics',
     hd: 10,
     extraSkills: 1,
     spellcasting: 'Minor',
-    desc: 'A battlefield commander coordinating strategies and physical maneuvers.'
+    desc: 'You direct battlefield movement, analyze enemy weaknesses, and lead allies.'
   },
   {
-    name: 'Unique Ancestry',
-    hd: 8,
+    name: 'Wild Magic',
+    hd: 6,
     extraSkills: 0,
     spellcasting: 'Major',
-    desc: 'Magic is in your blood, manifesting through elemental or sorcerous heritage.'
-  },
-  {
-    name: 'World Magic',
-    hd: 8,
-    extraSkills: 0,
-    spellcasting: 'Major',
-    desc: 'You tap into the raw magic of the natural world, drawing power from elements.'
+    desc: 'Uncontrolled chaotic magic flows naturally through your bloodline.'
   }
 ];

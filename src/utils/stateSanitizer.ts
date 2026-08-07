@@ -1,13 +1,14 @@
-import { BACKGROUNDS } from '../../js/data/backgrounds';
+import { BACKGROUNDS } from '../data/backgrounds';
+import { ORIGINS } from '../data/origins';
 import {
   getTotalAccomplishmentPointsLimit,
   calculateSpentAccomplishmentPoints,
-} from '../../js/logic/state';
+} from '../logic/state';
 
 export function getSanitizedState(state: any) {
   return {
     ...state,
-    background: typeof state.background === 'object' ? state.background?.name : state.background,
+    background: state.background,
     level: state.identity?.level ?? state.level ?? 1,
     campaignPowerLevel: state.identity?.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
     levelSelections: state.ao?.levelSelections ?? state.levelSelections ?? {},
@@ -27,7 +28,7 @@ export function getSanitizedState(state: any) {
 export function getGlobalAPSummary(state: any) {
   const sanitizedState = getSanitizedState(state);
   const apLimit = getTotalAccomplishmentPointsLimit(sanitizedState) || 16;
-  const apResult = calculateSpentAccomplishmentPoints(sanitizedState, BACKGROUNDS);
+  const apResult = calculateSpentAccomplishmentPoints(sanitizedState, BACKGROUNDS, ORIGINS);
   const totalSpent = (typeof apResult === 'number' ? apResult : apResult?.totalSpent) || 0;
   const apRemaining = apLimit - totalSpent;
 

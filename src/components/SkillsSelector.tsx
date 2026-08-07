@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { SKILLS, SKILL_RANK_CUMULATIVE_COSTS } from '../../js/data/constants';
-import { RACES } from '../../js/data/races';
-import { BACKGROUNDS } from '../../js/data/backgrounds';
+import { SKILLS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants';
+import { RACES } from '../data/races';
+import { BACKGROUNDS } from '../data/backgrounds';
+import { ORIGINS } from '../data/origins';
 import {
   getProficiencyBonus,
   getFinalCharacteristics,
   getCharacteristicModifier,
   getMaxSkillRank,
   computeFreeSkillPools,
-} from '../../js/logic/state';
+} from '../logic/state';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const SkillsSelector: React.FC = () => {
@@ -25,13 +26,14 @@ const SkillsSelector: React.FC = () => {
 
   const { apLimit: totalAPLimit, apRemaining, sanitizedState: integratedState } = getGlobalAPSummary(state);
 
-  const bgData = BACKGROUNDS.find((b) => b.name === (integratedState.background as string));
-  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(integratedState, BACKGROUNDS);
+  const bgName = typeof integratedState.background === 'object' ? integratedState.background?.name : integratedState.background;
+  const bgData = BACKGROUNDS.find((b) => b.name === bgName);
+  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(integratedState, BACKGROUNDS, ORIGINS);
 
-  const skillRanks = state.skills?.skillRanks ?? {};
-  const academicsEntries = state.skills?.academicsEntries ?? [];
-  const artsCraftEntries = state.skills?.artsCraftEntries ?? [];
-  const manualSkills = state.skills?.manualSkills ?? false;
+  const skillRanks = state.skills?.skillRanks ?? state.skillRanks ?? {};
+  const academicsEntries = state.skills?.academicsEntries ?? state.academicsEntries ?? [];
+  const artsCraftEntries = state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [];
+  const manualSkills = state.skills?.manualSkills ?? state.manualSkills ?? false;
 
   // Compute spent points split by Background & AO free pools
   let restrictedSpent = 0;
@@ -49,14 +51,28 @@ const SkillsSelector: React.FC = () => {
   }
 
   const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
-  for (const entry of academicsEntries) {
-    const rank = entry.rank ?? 1;
-    const builtIn = builtInAcademics[entry.name] ?? 0;
-    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
-      restrictedSpent += cost;
-    } else {
-      unrestrictedSpent += cost;
+  if (academicsEntries.length > 0) {
+    for (const entry of academicsEntries) {
+      const rank = entry.rank ?? 1;
+      const builtIn = builtInAcademics[entry.name] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
+    }
+  } else {
+    const academicsRanks = state.skills?.academicsRanks ?? state.academicsRanks ?? {};
+    for (const field in academicsRanks) {
+      const rank = academicsRanks[field] ?? 0;
+      const builtIn = builtInAcademics[field] ?? 0;
+      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
+      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(field))) {
+        restrictedSpent += cost;
+      } else {
+        unrestrictedSpent += cost;
+      }
     }
   }
 
@@ -75,7 +91,7 @@ const SkillsSelector: React.FC = () => {
   let bgSpent = 0;
   let aoSpent = 0;
 
-  if (integratedState.background && restrictSkills) {
+  if (restrictSkills) {
     // Restricted background points can only cover restricted skills
     bgSpent = Math.min(bgFree, restrictedSpent);
     const excessRestricted = restrictedSpent - bgSpent;
@@ -84,7 +100,7 @@ const SkillsSelector: React.FC = () => {
   } else {
     // Unrestricted background points cover any skills first, then AO free points
     const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    bgSpent = Math.min(integratedState.background ? bgFree : 0, totalSpentPoints);
+    bgSpent = Math.min(bgFree, totalSpentPoints);
     aoSpent = Math.min(aoFree, Math.max(0, totalSpentPoints - bgSpent));
   }
 
@@ -102,11 +118,10 @@ const SkillsSelector: React.FC = () => {
   };
 
   const handleAdjustSkill = (skillName: string, delta: number) => {
-    const currentRank = skillRanks[skillName] ?? (builtInRanks[skillName] ?? 0);
+    const currentRank = skillRanks[skillName] ?? 0;
     const nextRank = currentRank + delta;
-    const builtIn = builtInRanks[skillName] ?? 0;
 
-    if (nextRank < builtIn || nextRank > 5) return;
+    if (nextRank < 0 || nextRank > 5) return;
 
     dispatch({
       type: 'SET_SKILLS',
@@ -243,7 +258,7 @@ const SkillsSelector: React.FC = () => {
             }}
           >
             <strong>⚠️ Background Skill Restriction:</strong> The {bgFree} free skill points from your background (
-            <strong>{bgData?.name ?? (integratedState.background as string)}</strong>) can only be spent on the following skills:{' '}
+            <strong>{bgData?.name ?? (typeof integratedState.background === 'object' ? integratedState.background?.name : integratedState.background)}</strong>) can only be spent on the following skills:{' '}
             <strong>{restrictSkills.join(', ')}</strong>.
           </div>
         )}
@@ -266,7 +281,7 @@ const SkillsSelector: React.FC = () => {
           <div>
             <span>Background Free Skill Points Used: </span>
             <strong style={{ fontSize: '1.1rem', marginLeft: '0.25rem', color: '#2ecc71' }}>{bgSpent}</strong>
-            <span> / {integratedState.background ? bgFree : 0}</span>
+            <span> / {bgFree}</span>
           </div>
           <div>
             <span>Ability Origin Free Skill Points Used: </span>
@@ -378,7 +393,7 @@ const SkillsSelector: React.FC = () => {
                   <div className="rank-controls">
                     <button
                       className="rank-btn minus"
-                      disabled={rank <= builtInRank}
+                      disabled={rank <= 0}
                       onClick={() => handleAdjustSkill(skill.name, -1)}
                     >
                       −
