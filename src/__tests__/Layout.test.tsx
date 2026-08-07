@@ -54,7 +54,7 @@ describe('Layout', () => {
 
     expect(screen.getByText('Character Summary')).toBeInTheDocument();
     expect(screen.getAllByText(/Save Data/)[0]).toBeInTheDocument();
-    expect(screen.getAllByText(/Save Character Sheet/)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/Download Character Sheet/)[0]).toBeInTheDocument();
   });
 
   it('renders step footer with navigation buttons', () => {

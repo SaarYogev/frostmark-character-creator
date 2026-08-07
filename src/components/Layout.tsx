@@ -1,22 +1,24 @@
 import React, { ReactNode } from 'react';
-import { STEPS, StepId } from '../types/Steps';
+import { STEPS } from '../types/Steps';
 import { useCharacter } from '../contexts/CharacterContext';
+import { CharacterSummaryPanel } from './CharacterSummaryPanel';
+import { AutoSaveIndicator } from './AutoSaveIndicator';
+import { StorageStatus } from '../services/storage/types';
 
 interface LayoutProps {
   currentStep: number;
   children: ReactNode;
   onNavigate: (step: number) => void;
+  onNavigateHome?: () => void;
+  saveStatus?: StorageStatus;
+  isCloud?: boolean;
+  onRetrySave?: () => void;
 }
 
 const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
   const getStepLockReason = (stepIndex: number): string | null => {
     const stepId = STEPS[stepIndex].id;
-    // Only lock spell-related steps if no Primary AO is chosen
-    // For now, we'll keep it simple and not lock anything
-    // This can be enhanced later when we implement AO
-    if ((stepId === 'spellslots' || stepId === 'spellcasting') ) {
-      // In the future, check if primaryAO is selected
-      // For now, don't lock
+    if (stepId === 'spellslots' || stepId === 'spellcasting') {
       return null;
     }
     return null;
@@ -50,30 +52,19 @@ const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
   );
 };
 
-import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
-
-const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
-  const { state, dispatch } = useCharacter();
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const loadedState = JSON.parse(ev.target?.result as string);
-        dispatch({ type: 'LOAD_STATE', payload: loadedState });
-        alert('Character data loaded successfully!');
-      } catch (err: any) {
-        alert('Failed to parse JSON file: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-  };
-
+const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => void; onNavigateHome: () => void }> = ({
+  currentStep,
+  onNavigate,
+  onNavigateHome,
+}) => {
   return (
     <aside className="sidebar" id="sidebar">
-      <div className="sidebar-header">
+      <div
+        className="sidebar-header"
+        onClick={onNavigateHome}
+        style={{ cursor: 'pointer' }}
+        title="Return to Home Dashboard"
+      >
         <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark" className="sidebar-logo" />
         <p className="sidebar-subtitle">Character Creator</p>
       </div>
@@ -82,9 +73,11 @@ const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
   );
 };
 
-import { CharacterSummaryPanel } from './CharacterSummaryPanel';
-
-const StepFooter: React.FC<{ currentStep: number; onNavigate: (step: number) => void; totalSteps: number }> = ({ currentStep, onNavigate, totalSteps }) => {
+const StepFooter: React.FC<{ currentStep: number; onNavigate: (step: number) => void; totalSteps: number }> = ({
+  currentStep,
+  onNavigate,
+  totalSteps,
+}) => {
   return (
     <div className="step-footer">
       <button
@@ -109,22 +102,40 @@ const StepFooter: React.FC<{ currentStep: number; onNavigate: (step: number) => 
   );
 };
 
-export const Layout: React.FC<LayoutProps> = ({ currentStep, children, onNavigate }) => {
+export const Layout: React.FC<LayoutProps> = ({
+  currentStep,
+  children,
+  onNavigate,
+  onNavigateHome = () => {},
+  saveStatus = 'idle',
+  isCloud = false,
+  onRetrySave,
+}) => {
   return (
-    <>
-      <Sidebar currentStep={currentStep} onNavigate={onNavigate} />
+    <div className="app-layout">
+      <Sidebar currentStep={currentStep} onNavigate={onNavigate} onNavigateHome={onNavigateHome} />
       <main className="main-content">
+        {/* Top Action Bar in Main Builder View */}
+        <div
+          style={{
+            display: 'flex',
+            justify: 'flex-end',
+            alignItems: 'center',
+            marginBottom: '1rem',
+            paddingBottom: '0.75rem',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
+        </div>
+
         <div className="step-container">{children}</div>
-        <StepFooter
-          currentStep={currentStep}
-          onNavigate={onNavigate}
-          totalSteps={STEPS.length}
-        />
+        <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
       </main>
-      <CharacterSummaryPanel />
+      <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
-    </>
+    </div>
   );
 };
 

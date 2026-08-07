@@ -76,11 +76,10 @@ body::before {
 }
 
 #app {
-  display: grid;
-  grid-template-columns: var(--sidebar-width) 1fr var(--summary-width);
   min-height: 100vh;
   position: relative;
   z-index: 1;
+  width: 100%;
 }
 
 /* React app layout */
@@ -1336,7 +1335,7 @@ body::before {
   :root {
     --summary-width: 0px;
   }
-  #app {
+  .app-layout {
     grid-template-columns: var(--sidebar-width) 1fr;
   }
   .character-summary {
@@ -1348,7 +1347,7 @@ body::before {
   :root {
     --sidebar-width: 0px;
   }
-  #app {
+  .app-layout {
     grid-template-columns: 1fr;
   }
   .sidebar {
