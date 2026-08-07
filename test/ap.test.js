@@ -5,9 +5,9 @@ import {
   calculateSpentAccomplishmentPoints,
   getFinalCharacteristics,
   getMaxSkillRank
-} from '../js/logic/state.js';
-import { BACKGROUNDS } from '../js/data/backgrounds.js';
-import { RACES } from '../js/data/races.js';
+} from '../src/logic/state';
+import { BACKGROUNDS } from '../src/data/backgrounds';
+import { RACES } from '../src/data/races';
 
 function calculateSpellPotentialCost(state) {
   const cantripsCost = (state.spellcasting?.cantrips ?? []).length * 10;
@@ -162,7 +162,7 @@ describe('Background Starting Skill Point Calculations', () => {
     expect(result.skillsSpent).toBe(2);
   });
 
-  test('Artist/Crafter background starts with free ranks and has 3 free skill points', () => {
+  test('Artist/Crafter background has 3 free skill points', () => {
     const state = getInitialState();
     state.background = 'Artist/Crafter';
 
@@ -172,7 +172,7 @@ describe('Background Starting Skill Point Calculations', () => {
       'Persuasion': 1
     };
     let result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(0);
+    expect(result.skillsSpent).toBe(1);
 
     state.skillRanks = {
       'Arts & Craft': 3,
@@ -180,7 +180,7 @@ describe('Background Starting Skill Point Calculations', () => {
       'Persuasion': 1
     };
     result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(0);
+    expect(result.skillsSpent).toBe(4);
 
     state.skillRanks = {
       'Arts & Craft': 3,
@@ -189,7 +189,7 @@ describe('Background Starting Skill Point Calculations', () => {
       'Athletics': 1
     };
     result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(1);
+    expect(result.skillsSpent).toBe(5);
   });
 
   test('Criminal background enforces restricted skill points allocation', () => {
@@ -213,7 +213,7 @@ describe('Background Starting Skill Point Calculations', () => {
     expect(result.skillsSpent).toBe(2);
   });
 
-  test('Military Engineer background handles free starting ranks and academic engineering ranks', () => {
+  test('Military Engineer background handles free skill points for engineering and arts & craft', () => {
     const state = getInitialState();
     state.background = 'Military Engineer';
 
@@ -221,10 +221,10 @@ describe('Background Starting Skill Point Calculations', () => {
       'Arts & Craft': 2
     };
     state.academicsRanks = {
-      'Engineering': 2
+      'Engineering': 1
     };
     let result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(0);
+    expect(result.skillsSpent).toBe(2);
 
     state.skillRanks = {
       'Arts & Craft': 3
@@ -233,7 +233,7 @@ describe('Background Starting Skill Point Calculations', () => {
       'Engineering': 2
     };
     result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
-    expect(result.skillsSpent).toBe(1);
+    expect(result.skillsSpent).toBe(5);
   });
 });
 

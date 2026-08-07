@@ -125,7 +125,7 @@ async function main() {
 
   const tomlObj = { abilities: allAbilities };
   const tomlStr = stringify(tomlObj);
-  const outPath = path.resolve('js/data/abilities.toml');
+  const outPath = path.resolve('src/data/toml/abilities.toml');
   fs.writeFileSync(outPath, tomlStr, 'utf-8');
   console.log(`Successfully wrote ${allAbilities.length} abilities to ${outPath}`);
 }

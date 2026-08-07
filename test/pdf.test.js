@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { exportToPDF } from '../js/logic/pdf.js';
-import { getInitialState } from '../js/logic/state.js';
-import { RACES } from '../js/data/races.js';
-import { BACKGROUNDS } from '../js/data/backgrounds.js';
+import { exportToPDF } from '../src/logic/pdf';
+import { getInitialState } from '../src/logic/state';
+import { RACES } from '../src/data/races';
+import { BACKGROUNDS } from '../src/data/backgrounds';
 
 
 test('exportToPDF fills fields without throwing runtime errors', async () => {
@@ -23,10 +23,8 @@ test('exportToPDF fills fields without throwing runtime errors', async () => {
       ok: true,
       status: 200,
       arrayBuffer: async () => {
-        return pdfBuffer.buffer.slice(
-          pdfBuffer.byteOffset,
-          pdfBuffer.byteOffset + pdfBuffer.byteLength
-        );
+        const u8 = new Uint8Array(pdfBuffer);
+        return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
       }
     };
   });
@@ -103,7 +101,10 @@ test('exportToPDF exports levelSelections chosen abilities into essential abilit
     return {
       ok: true,
       status: 200,
-      arrayBuffer: async () => pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
+      arrayBuffer: async () => {
+        const u8 = new Uint8Array(pdfBuffer);
+        return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      }
     };
   });
 
@@ -144,7 +145,10 @@ test('exportToPDF sets spellcasting ability correctly according to level 1 prima
     return {
       ok: true,
       status: 200,
-      arrayBuffer: async () => pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
+      arrayBuffer: async () => {
+        const u8 = new Uint8Array(pdfBuffer);
+        return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      }
     };
   });
 
@@ -180,7 +184,10 @@ test('exportToPDF exports weapon and defense list entries properly', async () =>
     return {
       ok: true,
       status: 200,
-      arrayBuffer: async () => pdfBuffer.buffer.slice(pdfBuffer.byteOffset, pdfBuffer.byteOffset + pdfBuffer.byteLength)
+      arrayBuffer: async () => {
+        const u8 = new Uint8Array(pdfBuffer);
+        return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      }
     };
   });
 
