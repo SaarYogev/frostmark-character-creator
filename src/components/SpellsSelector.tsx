@@ -218,6 +218,8 @@ const SpellsSelector: React.FC = () => {
 
   const isCompact = (key: string) => ['concentration', 'casting', 'levels'].includes(key);
 
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+
   const availableFilters = FILTER_CATALOG.filter((f) => !activeFilters.includes(f.key));
 
   const allSelectedSpellsCombined = useMemo(() => {
@@ -227,6 +229,66 @@ const SpellsSelector: React.FC = () => {
     list.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
     return list;
   }, [cantrips, selectedSpells]);
+
+  const renderActiveSpellDetailCard = () => {
+    if (!activeSpell) {
+      return (
+        <div className="spell-detail-empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#a0a5c0', textAlign: 'center', padding: '2rem', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+          <p>Select a spell from the list to view its complete details, stats, and description.</p>
+        </div>
+      );
+    }
+
+    const isSelected = getSpellIsSelected(activeSpell);
+    const isDisabled = getSpellDisabled(activeSpell);
+    const tooltip = getSpellTooltip(activeSpell);
+    const schoolClass = `school-${activeSpell.school?.toLowerCase() ?? 'evocation'}`;
+
+    return (
+      <div className={`spell-detail-card ${schoolClass}`}>
+        <div className="spell-detail-header">
+          <h4 className="spell-detail-name">{activeSpell.name}</h4>
+          <div className="spell-detail-tags">
+            <span className="spell-tag level-tag">{activeSpell.level === 0 ? 'Cantrip' : `Level ${activeSpell.level}`}</span>
+            <span className="spell-tag school-tag">{activeSpell.school}</span>
+          </div>
+        </div>
+        <div className="spell-detail-stats">
+          <div className="stat-item"><strong>Casting Time</strong><span>{activeSpell.castingTime}</span></div>
+          <div className="stat-item"><strong>Range</strong><span>{activeSpell.rangeLabel ?? `${activeSpell.range}m`}</span></div>
+          <div className="stat-item"><strong>Duration</strong><span>{activeSpell.duration}</span></div>
+          <div className="stat-item"><strong>Concentration</strong><span>{activeSpell.concentration ? 'Yes' : 'No'}</span></div>
+          {activeSpell.damageTypes && activeSpell.damageTypes.length > 0 && (
+            <div className="stat-item full-width">
+              <strong>Damage Types <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>(Experimental)</span></strong>
+              <span className="damage-types-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
+                {activeSpell.damageTypes.map((dt) => (
+                  <span key={dt} className={`damage-type-pill ${dt.toLowerCase()}`}>{dt}</span>
+                ))}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="spell-detail-desc">
+          <h5>Description</h5>
+          <p>{activeSpell.desc}</p>
+        </div>
+        <div className="spell-detail-actions">
+          <button
+            className={`btn ${isSelected ? 'btn-danger' : 'btn-primary'} learn-spell-btn`}
+            data-spell={activeSpell.name}
+            disabled={isDisabled}
+            title={tooltip}
+            onClick={() => handleLearnSpell(activeSpell)}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {isSelected ? 'Forget Spell' : 'Learn Spell'}
+          </button>
+          {tooltip && <div className="btn-error-tooltip" style={{ color: '#eb5e55', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center' }}>{tooltip}</div>}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="spells-selector">
@@ -352,13 +414,13 @@ const SpellsSelector: React.FC = () => {
               {allSelectedSpellsCombined.length === 0 ? (
                 <span style={{ color: '#606580', fontStyle: 'italic', fontSize: '0.85rem' }}>None</span>
               ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                   {allSelectedSpellsCombined.map((s) => (
-                    <li key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.35rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 500, cursor: 'pointer', color: 'var(--text-color)' }} onClick={() => setSelectedSpellName(s.name)}>{s.name}</span>
-                        <span style={{ fontSize: '0.7rem', color: '#a0a5c0' }}>{s.isCantrip ? 'Cantrip' : `Level ${s.level}`}</span>
-                      </div>
+                    <div
+                      key={s.name}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(108, 141, 255, 0.15)', border: '1px solid var(--border-active)', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}
+                    >
+                      <span>{s.name} <small style={{ opacity: 0.7 }}>({s.isCantrip ? 'Cantrip' : `Lv.${s.level}`})</small></span>
                       <button
                         onClick={() => {
                           if (s.isCantrip) {
@@ -367,113 +429,67 @@ const SpellsSelector: React.FC = () => {
                             updateSpellcasting({ spells: selectedSpells.filter((sp) => sp.name !== s.name) });
                           }
                         }}
-                        style={{ background: 'none', border: 'none', color: '#eb5e55', cursor: 'pointer', fontSize: '0.95rem', padding: '0 0.25rem' }}
-                      >✕</button>
-                    </li>
+                        style={{ background: 'transparent', border: 'none', color: '#a0a5c0', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Spell list + detail pane */}
-        <div className="spells-split-view" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-          {/* Left: spell list */}
+        {/* Main 2-column layout (Desktop: split list & detail pane; Mobile: fluid grid + slide-up sheet) */}
+        <div className="spells-main-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem', alignItems: 'start' }}>
           <div className="spells-list-column">
             <div className="section-block" style={{ marginTop: 0 }}>
-              <h3 className="section-title" style={{ textTransform: 'none', marginTop: 0 }}>Spells & Cantrips</h3>
-              <div className="spell-list" id="unified-spell-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.5rem' }}>
+              <h3 className="section-title" style={{ marginTop: 0 }}>Spells & Cantrips ({allSpells.length})</h3>
+              <div className="spells-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem' }}>
                 {allSpells.length === 0 ? (
-                  <div className="no-spells-found" style={{ color: '#a0a5c0', padding: '1.5rem', textAlign: 'center', fontStyle: 'italic', background: 'rgba(0,0,0,0.1)', borderRadius: '6px', gridColumn: '1 / -1' }}>
-                    No spells match current filters.
-                  </div>
-                ) : allSpells.map((spell) => {
-                  const isSelected = getSpellIsSelected(spell);
-                  const isDisabled = getSpellDisabled(spell);
-                  const isActiveDetail = selectedSpellName === spell.name;
-                  const tooltip = getSpellTooltip(spell);
+                  <div className="no-spells" style={{ color: '#a0a5c0', padding: '1rem', gridColumn: '1 / -1' }}>No spells match current filters.</div>
+                ) : (
+                  allSpells.map((spell) => {
+                    const isSelected = getSpellIsSelected(spell);
+                    const isDisabled = getSpellDisabled(spell);
+                    const isActiveDetail = activeSpell?.name === spell.name;
+                    const tooltip = getSpellTooltip(spell);
 
-                  return (
-                    <div
-                      key={spell.name}
-                      id={`spell-${spell.name.replace(/\s/g, '-')}`}
-                      className={`spell-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isActiveDetail ? 'active-detail' : ''}`}
-                      data-spell={spell.name}
-                      title={tooltip}
-                      onClick={() => { if (!isDisabled) setSelectedSpellName(spell.name); }}
-                      style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.5 : 1, pointerEvents: isDisabled ? 'none' : 'auto', padding: '0.4rem 0.5rem' }}
-                    >
-                      <span className="spell-name" style={{ fontSize: '0.8rem' }}>{spell.name}</span>
-                      <span className="spell-level-tag">{spell.level === 0 ? 'Cantrip' : `Lv.${spell.level}`}</span>
-                    </div>
-                  );
-                })}
+                    return (
+                      <React.Fragment key={spell.name}>
+                        <div
+                          className={`spell-entry ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isActiveDetail ? 'active-detail' : ''}`}
+                          title={tooltip}
+                          onClick={() => {
+                            if (!isDisabled) {
+                              setSelectedSpellName(selectedSpellName === spell.name ? null : spell.name);
+                            }
+                          }}
+                          style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.5 : 1, padding: '0.5rem 0.65rem' }}
+                        >
+                          <span className="spell-name" style={{ fontSize: '0.82rem', fontWeight: 500, wordBreak: 'break-word' }}>{spell.name}</span>
+                          <span className="spell-level-tag">{spell.level === 0 ? 'Cantrip' : `Lv.${spell.level}`}</span>
+                        </div>
+                        {isActiveDetail && (
+                          <div className="mobile-inline-spell-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+                            {renderActiveSpellDetailCard()}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
 
-          {/* Right: detail pane */}
+          {/* Right Desktop Detail Pane */}
           <div className="spells-detail-column" style={{ position: 'sticky', top: '1.5rem' }}>
             <div className="section-block" style={{ marginTop: 0 }}>
               <h3 className="section-title" style={{ marginTop: 0 }}>Active Spell Details</h3>
               <div className="spell-detail-container">
-                {!activeSpell ? (
-                  <div className="spell-detail-empty" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#a0a5c0', textAlign: 'center', padding: '2rem', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-                    <p>Select a spell from the list to view its complete details, stats, and description.</p>
-                  </div>
-                ) : (() => {
-                  const isCantrip = activeSpell.level === 0;
-                  const isSelected = getSpellIsSelected(activeSpell);
-                  const isDisabled = getSpellDisabled(activeSpell);
-                  const tooltip = getSpellTooltip(activeSpell);
-                  const schoolClass = `school-${activeSpell.school?.toLowerCase()}`;
-
-                  return (
-                    <div className={`spell-detail-card ${schoolClass}`}>
-                      <div className="spell-detail-header">
-                        <h4 className="spell-detail-name">{activeSpell.name}</h4>
-                        <div className="spell-detail-tags">
-                          <span className="spell-tag level-tag">{activeSpell.level === 0 ? 'Cantrip' : `Level ${activeSpell.level}`}</span>
-                          <span className="spell-tag school-tag">{activeSpell.school}</span>
-                        </div>
-                      </div>
-                      <div className="spell-detail-stats">
-                        <div className="stat-item"><strong>Casting Time</strong><span>{activeSpell.castingTime}</span></div>
-                        <div className="stat-item"><strong>Range</strong><span>{activeSpell.rangeLabel ?? `${activeSpell.range}m`}</span></div>
-                        <div className="stat-item"><strong>Duration</strong><span>{activeSpell.duration}</span></div>
-                        <div className="stat-item"><strong>Concentration</strong><span>{activeSpell.concentration ? 'Yes' : 'No'}</span></div>
-                        {activeSpell.damageTypes && activeSpell.damageTypes.length > 0 && (
-                          <div className="stat-item full-width">
-                            <strong>Damage Types <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>(Experimental)</span></strong>
-                            <span className="damage-types-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
-                              {activeSpell.damageTypes.map((dt) => (
-                                <span key={dt} className={`damage-type-pill ${dt.toLowerCase()}`}>{dt}</span>
-                              ))}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="spell-detail-desc">
-                        <h5>Description</h5>
-                        <p>{activeSpell.desc}</p>
-                      </div>
-                      <div className="spell-detail-actions" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                        <button
-                          className={`btn ${isSelected ? 'btn-danger' : 'btn-primary'} learn-spell-btn`}
-                          data-spell={activeSpell.name}
-                          disabled={isDisabled}
-                          title={tooltip}
-                          onClick={() => handleLearnSpell(activeSpell)}
-                          style={{ width: '100%', justifyContent: 'center' }}
-                        >
-                          {isSelected ? 'Forget Spell' : 'Learn Spell'}
-                        </button>
-                        {tooltip && <div className="btn-error-tooltip" style={{ color: '#eb5e55', fontSize: '0.8rem', marginTop: '0.5rem', textAlign: 'center' }}>{tooltip}</div>}
-                      </div>
-                    </div>
-                  );
-                })()}
+                {renderActiveSpellDetailCard()}
               </div>
             </div>
           </div>

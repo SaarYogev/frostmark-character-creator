@@ -277,7 +277,32 @@ const EquipmentSelector: React.FC = () => {
 
         <div className="section-block" style={{ marginBottom: '2rem' }}>
           <h3 className="section-title">Weapons</h3>
+          {showWeaponForm && (
+            <form onSubmit={handleSaveCustomWeapon} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '550px' }}>
+              <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-color, #4a90e2)' }}>{editingItemName ? 'Edit Custom Weapon' : 'Add Custom Weapon'}</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '0.5rem' }}>
+                <input type="text" className="input" placeholder="Name *" value={customWeaponName} onChange={(e) => setCustomWeaponName(e.target.value)} required />
+                <input type="number" className="input" placeholder="Cost (gp)" value={customWeaponCost} onChange={(e) => setCustomWeaponCost(e.target.value)} />
+                <input type="text" className="input" placeholder="Damage" value={customWeaponDamage} onChange={(e) => setCustomWeaponDamage(e.target.value)} />
+                <input type="number" className="input" placeholder="Weight (kg)" value={customWeaponWeight} onChange={(e) => setCustomWeaponWeight(e.target.value)} />
+                <input type="number" className="input" placeholder="Range (ft)" value={customWeaponRange} onChange={(e) => setCustomWeaponRange(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setShowWeaponForm(false); setEditingItemName(null); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">{editingItemName ? 'Save Weapon' : 'Add Weapon'}</button>
+              </div>
+            </form>
+          )}
           <div className="equipment-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+            <div
+              className="equipment-entry custom-card-square"
+              onClick={() => { setEditingItemName(null); setShowWeaponForm(!showWeaponForm); }}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="custom-card-icon">＋</div>
+              <div className="custom-card-title">Custom Weapon</div>
+            </div>
             {weaponsList.map((item: any) => {
               const name = item.name;
               const isSelected = selectedNames.includes(name);
@@ -344,32 +369,35 @@ const EquipmentSelector: React.FC = () => {
               );
             })}
           </div>
-
-          {!showWeaponForm ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingItemName(null); setShowWeaponForm(true); }}>
-              + Add Custom Weapon
-            </button>
-          ) : (
-            <form onSubmit={handleSaveCustomWeapon} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '550px' }}>
-              <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-color, #4a90e2)' }}>{editingItemName ? 'Edit Custom Weapon' : 'Add Custom Weapon'}</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '0.5rem' }}>
-                <input type="text" className="input" placeholder="Name *" value={customWeaponName} onChange={(e) => setCustomWeaponName(e.target.value)} required />
-                <input type="number" className="input" placeholder="Cost (gp)" value={customWeaponCost} onChange={(e) => setCustomWeaponCost(e.target.value)} />
-                <input type="text" className="input" placeholder="Damage" value={customWeaponDamage} onChange={(e) => setCustomWeaponDamage(e.target.value)} />
-                <input type="number" className="input" placeholder="Weight (kg)" value={customWeaponWeight} onChange={(e) => setCustomWeaponWeight(e.target.value)} />
-                <input type="number" className="input" placeholder="Range (ft)" value={customWeaponRange} onChange={(e) => setCustomWeaponRange(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setShowWeaponForm(false); setEditingItemName(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary btn-sm">{editingItemName ? 'Save Weapon' : 'Add Weapon'}</button>
-              </div>
-            </form>
-          )}
         </div>
 
         <div className="section-block" style={{ marginBottom: '2rem' }}>
           <h3 className="section-title">Armor</h3>
+          {showArmorForm && (
+            <form onSubmit={handleSaveCustomArmor} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '500px' }}>
+              <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-color, #4a90e2)' }}>{editingItemName ? 'Edit Custom Armor' : 'Add Custom Armor'}</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem' }}>
+                <input type="text" className="input" placeholder="Name *" value={customArmorName} onChange={(e) => setCustomArmorName(e.target.value)} required />
+                <input type="number" className="input" placeholder="Cost (gp)" value={customArmorCost} onChange={(e) => setCustomArmorCost(e.target.value)} />
+                <input type="text" className="input" placeholder="Armor Value (AV)" value={customArmorAV} onChange={(e) => setCustomArmorAV(e.target.value)} />
+                <input type="number" className="input" placeholder="Weight (kg)" value={customArmorWeight} onChange={(e) => setCustomArmorWeight(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setShowArmorForm(false); setEditingItemName(null); }}>Cancel</button>
+                <button type="submit" className="btn btn-primary btn-sm">{editingItemName ? 'Save Armor' : 'Add Armor'}</button>
+              </div>
+            </form>
+          )}
           <div className="equipment-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '12px' }}>
+            <div
+              className="equipment-entry custom-card-square"
+              onClick={() => { setEditingItemName(null); setShowArmorForm(!showArmorForm); }}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="custom-card-icon">＋</div>
+              <div className="custom-card-title">Custom Armor</div>
+            </div>
             {armorsList.map((item: any) => {
               const name = item.name;
               const isSelected = selectedNames.includes(name);
@@ -436,101 +464,12 @@ const EquipmentSelector: React.FC = () => {
               );
             })}
           </div>
-
-          {!showArmorForm ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingItemName(null); setShowArmorForm(true); }}>
-              + Add Custom Armor
-            </button>
-          ) : (
-            <form onSubmit={handleSaveCustomArmor} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '500px' }}>
-              <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-color, #4a90e2)' }}>{editingItemName ? 'Edit Custom Armor' : 'Add Custom Armor'}</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem' }}>
-                <input type="text" className="input" placeholder="Name *" value={customArmorName} onChange={(e) => setCustomArmorName(e.target.value)} required />
-                <input type="number" className="input" placeholder="Cost (gp)" value={customArmorCost} onChange={(e) => setCustomArmorCost(e.target.value)} />
-                <input type="text" className="input" placeholder="Armor Value (AV)" value={customArmorAV} onChange={(e) => setCustomArmorAV(e.target.value)} />
-                <input type="number" className="input" placeholder="Weight (kg)" value={customArmorWeight} onChange={(e) => setCustomArmorWeight(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setShowArmorForm(false); setEditingItemName(null); }}>Cancel</button>
-                <button type="submit" className="btn btn-primary btn-sm">{editingItemName ? 'Save Armor' : 'Add Armor'}</button>
-              </div>
-            </form>
-          )}
         </div>
 
         <div className="section-block">
           <h3 className="section-title">Other Items</h3>
-          <div id="other-items-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-            {otherItems.length === 0 ? (
-              <span style={{ color: '#606580', fontStyle: 'italic', fontSize: '0.85rem' }}>No other items added.</span>
-            ) : (
-              otherItems.map((item, i) => (
-                <div
-                  key={i}
-                  className="other-item"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(255,255,255,0.03)',
-                    padding: '0.4rem 0.75rem',
-                    borderRadius: '6px',
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  <span>
-                    {item.name} {(item.quantity ?? 1) > 1 ? `×${item.quantity}` : ''} {item.weight ? `(${item.weight} kg)` : ''} {item.cost ? `[${item.cost}]` : ''}
-                  </span>
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <button
-                      title="Edit item"
-                      onClick={() => handleEditOtherItem(item)}
-                      className="btn-icon"
-                      style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
-                        borderRadius: '4px',
-                        color: 'var(--text-secondary, #a0a5c0)',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = '#fff';
-                        e.currentTarget.style.borderColor = 'var(--accent-color, #4a90e2)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = 'var(--text-secondary, #a0a5c0)';
-                        e.currentTarget.style.borderColor = 'var(--border-color, rgba(255, 255, 255, 0.1))';
-                      }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                      </svg>
-                    </button>
-                    <button
-                      className="btn-icon remove-item"
-                      onClick={() => handleRemoveItem(item)}
-                      style={{ background: 'none', border: 'none', color: '#eb5e55', cursor: 'pointer', fontSize: '0.95rem' }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {!showItemForm ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditingItemName(null); setShowItemForm(true); }}>
-              + Add Item
-            </button>
-          ) : (
-            <form onSubmit={handleSaveCustomItem} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '500px' }}>
+          {showItemForm && (
+            <form onSubmit={handleSaveCustomItem} style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '500px' }}>
               <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-color, #4a90e2)' }}>{editingItemName ? 'Edit Custom Item' : 'Add Custom Item'}</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0.5rem' }}>
                 <input type="text" className="input" placeholder="Item Name *" value={customItemName} onChange={(e) => setCustomItemName(e.target.value)} required />
@@ -544,6 +483,65 @@ const EquipmentSelector: React.FC = () => {
               </div>
             </form>
           )}
+          <div id="other-items-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '1rem' }}>
+            <div
+              className="equipment-entry custom-card-square"
+              onClick={() => { setEditingItemName(null); setShowItemForm(!showItemForm); }}
+              role="button"
+              tabIndex={0}
+              title="+ Add Item"
+            >
+              <span className="custom-card-icon">＋</span>
+              <span className="custom-card-title">Custom Item</span>
+            </div>
+            {otherItems.map((item, i) => (
+              <div
+                key={i}
+                className="equipment-entry"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.5rem 0.75rem',
+                }}
+              >
+                <span>
+                  {item.name} {(item.quantity ?? 1) > 1 ? `×${item.quantity}` : ''} {item.weight ? `(${item.weight} kg)` : ''} {item.cost ? `[${item.cost}]` : ''}
+                </span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button
+                    title="Edit item"
+                    onClick={() => handleEditOtherItem(item)}
+                    className="btn-icon"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+                      borderRadius: '4px',
+                      color: 'var(--text-secondary, #a0a5c0)',
+                      cursor: 'pointer',
+                      padding: '2px 4px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9"></path>
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                  </button>
+                  <button
+                    className="btn-icon remove-item"
+                    onClick={() => handleRemoveItem(item)}
+                    style={{ background: 'none', border: 'none', color: '#eb5e55', cursor: 'pointer', fontSize: '0.95rem' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
 
           {totalItemsCount > 21 && (
             <div className="warning-badge" style={{ color: '#cf721c', marginTop: '1rem', fontSize: '0.85rem', fontWeight: 'bold' }}>

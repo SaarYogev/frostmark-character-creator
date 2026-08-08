@@ -17,7 +17,7 @@ interface LayoutProps {
 
 const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
   const getStepLockReason = (stepIndex: number): string | null => {
-    const stepId = STEPS[stepIndex].id;
+    const stepId = STEPS[stepIndex]?.id;
     if (stepId === 'spellslots' || stepId === 'spellcasting') {
       return null;
     }
@@ -111,31 +111,82 @@ export const Layout: React.FC<LayoutProps> = ({
   isCloud = false,
   onRetrySave,
 }) => {
-  return (
-    <div className="app-layout">
-      <Sidebar currentStep={currentStep} onNavigate={onNavigate} onNavigateHome={onNavigateHome} />
-      <main className="main-content">
-        {/* Top Action Bar in Main Builder View */}
-        <div
-          style={{
-            display: 'flex',
-            justify: 'flex-end',
-            alignItems: 'center',
-            marginBottom: '1rem',
-            paddingBottom: '0.75rem',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
-        </div>
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
 
-        <div className="step-container">{children}</div>
-        <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
-      </main>
-      <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
+  return (
+    <>
+      {/* Standardized Mobile Top Header Bar */}
+      <header className="mobile-header-bar">
+        <img
+          src={`${import.meta.env.BASE_URL}frostmark-logo.png`}
+          alt="Frostmark Mobile"
+          className="mobile-header-logo"
+        />
+        <select
+          className="mobile-step-dropdown"
+          value={currentStep}
+          onChange={(e) => onNavigate(Number(e.target.value))}
+          aria-label="Select Step"
+        >
+          {STEPS.map((step, idx) => (
+            <option key={step.id} value={idx}>
+              Step {idx + 1}: {step.title}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn-summary-toggle"
+          onClick={() => setIsDrawerOpen(true)}
+        >
+          Summary
+        </button>
+      </header>
+
+      <div className="app-layout">
+        <Sidebar currentStep={currentStep} onNavigate={onNavigate} onNavigateHome={onNavigateHome} />
+
+        <main className="main-content">
+          {/* Top Action Bar in Main Builder View */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
+          </div>
+
+          <div className="step-container">{children}</div>
+          <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
+        </main>
+
+        <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
+      </div>
+
+      {/* Collapsible Mobile/Tablet Summary Drawer */}
+      <div
+        className={`drawer-backdrop ${isDrawerOpen ? 'open' : ''}`}
+        onClick={() => setIsDrawerOpen(false)}
+      />
+      <div className={`summary-drawer ${isDrawerOpen ? 'open' : ''}`}>
+        <div className="drawer-header">
+          <h3 className="drawer-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+            Quick Summary
+          </h3>
+          <button className="btn-close-drawer" onClick={() => setIsDrawerOpen(false)}>
+            ✕
+          </button>
+        </div>
+        <CharacterSummaryPanel isDrawer onNavigateHome={onNavigateHome} />
+      </div>
+
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
-    </div>
+    </>
   );
 };
 

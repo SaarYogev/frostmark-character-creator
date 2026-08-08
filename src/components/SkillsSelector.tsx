@@ -259,7 +259,7 @@ const SkillsSelector: React.FC = () => {
           >
             <strong>⚠️ Background Skill Restriction:</strong> The {bgFree} free skill points from your background (
             <strong>{bgData?.name ?? (typeof integratedState.background === 'object' ? integratedState.background?.name : integratedState.background)}</strong>) can only be spent on the following skills:{' '}
-            <strong>{restrictSkills.join(', ')}</strong>.
+            <strong>{Array.isArray(restrictSkills) ? restrictSkills.join(', ') : String(restrictSkills || '')}</strong>.
           </div>
         )}
 
@@ -377,11 +377,14 @@ const SkillsSelector: React.FC = () => {
                         style={{
                           background: 'rgba(46,204,113,0.15)',
                           color: '#2ecc71',
-                          padding: '0.1rem 0.4rem',
-                          fontSize: '0.75rem',
+                          padding: '0.2rem 0.4rem',
+                          fontSize: '0.72rem',
                           borderRadius: '4px',
-                          marginLeft: '0.5rem',
-                          whiteSpace: 'nowrap',
+                          display: 'inline-block',
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          lineHeight: '1.2',
+                          marginTop: '0.25rem',
                         }}
                         title="Background-free points can be used here"
                       >
@@ -390,29 +393,33 @@ const SkillsSelector: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="rank-controls">
-                    <button
-                      className="rank-btn minus"
-                      disabled={rank <= 0}
-                      onClick={() => handleAdjustSkill(skill.name, -1)}
-                    >
-                      −
-                    </button>
-                    <div className="rank-pips">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <div key={n} className={`pip ${n <= rank ? 'filled' : ''}`} />
-                      ))}
+                  <div className="rank-controls" style={{ flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className="rank-btn minus"
+                        disabled={rank <= 0}
+                        onClick={() => handleAdjustSkill(skill.name, -1)}
+                      >
+                        −
+                      </button>
+                      <div className="rank-pips">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <div key={n} className={`pip ${n <= rank ? 'filled' : ''}`} />
+                        ))}
+                      </div>
+                      <button
+                        className="rank-btn plus"
+                        disabled={plusDisabled}
+                        title={plusTooltip}
+                        onClick={() => handleAdjustSkill(skill.name, 1)}
+                      >
+                        +
+                      </button>
                     </div>
-                    <button
-                      className="rank-btn plus"
-                      disabled={plusDisabled}
-                      title={plusTooltip}
-                      onClick={() => handleAdjustSkill(skill.name, 1)}
-                    >
-                      +
-                    </button>
+                    <div className="skill-cost" style={{ fontSize: '0.72rem', color: '#a0a5c0' }}>
+                      Cost: {currentCost} pts
+                    </div>
                   </div>
-                  <div className="skill-cost">Cost: {currentCost} pts</div>
                 </div>
               );
             })}
@@ -462,18 +469,9 @@ const SkillsSelector: React.FC = () => {
                   <button className="rank-btn minus" onClick={() => handleAdjustAcademic(idx, -1)}>
                     −
                   </button>
-                  <div className="rank-pips" style={{ display: 'flex', gap: '0.25rem' }}>
+                  <div className="rank-pips">
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <div
-                        key={n}
-                        className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`}
-                        style={{
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          background: n <= (entry.rank ?? 1) ? 'var(--accent-color)' : 'var(--border-color)',
-                        }}
-                      />
+                      <div key={n} className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`} />
                     ))}
                   </div>
                   <button className="rank-btn plus" onClick={() => handleAdjustAcademic(idx, 1)}>
@@ -526,18 +524,9 @@ const SkillsSelector: React.FC = () => {
                   <button className="rank-btn minus" onClick={() => handleAdjustArts(idx, -1)}>
                     −
                   </button>
-                  <div className="rank-pips" style={{ display: 'flex', gap: '0.25rem' }}>
+                  <div className="rank-pips">
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <div
-                        key={n}
-                        className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`}
-                        style={{
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          background: n <= (entry.rank ?? 1) ? 'var(--accent-color)' : 'var(--border-color)',
-                        }}
-                      />
+                      <div key={n} className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`} />
                     ))}
                   </div>
                   <button className="rank-btn plus" onClick={() => handleAdjustArts(idx, 1)}>
