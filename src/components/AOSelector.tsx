@@ -177,7 +177,123 @@ const AOSelector: React.FC = () => {
     return getAbilityById(id) || customAbilities.find((a: AbilityItem) => a.id === id) || null;
   };
 
-  const inspectedAbility = getInspectedAbility(selectedAbilityForDetailId);
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+
+  const firstSelectedAbilityId = React.useMemo(() => {
+    const levelSelections = state.ao?.levelSelections ?? {};
+    for (let l = 1; l <= currentLevel; l++) {
+      const sel = levelSelections[l];
+      if (sel?.primaryAbility) return sel.primaryAbility;
+      if (sel?.secondaryAbility) return sel.secondaryAbility;
+    }
+    return null;
+  }, [state.ao?.levelSelections, currentLevel]);
+
+  const activeDetailId = selectedAbilityForDetailId ?? firstSelectedAbilityId;
+  const inspectedAbility = getInspectedAbility(activeDetailId);
+
+  const renderAODetailContent = (abilityTarget: AbilityItem | null) => {
+    if (!abilityTarget) {
+      return (
+        <div className="no-ability-selected" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+          <p>Click on any ability card to view full details, rules, and effects.</p>
+        </div>
+      );
+    }
+
+    let selectedLevel: number | null = null;
+    let selectedSlot: string | null = null;
+
+    for (const [lvlStr, sel] of Object.entries(state.ao?.levelSelections ?? {})) {
+      if (sel.primaryAbility === abilityTarget.id) {
+        selectedLevel = parseInt(lvlStr, 10);
+        selectedSlot = 'Primary';
+        break;
+      }
+      if (sel.secondaryAbility === abilityTarget.id) {
+        selectedLevel = parseInt(lvlStr, 10);
+        selectedSlot = 'Secondary';
+        break;
+      }
+    }
+
+    const isCurrentlySelected = Boolean(selectedLevel);
+    const choiceValue = selectedLevel
+      ? state.ao?.levelSelections?.[selectedLevel]?.upgradeChoices?.[abilityTarget.id] || ''
+      : '';
+
+    const isUpgrade =
+      (abilityTarget.name ?? '').includes('General Upgrade') ||
+      (abilityTarget.name ?? '').includes('Magical Upgrade') ||
+      (abilityTarget.full_desc ?? '').includes('Gain one of your choices:');
+
+    const handleUpgradeChoiceChange = (val: string) => {
+      const targetLvl = selectedLevel || abilityTarget.level;
+      const currentSelections = state.ao?.levelSelections ?? {};
+      const levelSel = currentSelections[targetLvl] ?? {
+        primaryAO: state.ao?.primaryAO || selectedAOs[0] || '',
+        secondaryAO: state.ao?.secondaryAO || '',
+        primaryAbility: '',
+        secondaryAbility: '',
+      };
+
+      const nextUpgradeChoices = {
+        ...(levelSel.upgradeChoices ?? {}),
+        [abilityTarget.id]: val,
+      };
+
+      dispatch({
+        type: 'SET_AO',
+        payload: {
+          levelSelections: {
+            ...currentSelections,
+            [targetLvl]: {
+              ...levelSel,
+              upgradeChoices: nextUpgradeChoices,
+            },
+          },
+        },
+      });
+    };
+
+    return (
+      <div className="ao-detail-card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{abilityTarget.name}</h4>
+            <span className="ability-origin-tag" style={{ marginTop: '0.25rem', display: 'inline-block' }}>{abilityTarget.origin}</span>
+          </div>
+          {isCurrentlySelected && (
+            <span className="badge primary-tag">
+              ✓ Lvl {selectedLevel} {selectedSlot}
+            </span>
+          )}
+        </div>
+
+        <p className="ability-short-desc" style={{ fontStyle: 'italic', marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+          {abilityTarget.short_desc}
+        </p>
+
+        <div className="ability-full-desc" style={{ fontSize: '0.88rem', lineHeight: '1.6', marginBottom: '1.25rem' }}>
+          {abilityTarget.full_desc}
+        </div>
+
+        {isUpgrade && (
+          <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-gold)' }}>Upgrade Choice:</label>
+            <input
+              type="text"
+              className="input"
+              style={{ marginTop: '0.35rem' }}
+              placeholder="e.g. +1 AC, Advantage on Perception..."
+              value={choiceValue}
+              onChange={(e) => handleUpgradeChoiceChange(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="ao-selector">
@@ -195,13 +311,6 @@ const AOSelector: React.FC = () => {
             <h3 className="section-title" style={{ margin: 0 }}>
               1. General Ability Origin Pool <span className="optional-tag">Select up to 4</span>
             </h3>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => setShowCustomAOModal(!showCustomAOModal)}
-              style={{ fontSize: '0.85rem' }}
-            >
-              {showCustomAOModal ? '✕ Cancel' : '+ Add Custom Origin'}
-            </button>
           </div>
 
           <p className="form-hint">
@@ -282,6 +391,15 @@ const AOSelector: React.FC = () => {
           )}
 
           <div className="card-selector ao-pool-selector">
+            <div
+              className="ability-card custom-card-square"
+              onClick={() => setShowCustomAOModal(!showCustomAOModal)}
+              role="button"
+              tabIndex={0}
+            >
+              <div className="custom-card-icon">＋</div>
+              <div className="custom-card-title">Custom Origin</div>
+            </div>
             {allPoolOrigins.map((o) => {
               const isSelected = selectedAOs.includes(o.name);
               const isDisabled = !isSelected && selectedAOs.length >= 4;
@@ -319,7 +437,7 @@ const AOSelector: React.FC = () => {
             <p>⚠️ Please select at least one Ability Origin in your general pool above to configure level choices.</p>
           </div>
         ) : (
-          <div className="ao-main-layout" style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem' }}>
+          <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* Left: Level Selections */}
             <div className="ao-levels-column" style={{ flex: 1 }}>
               <h3 className="section-title">2. Level Selections (Levels 1 to {currentLevel})</h3>
@@ -381,24 +499,9 @@ const AOSelector: React.FC = () => {
                         <div className="ao-ability-group">
                           <div
                             className="ao-ability-group-title"
-                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}
+                            style={{ marginBottom: '0.5rem' }}
                           >
                             <span style={{ fontWeight: 'bold' }}>Primary Ability Choices</span>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              style={{ fontSize: '0.75rem' }}
-                              onClick={() => {
-                                if (customAbilityLevel === lvl && customAbilitySlot === 'primary') {
-                                  setCustomAbilityLevel(null);
-                                } else {
-                                  setCustomAbilityLevel(lvl);
-                                  setCustomAbilitySlot('primary');
-                                  setCustomAbilityOrigin(selectedAOs[0] || '');
-                                }
-                              }}
-                            >
-                              {customAbilityLevel === lvl && customAbilitySlot === 'primary' ? '✕ Cancel' : '+ Custom Primary Ability'}
-                            </button>
                           </div>
 
                           {/* Inline Custom Primary Ability Form */}
@@ -469,33 +572,55 @@ const AOSelector: React.FC = () => {
                           )}
 
                           <div className="ao-abilities-grid card-selector">
-                            {primaryAbilities.length === 0 ? (
-                              <div className="no-abilities">No primary abilities found for level {lvl} in pool</div>
-                            ) : (
-                              primaryAbilities.map((ab: any) => {
+                            <div
+                              className="ability-card custom-card-square"
+                              onClick={() => {
+                                if (customAbilityLevel === lvl && customAbilitySlot === 'primary') {
+                                  setCustomAbilityLevel(null);
+                                } else {
+                                  setCustomAbilityLevel(lvl);
+                                  setCustomAbilitySlot('primary');
+                                  setCustomAbilityOrigin(selectedAOs[0] || '');
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                            >
+                              <div className="custom-card-icon">＋</div>
+                              <div className="custom-card-title">Custom Ability</div>
+                            </div>
+                            {primaryAbilities.map((ab: any) => {
                                 const isPicked = sel.primaryAbility === ab.id;
-                                const isInspected = selectedAbilityForDetailId === ab.id;
+                                const isInspected = activeDetailId === ab.id;
 
                                 return (
-                                  <div
-                                    key={ab.id}
-                                    className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
-                                    data-ability-id={ab.id}
-                                    data-level={lvl}
-                                    data-slot="primary"
-                                    onClick={() => handleSelectAbility(lvl, 'primary', ab.id)}
-                                    style={{ cursor: 'pointer' }}
-                                  >
-                                    <div className="ability-card-header">
-                                      <span className="ability-origin-tag">{ab.origin}</span>
-                                      {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                  <React.Fragment key={ab.id}>
+                                    <div
+                                      className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
+                                      data-ability-id={ab.id}
+                                      data-level={lvl}
+                                      data-slot="primary"
+                                      onClick={() => {
+                                        handleSelectAbility(lvl, 'primary', ab.id);
+                                        setSelectedAbilityForDetailId(isPicked ? null : ab.id);
+                                      }}
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      <div className="ability-card-header">
+                                        <span className="ability-origin-tag">{ab.origin}</span>
+                                        {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                      </div>
+                                      <h4 className="ability-card-title">{ab.name}</h4>
+                                      <p className="ability-short-desc">{ab.short_desc}</p>
                                     </div>
-                                    <h4 className="ability-card-title">{ab.name}</h4>
-                                    <p className="ability-short-desc">{ab.short_desc}</p>
-                                  </div>
+                                    {isInspected && (
+                                      <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+                                        {renderAODetailContent(ab)}
+                                      </div>
+                                    )}
+                                  </React.Fragment>
                                 );
-                              })
-                            )}
+                            })}
                           </div>
                         </div>
 
@@ -504,32 +629,17 @@ const AOSelector: React.FC = () => {
                           <div className="ao-ability-group" style={{ marginTop: '1.25rem' }}>
                             <div
                               className="ao-ability-group-title"
-                              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}
+                              style={{ marginBottom: '0.5rem' }}
                             >
                               <span style={{ fontWeight: 'bold' }}>Secondary Ability Choices</span>
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                style={{ fontSize: '0.75rem' }}
-                                onClick={() => {
-                                  if (customAbilityLevel === lvl && customAbilitySlot === 'secondary') {
-                                    setCustomAbilityLevel(null);
-                                  } else {
-                                    setCustomAbilityLevel(lvl);
-                                    setCustomAbilitySlot('secondary');
-                                    setCustomAbilityOrigin(selectedAOs[0] || '');
-                                  }
-                                }}
-                              >
-                                {customAbilityLevel === lvl && customAbilitySlot === 'secondary' ? '✕ Cancel' : '+ Custom Secondary Ability'}
-                              </button>
                             </div>
 
                             {/* Inline Custom Secondary Ability Form */}
                             {customAbilityLevel === lvl && customAbilitySlot === 'secondary' && (
                               <form
-                                onSubmit={handleCreateCustomAbility}
-                                className="info-card"
-                                style={{ marginBottom: '1rem', padding: '1rem', border: '1px dashed var(--accent-color)' }}
+                                className="custom-ability-form"
+                                onSubmit={(e) => handleSaveCustomAbility(e, lvl, 'secondary')}
+                                style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '0.75rem' }}
                               >
                                 <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Create Custom Secondary Ability (Level {lvl})</h4>
                                 <div className="form-grid form-grid-2">
@@ -597,25 +707,34 @@ const AOSelector: React.FC = () => {
                               ) : (
                                 secondaryAbilities.map((ab: any) => {
                                   const isPicked = sel.secondaryAbility === ab.id;
-                                  const isInspected = selectedAbilityForDetailId === ab.id;
+                                  const isInspected = activeDetailId === ab.id;
 
                                   return (
-                                    <div
-                                      key={ab.id}
-                                      className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
-                                      data-ability-id={ab.id}
-                                      data-level={lvl}
-                                      data-slot="secondary"
-                                      onClick={() => handleSelectAbility(lvl, 'secondary', ab.id)}
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      <div className="ability-card-header">
-                                        <span className="ability-origin-tag">{ab.origin}</span>
-                                        {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                    <React.Fragment key={ab.id}>
+                                      <div
+                                        className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
+                                        data-ability-id={ab.id}
+                                        data-level={lvl}
+                                        data-slot="secondary"
+                                        onClick={() => {
+                                          handleSelectAbility(lvl, 'secondary', ab.id);
+                                          setSelectedAbilityForDetailId(isPicked ? null : ab.id);
+                                        }}
+                                        style={{ cursor: 'pointer' }}
+                                      >
+                                        <div className="ability-card-header">
+                                          <span className="ability-origin-tag">{ab.origin}</span>
+                                          {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                        </div>
+                                        <h4 className="ability-card-title">{ab.name}</h4>
+                                        <p className="ability-short-desc">{ab.short_desc}</p>
                                       </div>
-                                      <h4 className="ability-card-title">{ab.name}</h4>
-                                      <p className="ability-short-desc">{ab.short_desc}</p>
-                                    </div>
+                                      {isInspected && (
+                                        <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+                                          {renderAODetailContent(ab)}
+                                        </div>
+                                      )}
+                                    </React.Fragment>
                                   );
                                 })
                               )}
@@ -630,177 +749,32 @@ const AOSelector: React.FC = () => {
             </div>
 
             {/* Right: Sticky Detail Panel */}
-            <div className="ao-details-column" style={{ width: '300px' }}>
+            <div className="ao-details-column">
               <div className="sticky-detail-panel info-card" style={{ position: 'sticky', top: '1rem' }}>
                 <h3 className="section-title">Ability Details</h3>
-                {inspectedAbility ? (() => {
-                  let selectedLevel: number | null = null;
-                  let selectedSlot: string | null = null;
-
-                  for (const [lvlStr, sel] of Object.entries(state.ao?.levelSelections ?? {})) {
-                    if (sel.primaryAbility === inspectedAbility.id) {
-                      selectedLevel = parseInt(lvlStr, 10);
-                      selectedSlot = 'Primary';
-                      break;
-                    }
-                    if (sel.secondaryAbility === inspectedAbility.id) {
-                      selectedLevel = parseInt(lvlStr, 10);
-                      selectedSlot = 'Secondary';
-                      break;
-                    }
-                  }
-
-                  const isCurrentlySelected = Boolean(selectedLevel);
-                  const choiceValue = selectedLevel
-                    ? state.ao?.levelSelections?.[selectedLevel]?.upgradeChoices?.[inspectedAbility.id] || ''
-                    : '';
-
-                  const isUpgrade =
-                    inspectedAbility.name.includes('General Upgrade') ||
-                    inspectedAbility.name.includes('Magical Upgrade') ||
-                    (inspectedAbility.full_desc ?? '').includes('Gain one of your choices:');
-
-                  const handleUpgradeChoiceChange = (val: string) => {
-                    const targetLvl = selectedLevel || inspectedAbility.level;
-                    const currentSelections = state.ao?.levelSelections ?? {};
-                    const levelSel = currentSelections[targetLvl] ?? {
-                      primaryAO: state.ao?.primaryAO || selectedAOs[0] || '',
-                      secondaryAO: state.ao?.secondaryAO || '',
-                      primaryAbility: '',
-                      secondaryAbility: '',
-                    };
-
-                    const nextUpgradeChoices = {
-                      ...(levelSel.upgradeChoices ?? {}),
-                      [inspectedAbility.id]: val,
-                    };
-
-                    dispatch({
-                      type: 'SET_AO',
-                      payload: {
-                        levelSelections: {
-                          ...currentSelections,
-                          [targetLvl]: {
-                            ...levelSel,
-                            upgradeChoices: nextUpgradeChoices,
-                          },
-                        },
-                      },
-                    });
-                  };
-
-                  const handleToggleSelectAction = () => {
-                    const targetLvl = inspectedAbility.level;
-                    const currentSelections = state.ao?.levelSelections ?? {};
-                    const levelSel = currentSelections[targetLvl] ?? {
-                      primaryAO: state.ao?.primaryAO || selectedAOs[0] || '',
-                      secondaryAO: state.ao?.secondaryAO || '',
-                      primaryAbility: '',
-                      secondaryAbility: '',
-                    };
-
-                    const slotKey = inspectedAbility.selection.toLowerCase() === 'primary' ? 'primaryAbility' : 'secondaryAbility';
-                    const isSelect = !isCurrentlySelected;
-
-                    const nextLevelSel = {
-                      ...levelSel,
-                      [slotKey]: isSelect ? inspectedAbility.id : '',
-                    };
-
-                    dispatch({
-                      type: 'SET_AO',
-                      payload: {
-                        levelSelections: {
-                          ...currentSelections,
-                          [targetLvl]: nextLevelSel,
-                        },
-                      },
-                    });
-                  };
-
-                  return (
-                    <div className="ability-detail-content">
-                      <div className="ability-detail-header" style={{ marginBottom: '0.75rem' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{inspectedAbility.name}</h4>
-                        <div className="ability-meta" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                          <span className="ability-origin">{inspectedAbility.origin}</span> ·{' '}
-                          <span className="ability-level">Level {inspectedAbility.level}</span> ({inspectedAbility.selection})
-                        </div>
-                      </div>
-
-                      <div className="ability-full-desc" style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', marginBottom: '1rem' }}>
-                        {inspectedAbility.full_desc || inspectedAbility.short_desc}
-                      </div>
-
-                      {isUpgrade && (
-                        <div
-                          className="detail-choice-block"
-                          style={{
-                            marginTop: '1rem',
-                            padding: '0.75rem',
-                            background: 'var(--bg-elevated)',
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-subtle)',
-                          }}
-                        >
-                          <label
-                            style={{
-                              fontSize: '0.8rem',
-                              fontWeight: 600,
-                              color: 'var(--accent-gold)',
-                              display: 'block',
-                              marginBottom: '0.4rem',
-                            }}
-                          >
-                            Select Upgrade Benefit:
-                          </label>
-                          <select
-                            className="select detail-upgrade-select"
-                            value={choiceValue}
-                            onChange={(e) => handleUpgradeChoiceChange(e.target.value)}
-                            style={{ width: '100%' }}
-                          >
-                            <option value="">-- Choose Option --</option>
-                            <option value="Accomplishment Points">1 Accomplishment Point</option>
-                            <option value="Potential">10 Potential</option>
-                            {(inspectedAbility.full_desc ?? '').includes('skill points') && (
-                              <option value="Skill Points">Skill Points</option>
-                            )}
-                            {(inspectedAbility.full_desc ?? '').includes('ability score') && (
-                              <option value="Ability Score +1">Ability Score +1</option>
-                            )}
-                            {(inspectedAbility.full_desc ?? '').includes('feat') && (
-                              <option value="Feat">Feat</option>
-                            )}
-                          </select>
-                        </div>
-                      )}
-
-                      <div
-                        className="ability-detail-actions"
-                        style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}
-                      >
-                        <button
-                          className={`btn ${isCurrentlySelected ? 'btn-secondary' : 'btn-accent'} toggle-inspect-pick-btn`}
-                          onClick={handleToggleSelectAction}
-                          style={{ width: '100%' }}
-                        >
-                          {isCurrentlySelected
-                            ? `Selected at Level ${selectedLevel} (${selectedSlot}) — Click to Deselect`
-                            : `Select Ability for Level ${inspectedAbility.level}`}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })() : (
-                  <div className="no-ability-selected">
-                    <p>Click on any ability card to inspect its full rules, prerequisites, and effects here.</p>
-                  </div>
-                )}
+                {renderAODetailContent(inspectedAbility)}
               </div>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Mobile Slide-Up Detail Bottom Sheet for AO */}
+      <div
+        className={`sheet-backdrop ${isMobileSheetOpen ? 'open' : ''}`}
+        onClick={() => setIsMobileSheetOpen(false)}
+      />
+      <div className={`detail-bottom-sheet ${isMobileSheetOpen ? 'open' : ''}`}>
+        <div className="sheet-drag-handle" />
+        <div className="sheet-header-bar">
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+            Ability Details
+          </span>
+          <button className="btn-sheet-close" onClick={() => setIsMobileSheetOpen(false)}>
+            ✕ Close
+          </button>
+        </div>
+        {renderAODetailContent(inspectedAbility)}
       </div>
     </div>
   );

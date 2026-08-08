@@ -33,7 +33,7 @@ describe('EquipmentSelector', () => {
   it('allows adding custom item', () => {
     renderWithProvider();
 
-    const addBtn = screen.getByText('+ Add Item');
+    const addBtn = screen.getByText(/Custom Item/);
     fireEvent.click(addBtn);
 
     const nameInput = screen.getByPlaceholderText('Item Name *');
