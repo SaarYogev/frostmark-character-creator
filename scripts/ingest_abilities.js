@@ -232,6 +232,49 @@ async function main() {
   const outPath = path.resolve('src/data/toml/abilities.toml');
   fs.writeFileSync(outPath, tomlStr, 'utf-8');
   console.log(`Successfully wrote ${allAbilities.length} abilities to ${outPath}`);
+
+  // Post-ingestion validation check for unmapped choice abilities
+  validateIngestedChoices(allAbilities);
+}
+
+function validateIngestedChoices(abilities) {
+  const choiceKeywords = [
+    'when you pick this ability',
+    'when you choose this ability',
+    'when you gain this ability',
+    'when you take this ability',
+    'choose one:',
+    'choose two:',
+    'choose three:',
+    'gain one of the following',
+    'gain two of the following',
+    'choose either'
+  ];
+
+  const registeredKeys = [
+    'Charmer', 'Connoisseur', 'Extension of the Soul', 'Divine Smite',
+    'Absorbed Soul Aspect', 'Pact Boon', 'Survival Instincts',
+    'Child of the Natural World', 'Animalistic Virtue', 'Soul of the Wild',
+    'Beast Bond', 'Force of Nature', 'Favored Enemy', 'Hunter’s Prey',
+    'Greater Favored Enemy', 'Relentless Chaser', 'Superior Elusive Stalker',
+    'Threaten', 'Oaths', 'Braggadocio', 'Dictate of Order', 'Metamagic',
+    'Elemental Affinity', 'Improved Magical Upgrade', 'General Upgrade'
+  ];
+
+  const unmapped = abilities.filter(a => {
+    const text = `${a.name} ${a.desc}`.toLowerCase();
+    const hasChoiceKeyword = choiceKeywords.some(kw => text.includes(kw));
+    if (!hasChoiceKeyword) return false;
+    return !registeredKeys.some(key => a.name.toLowerCase().includes(key.toLowerCase()));
+  });
+
+  if (unmapped.length > 0) {
+    console.warn(`\n[WARNING] Found ${unmapped.length} abilities with choice keywords not registered in aoChoices.ts:`);
+    unmapped.forEach(a => console.warn(`  - [${a.origin} Lvl ${a.level}] ${a.name}`));
+    console.warn(`Please review src/data/aoChoices.ts to add choice definitions for these abilities.\n`);
+  } else {
+    console.log(`[VALIDATION] All ingested abilities with choices are registered in aoChoices.ts.`);
+  }
 }
 
 main().catch(err => {

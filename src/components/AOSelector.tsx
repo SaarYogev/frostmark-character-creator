@@ -3,6 +3,7 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { ORIGINS } from '../data/origins';
 import { getAbilitiesForLevel, getAbilityById, ABILITIES } from '../data/abilities';
 import { CustomOrigin, AbilityItem } from '../types/AO';
+import { getAOChoiceDefinition } from '../data/aoChoices';
 
 const AOSelector: React.FC = () => {
   const { state, dispatch } = useCharacter();
@@ -84,6 +85,8 @@ const AOSelector: React.FC = () => {
     e.preventDefault();
     if (!customAbilityName.trim() || !customAbilityLevel || !customAbilityOrigin) return;
 
+    const descText = [customAbilityShortDesc.trim(), customAbilityFullDesc.trim()].filter(Boolean).join('\n\n') || customAbilityName.trim();
+
     const newAbility: AbilityItem = {
       id: `custom-${customAbilityOrigin}-${customAbilityLevel}-${customAbilitySlot}-${customAbilityName}`
         .toLowerCase()
@@ -92,7 +95,7 @@ const AOSelector: React.FC = () => {
       origin: customAbilityOrigin,
       level: customAbilityLevel,
       selection: customAbilitySlot === 'primary' ? 'Primary' : 'Secondary',
-      desc: customAbilityFullDesc || customAbilityShortDesc || customAbilityName,
+      desc: descText,
     };
 
     const nextCustomAbilities = [...customAbilities, newAbility];
@@ -222,9 +225,14 @@ const AOSelector: React.FC = () => {
       : '';
 
     const isUpgrade =
-      (abilityTarget.name ?? '').includes('General Upgrade') ||
-      (abilityTarget.name ?? '').includes('Magical Upgrade') ||
-      (abilityTarget.desc ?? '').includes('Gain one of your choices:');
+      (abilityTarget.name ?? '').includes('Upgrade') ||
+      (abilityTarget.name ?? '').includes('Ability Score') ||
+      (abilityTarget.name ?? '').includes('Feat') ||
+      (abilityTarget.name ?? '').includes('ASI') ||
+      (abilityTarget.desc ?? '').includes('Gain one of your choices:') ||
+      (abilityTarget.desc ?? '').includes('increase one ability score');
+
+    const choiceDef = getAOChoiceDefinition(abilityTarget.name, abilityTarget.desc);
 
     const handleUpgradeChoiceChange = (val: string) => {
       const targetLvl = selectedLevel || abilityTarget.level;
@@ -253,6 +261,21 @@ const AOSelector: React.FC = () => {
           },
         },
       });
+    };
+
+    const handleMultiChoiceToggle = (option: string, maxChoices = 2) => {
+      const currentVals = choiceValue ? choiceValue.split(', ').filter(Boolean) : [];
+      let nextVals: string[];
+      if (currentVals.includes(option)) {
+        nextVals = currentVals.filter((v) => v !== option);
+      } else {
+        if (currentVals.length >= maxChoices) {
+          nextVals = [...currentVals.slice(1), option];
+        } else {
+          nextVals = [...currentVals, option];
+        }
+      }
+      handleUpgradeChoiceChange(nextVals.join(', '));
     };
 
     return (
@@ -316,7 +339,95 @@ const AOSelector: React.FC = () => {
           })}
         </div>
 
-        {isUpgrade && (
+        {/* 1. Structured Choice (Single Select Dropdown) */}
+        {choiceDef && choiceDef.type === 'single' && (
+          <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
+              {choiceDef.label}:
+            </label>
+            <select
+              className="select"
+              style={{ marginTop: '0.35rem', width: '100%' }}
+              value={choiceDef.options.includes(choiceValue) ? choiceValue : (choiceValue ? 'Other' : '')}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'Other') {
+                  handleUpgradeChoiceChange('Other: ');
+                } else {
+                  handleUpgradeChoiceChange(val);
+                }
+              }}
+            >
+              <option value="">-- Select Option --</option>
+              {choiceDef.options.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+              <option value="Other">Other / Specific Details...</option>
+            </select>
+            {(choiceValue.startsWith('Other:') ||
+              choiceValue === '+1 to Two Ability Scores' ||
+              choiceValue === 'Feat' ||
+              (!choiceDef.options.includes(choiceValue) && choiceValue !== '')) && (
+              <input
+                type="text"
+                className="input"
+                style={{ marginTop: '0.5rem', width: '100%' }}
+                placeholder={
+                  choiceValue === '+1 to Two Ability Scores'
+                    ? 'e.g. +1 Brawn & +1 Vitality'
+                    : choiceValue === 'Feat'
+                    ? 'Enter Feat Name...'
+                    : 'Enter custom choice details...'
+                }
+                value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
+                onChange={(e) => {
+                  if (choiceValue === '+1 to Two Ability Scores' || choiceValue === 'Feat') {
+                    // Store detailed text
+                    handleUpgradeChoiceChange(e.target.value);
+                  } else {
+                    handleUpgradeChoiceChange(`Other: ${e.target.value}`);
+                  }
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 2. Structured Choice (Multi-Select Pills / Checkboxes) */}
+        {choiceDef && choiceDef.type === 'multi' && (
+          <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)', display: 'block', marginBottom: '0.5rem' }}>
+              {choiceDef.label} (Max {choiceDef.maxChoices || 2}):
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {choiceDef.options.map((opt) => {
+                const selectedList = choiceValue ? choiceValue.split(', ').filter(Boolean) : [];
+                const isChecked = selectedList.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`btn btn-sm ${isChecked ? 'btn-accent' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.78rem', padding: '0.25rem 0.6rem' }}
+                    onClick={() => handleMultiChoiceToggle(opt, choiceDef.maxChoices || 2)}
+                  >
+                    {isChecked ? '✓ ' : ''}{opt}
+                  </button>
+                );
+              })}
+            </div>
+            {choiceValue && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                Selected: <strong>{choiceValue}</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3. Fallback Open Input for Generic Upgrades */}
+        {!choiceDef && isUpgrade && (
           <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-gold)' }}>Upgrade Choice:</label>
             <input
@@ -682,7 +793,7 @@ const AOSelector: React.FC = () => {
                             {customAbilityLevel === lvl && customAbilitySlot === 'secondary' && (
                               <form
                                 className="custom-ability-form"
-                                onSubmit={(e) => handleSaveCustomAbility(e, lvl, 'secondary')}
+                                onSubmit={handleCreateCustomAbility}
                                 style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '0.75rem' }}
                               >
                                 <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem' }}>Create Custom Secondary Ability (Level {lvl})</h4>
