@@ -71,11 +71,18 @@ export const ORIGINS: OriginData[] = [
     desc: 'You hunt prey using instinct, track craft, and primal survival skills.'
   },
   {
-    name: 'Stewardship',
-    hd: 8,
-    extraSkills: 1,
+    name: 'Soul Oath',
+    hd: 12,
+    extraSkills: 0,
+    spellcasting: 'Minor',
+    desc: 'You swear a personal cause or oath above all else, wielding martial power born of conviction.'
+  },
+  {
+    name: 'Soul Weapon',
+    hd: 10,
+    extraSkills: 0,
     spellcasting: 'Moderate',
-    desc: 'You act as a guardian of nature or communities, balancing magic and duty.'
+    desc: 'You blend spell and steel into a unique discipline of martial and magical mastery.'
   },
   {
     name: 'Tactics',
@@ -85,10 +92,18 @@ export const ORIGINS: OriginData[] = [
     desc: 'You direct battlefield movement, analyze enemy weaknesses, and lead allies.'
   },
   {
-    name: 'Wild Magic',
-    hd: 6,
+    name: 'Unique Ancestry',
+    hd: 8,
     extraSkills: 0,
     spellcasting: 'Major',
-    desc: 'Uncontrolled chaotic magic flows naturally through your bloodline.'
+    desc: 'Scions of innately magical bloodlines, looking within for arcane prowess.'
+  },
+  {
+    name: 'World Magic',
+    hd: 8,
+    extraSkills: 0,
+    spellcasting: 'Major',
+    desc: 'You tap into the latent power of the World itself after divine deaths.'
   }
 ];
+

@@ -92,8 +92,7 @@ const AOSelector: React.FC = () => {
       origin: customAbilityOrigin,
       level: customAbilityLevel,
       selection: customAbilitySlot === 'primary' ? 'Primary' : 'Secondary',
-      short_desc: customAbilityShortDesc || customAbilityName,
-      full_desc: customAbilityFullDesc || customAbilityShortDesc || customAbilityName,
+      desc: customAbilityFullDesc || customAbilityShortDesc || customAbilityName,
     };
 
     const nextCustomAbilities = [...customAbilities, newAbility];
@@ -225,7 +224,7 @@ const AOSelector: React.FC = () => {
     const isUpgrade =
       (abilityTarget.name ?? '').includes('General Upgrade') ||
       (abilityTarget.name ?? '').includes('Magical Upgrade') ||
-      (abilityTarget.full_desc ?? '').includes('Gain one of your choices:');
+      (abilityTarget.desc ?? '').includes('Gain one of your choices:');
 
     const handleUpgradeChoiceChange = (val: string) => {
       const targetLvl = selectedLevel || abilityTarget.level;
@@ -270,12 +269,51 @@ const AOSelector: React.FC = () => {
           )}
         </div>
 
-        <p className="ability-short-desc" style={{ fontStyle: 'italic', marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-          {abilityTarget.short_desc}
-        </p>
-
         <div className="ability-full-desc" style={{ fontSize: '0.88rem', lineHeight: '1.6', marginBottom: '1.25rem' }}>
-          {abilityTarget.full_desc}
+          {abilityTarget.desc.split('\n\n').map((block, idx) => {
+            const trimmedBlock = block.trim();
+            if (!trimmedBlock) return null;
+
+            if (trimmedBlock.includes(' | ') && trimmedBlock.includes('---')) {
+              const lines = trimmedBlock.split('\n').map(l => l.trim()).filter(Boolean);
+              const headerLine = lines.find(l => l.includes(' | ') && !l.includes('---'));
+              const dividerIdx = lines.findIndex(l => l.includes('---'));
+              if (headerLine && dividerIdx !== -1) {
+                const bodyLines = lines.slice(dividerIdx + 1);
+                const headers = headerLine.split('|').map(h => h.trim());
+                return (
+                  <div key={idx} style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', margin: '1rem 0', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-elevated)' }}>
+                    <table style={{ width: '100%', minWidth: '380px', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '2px solid var(--accent-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--accent-gold)' }}>
+                          {headers.map((h, i) => (
+                            <th key={i} style={{ padding: '0.5rem 0.75rem', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bodyLines.map((line, rIdx) => {
+                          const cells = line.split('|').map(c => c.trim());
+                          return (
+                            <tr key={rIdx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                              {cells.map((c, cIdx) => (
+                                <td key={cIdx} style={{ padding: '0.5rem 0.75rem', verticalAlign: 'top' }}>{c}</td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+            }
+            return (
+              <p key={idx} style={{ margin: '0 0 0.75rem 0', whiteSpace: 'pre-wrap', width: '100%' }}>
+                {trimmedBlock}
+              </p>
+            );
+          })}
         </div>
 
         {isUpgrade && (
@@ -436,8 +474,15 @@ const AOSelector: React.FC = () => {
           <div className="info-card" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
             <p>⚠️ Please select at least one Ability Origin in your general pool above to configure level choices.</p>
           </div>
-        ) : (
-          <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: '1.5rem', marginTop: '1.5rem' }}>
+        ) : (() => {
+          const isInspectedLarge = Boolean(
+            inspectedAbility &&
+            ((inspectedAbility.desc ?? '').length > 400 || (inspectedAbility.desc ?? '').includes(' | '))
+          );
+          const detailsWidth = !inspectedAbility ? '300px' : isInspectedLarge ? 'minmax(420px, 480px)' : '340px';
+
+          return (
+            <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${detailsWidth}`, gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* Left: Level Selections */}
             <div className="ao-levels-column" style={{ flex: 1 }}>
               <h3 className="section-title">2. Level Selections (Levels 1 to {currentLevel})</h3>
@@ -611,7 +656,6 @@ const AOSelector: React.FC = () => {
                                         {isPicked && <span className="selected-badge"> ✓ Selected</span>}
                                       </div>
                                       <h4 className="ability-card-title">{ab.name}</h4>
-                                      <p className="ability-short-desc">{ab.short_desc}</p>
                                     </div>
                                     {isInspected && (
                                       <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
@@ -727,7 +771,6 @@ const AOSelector: React.FC = () => {
                                           {isPicked && <span className="selected-badge"> ✓ Selected</span>}
                                         </div>
                                         <h4 className="ability-card-title">{ab.name}</h4>
-                                        <p className="ability-short-desc">{ab.short_desc}</p>
                                       </div>
                                       {isInspected && (
                                         <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
@@ -756,7 +799,8 @@ const AOSelector: React.FC = () => {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Mobile Slide-Up Detail Bottom Sheet for AO */}
