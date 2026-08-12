@@ -1,5 +1,8 @@
 # AGENTS.md
 
+> [!CRITICAL]
+> **STRICT RULE**: NEVER touch or edit TOML files directly under any circumstances. TOML files are auto-generated resources. Always modify application code or ingest scripts (`scripts/ingest_abilities.js`, etc.) and re-run ingest/build scripts to update TOML data.
+
 ## Key Commands
 - `npm run dev`: Starts development server (Vite)
 - `npm run build`: Builds production output
