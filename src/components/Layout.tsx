@@ -4,6 +4,8 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterSummaryPanel } from './CharacterSummaryPanel';
 import { AutoSaveIndicator } from './AutoSaveIndicator';
 import { StorageStatus } from '../services/storage/types';
+import { AboutModal } from './AboutModal';
+import { InfoIcon, GitHubIcon } from './Icons';
 
 interface LayoutProps {
   currentStep: number;
@@ -52,10 +54,16 @@ const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
   );
 };
 
-const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => void; onNavigateHome: () => void }> = ({
+const Sidebar: React.FC<{
+  currentStep: number;
+  onNavigate: (step: number) => void;
+  onNavigateHome: () => void;
+  onOpenAbout: () => void;
+}> = ({
   currentStep,
   onNavigate,
   onNavigateHome,
+  onOpenAbout,
 }) => {
   return (
     <aside className="sidebar" id="sidebar">
@@ -69,6 +77,57 @@ const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
         <p className="sidebar-subtitle">Character Creator</p>
       </div>
       <StepNav currentStep={currentStep} onNavigate={onNavigate} />
+      <div
+        style={{
+          padding: '0.85rem 1rem',
+          borderTop: '1px solid var(--border-subtle)',
+          marginTop: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '0.65rem',
+        }}
+      >
+        <button
+          className="btn btn-secondary icon-btn-round"
+          id="sidebar-btn-about"
+          onClick={onOpenAbout}
+          title="About Frostmark RPG"
+          aria-label="About Frostmark RPG"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            padding: 0,
+            borderRadius: '8px',
+          }}
+        >
+          <InfoIcon size={18} />
+        </button>
+        <a
+          href="https://github.com/SaarYogev/frostmark-character-creator"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary icon-btn-round"
+          id="sidebar-btn-github"
+          title="GitHub Repository"
+          aria-label="GitHub Repository"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            padding: 0,
+            borderRadius: '8px',
+            textDecoration: 'none',
+          }}
+        >
+          <GitHubIcon size={18} />
+        </a>
+      </div>
     </aside>
   );
 };
@@ -112,6 +171,7 @@ export const Layout: React.FC<LayoutProps> = ({
   onRetrySave,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isAboutOpen, setIsAboutOpen] = React.useState(false);
 
   return (
     <>
@@ -134,16 +194,60 @@ export const Layout: React.FC<LayoutProps> = ({
             </option>
           ))}
         </select>
-        <button
-          className="btn-summary-toggle"
-          onClick={() => setIsDrawerOpen(true)}
-        >
-          Summary
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
+          <button
+            className="btn btn-secondary icon-btn-round"
+            onClick={() => setIsAboutOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: '6px',
+            }}
+            title="About Frostmark RPG"
+            aria-label="About Frostmark RPG"
+          >
+            <InfoIcon size={16} />
+          </button>
+          <a
+            href="https://github.com/SaarYogev/frostmark-character-creator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary icon-btn-round"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: '6px',
+              textDecoration: 'none',
+            }}
+            title="GitHub Repository"
+            aria-label="GitHub Repository"
+          >
+            <GitHubIcon size={16} />
+          </a>
+          <button
+            className="btn-summary-toggle"
+            onClick={() => setIsDrawerOpen(true)}
+          >
+            Summary
+          </button>
+        </div>
       </header>
 
       <div className="app-layout">
-        <Sidebar currentStep={currentStep} onNavigate={onNavigate} onNavigateHome={onNavigateHome} />
+        <Sidebar
+          currentStep={currentStep}
+          onNavigate={onNavigate}
+          onNavigateHome={onNavigateHome}
+          onOpenAbout={() => setIsAboutOpen(true)}
+        />
 
         <main className="main-content">
           {/* Top Action Bar in Main Builder View */}
@@ -186,6 +290,9 @@ export const Layout: React.FC<LayoutProps> = ({
 
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
+
+      {/* About Modal */}
+      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </>
   );
 };
