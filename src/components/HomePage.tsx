@@ -12,6 +12,8 @@ import {
 } from '../services/storage/googleDriveService';
 import { handleExportPDF } from '../utils/exportHelpers';
 import { CharacterState, DEFAULT_CHARACTER } from '../types/Character';
+import { AboutModal } from './AboutModal';
+import { InfoIcon, GitHubIcon } from './Icons';
 
 interface HomePageProps {
   onSelectCharacter: (state: CharacterState, meta?: SavedCharacterMeta) => void;
@@ -24,6 +26,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
   const [cloudChars, setCloudChars] = useState<SavedCharacterMeta[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
 
   useEffect(() => {
     initGoogleAuth(() => {
@@ -153,7 +156,46 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
           </div>
         </div>
 
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <button
+            className="btn btn-secondary icon-btn-round"
+            id="btn-open-about"
+            onClick={() => setIsAboutOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '38px',
+              height: '38px',
+              padding: 0,
+              borderRadius: '8px',
+            }}
+            title="About Frostmark RPG"
+            aria-label="About Frostmark RPG"
+          >
+            <InfoIcon size={18} />
+          </button>
+          <a
+            href="https://github.com/SaarYogev/frostmark-character-creator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary icon-btn-round"
+            id="btn-open-github"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '38px',
+              height: '38px',
+              padding: 0,
+              borderRadius: '8px',
+              textDecoration: 'none',
+            }}
+            title="GitHub Repository"
+            aria-label="GitHub Repository"
+          >
+            <GitHubIcon size={18} />
+          </a>
           {isSignedIn ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <span style={{ fontSize: '0.85rem', color: '#4ade80', background: 'rgba(74,222,128,0.12)', padding: '0.4rem 0.8rem', borderRadius: '12px', border: '1px solid rgba(74,222,128,0.25)' }}>
@@ -338,6 +380,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
           ))}
         </div>
       )}
+
+      {/* Interactive About Modal */}
+      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
     </div>
   );
 };
