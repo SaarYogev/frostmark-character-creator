@@ -173,6 +173,34 @@ export function getHeuristicSpell(name, level, school) {
     damageTypes.push('slashing');
   }
 
+  let ritual = false;
+  if (
+    nameLower.includes('ritual') ||
+    nameLower.includes('identify') ||
+    nameLower.includes('alarm') ||
+    nameLower.includes('ceremony') ||
+    nameLower.includes('comprehend') ||
+    nameLower.includes('detect magic') ||
+    nameLower.includes('detect poison') ||
+    nameLower.includes('find familiar') ||
+    nameLower.includes('unseen servant') ||
+    nameLower.includes('augury') ||
+    nameLower.includes('beast bond') ||
+    nameLower.includes('gentle repose') ||
+    nameLower.includes('locate animals') ||
+    nameLower.includes('silence') ||
+    nameLower.includes('phantom steed') ||
+    nameLower.includes('water breathing') ||
+    nameLower.includes('water walk') ||
+    nameLower.includes('divination') ||
+    nameLower.includes('commune') ||
+    nameLower.includes('contact other') ||
+    nameLower.includes('telepathic bond') ||
+    nameLower.includes('forbiddance')
+  ) {
+    ritual = true;
+  }
+
   const levelStr = level === 0 ? 'cantrip' : `level ${level} spell`;
   const desc = `A powerful ${school} ${levelStr} that targets a range of ${rangeLabel} with a duration of ${duration}.`;
 
@@ -183,6 +211,7 @@ export function getHeuristicSpell(name, level, school) {
     damageTypes: [...new Set(damageTypes)],
     duration,
     concentration,
+    ritual,
     desc
   };
 }
@@ -294,6 +323,7 @@ export async function fetchSpellDetails(spellName) {
     let level = null;
     let school = null;
     let parentheticalConc = false;
+    let parentheticalRitual = false;
     if (metaMatch) {
       const rawLevel = metaMatch[1].toLowerCase();
       const rawSchool = metaMatch[2].toLowerCase();
@@ -301,6 +331,9 @@ export async function fetchSpellDetails(spellName) {
       school = SCHOOL_MAP[rawSchool] || null;
       if (metaMatch[0] && /conc/i.test(metaMatch[0])) {
         parentheticalConc = true;
+      }
+      if (metaMatch[0] && /ritual/i.test(metaMatch[0])) {
+        parentheticalRitual = true;
       }
     }
     
@@ -314,9 +347,10 @@ export async function fetchSpellDetails(spellName) {
       if (level === null) level = heuristic.level;
       if (school === null) school = heuristic.school;
       if (!parentheticalConc) parentheticalConc = heuristic.concentration;
+      if (!parentheticalRitual) parentheticalRitual = heuristic.ritual;
     }
     
-    // Concentration
+    // Concentration & Ritual
     let concentration = parentheticalConc;
     let duration = rawDuration;
     if (/concentration/i.test(rawDuration) || /conc/i.test(rawDuration)) {
@@ -324,6 +358,11 @@ export async function fetchSpellDetails(spellName) {
       let cleanDuration = rawDuration.replace(/concentration[.,\s]*/i, '').replace(/conc[.,\s]*/i, '');
       cleanDuration = cleanDuration.replace(/^[\s,.]+|[\s,.]+$/g, '').trim();
       duration = cleanDuration.charAt(0).toUpperCase() + cleanDuration.slice(1);
+    }
+
+    let ritual = parentheticalRitual;
+    if (!ritual && /\(\s*[^)]*\britual\b[^)]*\)/i.test(cleanHtml)) {
+      ritual = true;
     }
     
     // Parse range and rangeLabel
@@ -391,6 +430,7 @@ export async function fetchSpellDetails(spellName) {
       damageTypes: [...new Set(damageTypes)],
       duration,
       concentration,
+      ritual,
       desc
     };
   } catch (err) {

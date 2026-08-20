@@ -16,6 +16,7 @@ describe('Spells and Cantrips Metadata verification', () => {
       cantrip.damageTypes.forEach(dt => expect(dt).toBeTypeOf('string'));
       expect(cantrip.duration).toBeTypeOf('string');
       expect(cantrip.concentration).toBeTypeOf('boolean');
+      expect(cantrip.ritual).toBeTypeOf('boolean');
       expect(cantrip.desc).toBeTypeOf('string');
     });
   });
@@ -35,6 +36,7 @@ describe('Spells and Cantrips Metadata verification', () => {
       spell.damageTypes.forEach(dt => expect(dt).toBeTypeOf('string'));
       expect(spell.duration).toBeTypeOf('string');
       expect(spell.concentration).toBeTypeOf('boolean');
+      expect(spell.ritual).toBeTypeOf('boolean');
       expect(spell.desc).toBeTypeOf('string');
     });
   });
@@ -48,6 +50,20 @@ describe('Spells and Cantrips Metadata verification', () => {
     expect(shieldSpell.rangeLabel).toBe('Self');
     expect(shieldSpell.castingTime).toBe('Reaction*');
     expect(shieldSpell.concentration).toBe(false);
+    expect(shieldSpell.ritual).toBe(false);
+
+    const alarmSpell = SPELLS.find(s => s.name === 'Alarm');
+    expect(alarmSpell).toBeDefined();
+    expect(alarmSpell.ritual).toBe(true);
+
+    const identifySpell = SPELLS.find(s => s.name === 'Identify');
+    expect(identifySpell).toBeDefined();
+    expect(identifySpell.ritual).toBe(true);
+
+    const detectMagicSpell = SPELLS.find(s => s.name === 'Detect Magic');
+    expect(detectMagicSpell).toBeDefined();
+    expect(detectMagicSpell.ritual).toBe(true);
+    expect(detectMagicSpell.concentration).toBe(true);
 
     const guidanceCantrip = CANTRIPS.find(c => c.name === 'Guidance');
     expect(guidanceCantrip).toBeDefined();
@@ -57,10 +73,12 @@ describe('Spells and Cantrips Metadata verification', () => {
     expect(guidanceCantrip.rangeLabel).toBe('Touch');
     expect(guidanceCantrip.castingTime).toBe('1 action');
     expect(guidanceCantrip.concentration).toBe(true);
+    expect(guidanceCantrip.ritual).toBe(false);
 
     const fireballSpell = SPELLS.find(s => s.name === 'Fireball');
     expect(fireballSpell).toBeDefined();
     expect(fireballSpell.school).toBe('Evocation');
+    expect(fireballSpell.ritual).toBe(false);
   });
 
   test('Verify expanded damage types in the parser and enricher', () => {

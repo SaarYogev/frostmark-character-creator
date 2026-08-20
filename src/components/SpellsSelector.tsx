@@ -14,6 +14,7 @@ interface SpellEntry {
   rangeLabel?: string;
   duration: string;
   concentration: boolean;
+  ritual?: boolean;
   damageTypes?: string[];
   desc: string;
 }
@@ -22,6 +23,7 @@ const FILTER_CATALOG = [
   { key: 'schools',       label: 'Schools' },
   { key: 'levels',        label: 'Levels' },
   { key: 'concentration', label: 'Concentration' },
+  { key: 'ritual',        label: 'Ritual' },
   { key: 'casting',       label: 'Casting Times' },
   { key: 'damage',        label: 'Damage Types (Experimental)' },
 ];
@@ -60,6 +62,7 @@ const SpellsSelector: React.FC = () => {
   const [filterSchools, setFilterSchools] = useState<string[]>([]);
   const [filterLevels, setFilterLevels] = useState<number[]>([]);
   const [filterConcentration, setFilterConcentration] = useState<'yes' | 'no' | null>(null);
+  const [filterRitual, setFilterRitual] = useState<'yes' | 'no' | null>(null);
   const [filterCasting, setFilterCasting] = useState<string[]>([]);
   const [filterDamage, setFilterDamage] = useState<string[]>([]);
   const [selectedSpellName, setSelectedSpellName] = useState<string | null>(null);
@@ -80,6 +83,7 @@ const SpellsSelector: React.FC = () => {
     if (key === 'schools') setFilterSchools([]);
     if (key === 'levels') setFilterLevels([]);
     if (key === 'concentration') setFilterConcentration(null);
+    if (key === 'ritual') setFilterRitual(null);
     if (key === 'casting') setFilterCasting([]);
     if (key === 'damage') setFilterDamage([]);
   };
@@ -112,6 +116,8 @@ const SpellsSelector: React.FC = () => {
     if (filterLevels.length > 0) list = list.filter((s) => filterLevels.includes(s.level));
     if (filterConcentration === 'yes') list = list.filter((s) => s.concentration);
     if (filterConcentration === 'no') list = list.filter((s) => !s.concentration);
+    if (filterRitual === 'yes') list = list.filter((s) => s.ritual);
+    if (filterRitual === 'no') list = list.filter((s) => !s.ritual);
     if (filterCasting.length > 0) {
       list = list.filter((s) => {
         const ct = s.castingTime?.toLowerCase() ?? '';
@@ -137,7 +143,7 @@ const SpellsSelector: React.FC = () => {
     });
 
     return list;
-  }, [searchQuery, filterSchools, filterLevels, filterConcentration, filterCasting, filterDamage, sortBy]);
+  }, [searchQuery, filterSchools, filterLevels, filterConcentration, filterRitual, filterCasting, filterDamage, sortBy]);
 
   const activeSpell: SpellEntry | null = selectedSpellName
     ? ([...CANTRIPS, ...SPELLS] as SpellEntry[]).find((s) => s.name === selectedSpellName) ?? null
@@ -213,10 +219,16 @@ const SpellsSelector: React.FC = () => {
         <button style={pillStyle(filterConcentration === 'no')} onClick={() => setFilterConcentration((prev) => prev === 'no' ? null : 'no')}>No</button>
       </div>
     );
+    if (key === 'ritual') return (
+      <div className="filter-pills" style={{ display: 'flex', gap: '0.35rem' }}>
+        <button style={pillStyle(filterRitual === 'yes')} onClick={() => setFilterRitual((prev) => prev === 'yes' ? null : 'yes')}>Yes</button>
+        <button style={pillStyle(filterRitual === 'no')} onClick={() => setFilterRitual((prev) => prev === 'no' ? null : 'no')}>No</button>
+      </div>
+    );
     return null;
   };
 
-  const isCompact = (key: string) => ['concentration', 'casting', 'levels'].includes(key);
+  const isCompact = (key: string) => ['concentration', 'ritual', 'casting', 'levels'].includes(key);
 
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 
@@ -251,6 +263,8 @@ const SpellsSelector: React.FC = () => {
           <div className="spell-detail-tags">
             <span className="spell-tag level-tag">{activeSpell.level === 0 ? 'Cantrip' : `Level ${activeSpell.level}`}</span>
             <span className="spell-tag school-tag">{activeSpell.school}</span>
+            {activeSpell.concentration && <span className="spell-tag concentration-tag">Concentration</span>}
+            {activeSpell.ritual && <span className="spell-tag ritual-tag">Ritual</span>}
           </div>
         </div>
         <div className="spell-detail-stats">
@@ -258,6 +272,7 @@ const SpellsSelector: React.FC = () => {
           <div className="stat-item"><strong>Range</strong><span>{activeSpell.rangeLabel ?? `${activeSpell.range}m`}</span></div>
           <div className="stat-item"><strong>Duration</strong><span>{activeSpell.duration}</span></div>
           <div className="stat-item"><strong>Concentration</strong><span>{activeSpell.concentration ? 'Yes' : 'No'}</span></div>
+          <div className="stat-item"><strong>Ritual</strong><span>{activeSpell.ritual ? 'Yes' : 'No'}</span></div>
           {activeSpell.damageTypes && activeSpell.damageTypes.length > 0 && (
             <div className="stat-item full-width">
               <strong>Damage Types <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>(Experimental)</span></strong>
@@ -469,7 +484,15 @@ const SpellsSelector: React.FC = () => {
                           style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.5 : 1, padding: '0.5rem 0.65rem' }}
                         >
                           <span className="spell-name" style={{ fontSize: '0.82rem', fontWeight: 500, wordBreak: 'break-word' }}>{spell.name}</span>
-                          <span className="spell-level-tag">{spell.level === 0 ? 'Cantrip' : `Lv.${spell.level}`}</span>
+                          <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexShrink: 0 }}>
+                            {spell.ritual && (
+                              <span className="spell-tag-badge ritual" title="Ritual" style={{ fontSize: '0.65rem', background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', padding: '1px 4px', borderRadius: '4px', fontWeight: 600, lineHeight: 1 }}>R</span>
+                            )}
+                            {spell.concentration && (
+                              <span className="spell-tag-badge concentration" title="Concentration" style={{ fontSize: '0.65rem', background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24', padding: '1px 4px', borderRadius: '4px', fontWeight: 600, lineHeight: 1 }}>C</span>
+                            )}
+                            <span className="spell-level-tag">{spell.level === 0 ? 'Cantrip' : `Lv.${spell.level}`}</span>
+                          </div>
                         </div>
                         {isActiveDetail && (
                           <div className="mobile-inline-spell-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
