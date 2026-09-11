@@ -115,7 +115,7 @@ export async function fetchSpellDetails(spellName, fallbackLevel = null, fallbac
     const html = data?.parse?.text?.['*'];
     if (!html) throw new Error('Parsed HTML content missing from API response');
     const cleanHtml = html
-      .replace(/<[^>]+>/g, ' ')
+      .replace(/<[^>]+>/g, '')
       .replace(/&#160;/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ');
