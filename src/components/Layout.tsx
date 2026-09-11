@@ -4,6 +4,8 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterSummaryPanel } from './CharacterSummaryPanel';
 import { AutoSaveIndicator } from './AutoSaveIndicator';
 import { StorageStatus } from '../services/storage/types';
+import { AboutModal } from './AboutModal';
+import { InfoIcon, GitHubIcon } from './Icons';
 
 interface LayoutProps {
   currentStep: number;
@@ -17,7 +19,7 @@ interface LayoutProps {
 
 const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
   const getStepLockReason = (stepIndex: number): string | null => {
-    const stepId = STEPS[stepIndex].id;
+    const stepId = STEPS[stepIndex]?.id;
     if (stepId === 'spellslots' || stepId === 'spellcasting') {
       return null;
     }
@@ -52,10 +54,16 @@ const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
   );
 };
 
-const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => void; onNavigateHome: () => void }> = ({
+const Sidebar: React.FC<{
+  currentStep: number;
+  onNavigate: (step: number) => void;
+  onNavigateHome: () => void;
+  onOpenAbout: () => void;
+}> = ({
   currentStep,
   onNavigate,
   onNavigateHome,
+  onOpenAbout,
 }) => {
   return (
     <aside className="sidebar" id="sidebar">
@@ -69,6 +77,57 @@ const Sidebar: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
         <p className="sidebar-subtitle">Character Creator</p>
       </div>
       <StepNav currentStep={currentStep} onNavigate={onNavigate} />
+      <div
+        style={{
+          padding: '0.85rem 1rem',
+          borderTop: '1px solid var(--border-subtle)',
+          marginTop: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '0.65rem',
+        }}
+      >
+        <button
+          className="btn btn-secondary icon-btn-round"
+          id="sidebar-btn-about"
+          onClick={onOpenAbout}
+          title="About Frostmark RPG"
+          aria-label="About Frostmark RPG"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            padding: 0,
+            borderRadius: '8px',
+          }}
+        >
+          <InfoIcon size={18} />
+        </button>
+        <a
+          href="https://github.com/SaarYogev/frostmark-character-creator"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary icon-btn-round"
+          id="sidebar-btn-github"
+          title="GitHub Repository"
+          aria-label="GitHub Repository"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '36px',
+            height: '36px',
+            padding: 0,
+            borderRadius: '8px',
+            textDecoration: 'none',
+          }}
+        >
+          <GitHubIcon size={18} />
+        </a>
+      </div>
     </aside>
   );
 };
@@ -111,46 +170,132 @@ export const Layout: React.FC<LayoutProps> = ({
   isCloud = false,
   onRetrySave,
 }) => {
+  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isAboutOpen, setIsAboutOpen] = React.useState(false);
+
   return (
-    <div className="app-layout">
-      <Sidebar currentStep={currentStep} onNavigate={onNavigate} onNavigateHome={onNavigateHome} />
-      <main className="main-content">
-        {/* Top Action Bar in Main Builder View */}
-        <div
-          className="builder-top-bar"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '1rem',
-            padding: '0.75rem 1.25rem',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
+    <>
+      {/* Standardized Mobile Top Header Bar */}
+      <header className="mobile-header-bar">
+        <img
+          src={`${import.meta.env.BASE_URL}frostmark-logo.png`}
+          alt="Frostmark Mobile"
+          className="mobile-header-logo"
+          onClick={onNavigateHome}
+          style={{ cursor: 'pointer' }}
+          title="Return to Home Dashboard"
+        />
+        <select
+          className="mobile-step-dropdown"
+          value={currentStep}
+          onChange={(e) => onNavigate(Number(e.target.value))}
+          aria-label="Select Step"
         >
-          <div
-            className="builder-mobile-brand"
-            onClick={onNavigateHome}
-            style={{ display: 'none', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
-            title="Return to Home Dashboard"
+          {STEPS.map((step, idx) => (
+            <option key={step.id} value={idx}>
+              Step {idx + 1}: {step.title}
+            </option>
+          ))}
+        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
+          <button
+            className="btn btn-secondary icon-btn-round"
+            onClick={() => setIsAboutOpen(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: '6px',
+            }}
+            title="About Frostmark RPG"
+            aria-label="About Frostmark RPG"
           >
-            <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark Mobile" style={{ height: '32px' }} />
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Frostmark</span>
-          </div>
+            <InfoIcon size={16} />
+          </button>
+          <a
+            href="https://github.com/SaarYogev/frostmark-character-creator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary icon-btn-round"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              borderRadius: '6px',
+              textDecoration: 'none',
+            }}
+            title="GitHub Repository"
+            aria-label="GitHub Repository"
+          >
+            <GitHubIcon size={16} />
+          </a>
+          <button
+            className="btn-summary-toggle"
+            onClick={() => setIsDrawerOpen(true)}
+          >
+            Summary
+          </button>
+        </div>
+      </header>
 
+      <div className="app-layout">
+        <Sidebar
+          currentStep={currentStep}
+          onNavigate={onNavigate}
+          onNavigateHome={onNavigateHome}
+          onOpenAbout={() => setIsAboutOpen(true)}
+        />
 
-          <div style={{ marginLeft: 'auto' }}>
+        <main className="main-content">
+          {/* Top Action Bar in Main Builder View */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              marginBottom: '1rem',
+              paddingBottom: '0.75rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
             <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
           </div>
+
+          <div className="step-container">{children}</div>
+          <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
+        </main>
+
+        <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
+      </div>
+
+      {/* Collapsible Mobile/Tablet Summary Drawer */}
+      <div
+        className={`drawer-backdrop ${isDrawerOpen ? 'open' : ''}`}
+        onClick={() => setIsDrawerOpen(false)}
+      />
+      <div className={`summary-drawer ${isDrawerOpen ? 'open' : ''}`}>
+        <div className="drawer-header">
+          <h3 className="drawer-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+            Quick Summary
+          </h3>
+          <button className="btn-close-drawer" onClick={() => setIsDrawerOpen(false)}>
+            ✕
+          </button>
         </div>
-
-
-        <div className="step-container">{children}</div>
-        <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
-      </main>
-      <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
+        <CharacterSummaryPanel isDrawer onNavigateHome={onNavigateHome} />
+      </div>
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
-    </div>
+
+      {/* About Modal */}
+      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+    </>
   );
 };
 

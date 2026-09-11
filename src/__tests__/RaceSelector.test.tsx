@@ -13,7 +13,7 @@ describe('RaceSelector', () => {
     renderWithProvider(<RaceSelector />);
 
     // Should render Custom option plus all races
-    expect(screen.getByText('Custom / Enter Manually...')).toBeInTheDocument();
+    expect(screen.getByText('Custom Race')).toBeInTheDocument();
     RACES.forEach(race => {
       expect(screen.getByText(race.name)).toBeInTheDocument();
     });
@@ -79,10 +79,10 @@ describe('RaceSelector', () => {
   it('shows custom race form when Custom is selected', () => {
     renderWithProvider(<RaceSelector />);
 
-    const customCard = screen.getByText('Custom / Enter Manually...');
+    const customCard = screen.getByText('Custom Race');
     fireEvent.click(customCard);
 
-    expect(screen.getByText('Custom Race')).toBeInTheDocument();
+    expect(screen.getAllByText('Custom Race').length).toBeGreaterThan(0);
     expect(screen.getByText('Race Name')).toBeInTheDocument();
     expect(screen.getByText('Speed (squares)')).toBeInTheDocument();
   });

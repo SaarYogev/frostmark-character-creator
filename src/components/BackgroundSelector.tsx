@@ -5,7 +5,7 @@ import { Background, DEFAULT_BACKGROUND } from '../types/Background';
 
 const BackgroundDetails: React.FC<{ background: Background }> = ({ background }) => {
   const bgFree = background.freeSkillPoints ?? 4;
-  const restrictDesc = background.skills?.length 
+  const restrictDesc = Array.isArray(background?.skills) && background.skills.length 
     ? `Restricted to: ${background.skills.join(', ')}` 
     : "Player's choice (any skill)";
 

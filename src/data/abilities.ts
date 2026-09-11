@@ -6,8 +6,7 @@ export interface AbilityItem {
   origin: string;
   level: number;
   selection: string;
-  short_desc: string;
-  full_desc: string;
+  desc: string;
 }
 
 // Vite's TOML loader wraps array-of-tables ([[abilities]]) as { abilities: [...] }
@@ -15,15 +14,17 @@ const rawAbilities = Array.isArray(tomlData) ? tomlData : ((tomlData as any).abi
 
 // Export sorted list of abilities with unique IDs
 export const ABILITIES: AbilityItem[] = (rawAbilities as any[])
-  .map((ability) => ({
-    id: `${ability.origin}-${ability.level}-${ability.selection}-${ability.name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-    name: ability.name,
-    origin: ability.origin,
-    level: ability.level,
-    selection: ability.selection,
-    short_desc: ability.short_desc,
-    full_desc: ability.full_desc
-  }))
+  .map((ability) => {
+    const text = ability.desc ?? ability.full_desc ?? ability.short_desc ?? '';
+    return {
+      id: `${ability.origin}-${ability.level}-${ability.selection}-${ability.name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name: ability.name,
+      origin: ability.origin,
+      level: ability.level,
+      selection: ability.selection,
+      desc: text
+    };
+  })
   .sort((a, b) => {
     if (a.origin !== b.origin) return a.origin.localeCompare(b.origin);
     if (a.level !== b.level) return a.level - b.level;

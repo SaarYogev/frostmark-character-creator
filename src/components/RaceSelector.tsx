@@ -331,20 +331,33 @@ export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
       </div>
 
       <div className="card-selector" id="race-selector">
-        {raceNames.map(name => {
-          const raceName = name === 'Custom / Enter Manually...' ? 'Custom' : name;
-          const race = RACES.find(r => r.name === raceName);
-          const bonuses = race ? buildStatBonusSummary(race.stats) : 'Enter your own';
-          return (
-            <RaceCard
-              key={name}
-              name={name}
-              isSelected={state.race === raceName}
-              bonuses={bonuses}
-              onClick={() => handleRaceSelect(name)}
-            />
-          );
-        })}
+        <div
+          className={`race-card custom-card-square ${state.race === 'Custom' ? 'selected' : ''}`}
+          onClick={() => handleRaceSelect('Custom / Enter Manually...')}
+          role="button"
+          tabIndex={0}
+          title="Custom Race"
+          style={{ padding: '12px 16px', boxSizing: 'border-box' }}
+        >
+          <span className="custom-card-icon">＋</span>
+          <span className="custom-card-title">Custom Race</span>
+        </div>
+        {raceNames
+          .filter((name) => name !== 'Custom / Enter Manually...')
+          .map((name) => {
+            const raceName = name;
+            const race = RACES.find((r) => r.name === raceName);
+            const bonuses = race ? buildStatBonusSummary(race.stats) : 'Enter your own';
+            return (
+              <RaceCard
+                key={name}
+                name={name}
+                isSelected={state.race === raceName}
+                bonuses={bonuses}
+                onClick={() => handleRaceSelect(name)}
+              />
+            );
+          })}
       </div>
 
        {state.race && state.race !== 'Custom' && selectedRace && (

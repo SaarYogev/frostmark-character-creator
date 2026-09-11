@@ -12,7 +12,7 @@ import {
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
-export const CharacterSummaryPanel: React.FC<{ onNavigateHome?: () => void }> = ({ onNavigateHome }) => {
+export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHome?: () => void }> = ({ isDrawer, onNavigateHome }) => {
   const { state, dispatch } = useCharacter();
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,9 +88,9 @@ export const CharacterSummaryPanel: React.FC<{ onNavigateHome?: () => void }> = 
   const aoDisplayParts = Object.entries(aoLevelCounts).map(([aoName, count]) => `${aoName} ${count}`);
   const aoDisplay = aoDisplayParts.length > 0 ? aoDisplayParts.join(', ') : '—';
 
-  return (
-    <aside className="character-summary" id="character-summary">
-      <h2 className="summary-title">Character Summary</h2>
+  const contentMarkup = (
+    <>
+      {!isDrawer && <h2 className="summary-title">Character Summary</h2>}
       <div id="summary-content">
         <div
           className={`summary-ap-banner ${apRemaining < 0 ? 'over-budget' : ''}`}
@@ -160,7 +160,7 @@ export const CharacterSummaryPanel: React.FC<{ onNavigateHome?: () => void }> = 
       </div>
 
       <div className="summary-actions" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <button className="btn btn-secondary" id="btn-import" onClick={() => document.getElementById('right-import-file')?.click()}>
+        <button className="btn btn-secondary" id="btn-import" onClick={() => document.getElementById(isDrawer ? 'drawer-import-file' : 'right-import-file')?.click()}>
           📂 Load Data File
         </button>
         <button className="btn btn-accent" id="btn-export-json" onClick={() => handleExportJSON(state)}>
@@ -169,8 +169,18 @@ export const CharacterSummaryPanel: React.FC<{ onNavigateHome?: () => void }> = 
         <button className="btn btn-primary" id="btn-export-pdf" onClick={() => handleExportPDF(state)}>
           📄 Download Character Sheet
         </button>
-        <input type="file" id="right-import-file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+        <input type="file" id={isDrawer ? 'drawer-import-file' : 'right-import-file'} accept=".json" style={{ display: 'none' }} onChange={handleImport} />
       </div>
+    </>
+  );
+
+  if (isDrawer) {
+    return <div className="character-summary-drawer-inner">{contentMarkup}</div>;
+  }
+
+  return (
+    <aside className="character-summary" id="character-summary">
+      {contentMarkup}
     </aside>
   );
 };

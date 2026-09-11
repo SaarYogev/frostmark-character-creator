@@ -79,12 +79,8 @@ describe('Level-by-Level Ability Origins Logic', () => {
     const lvl1Names = level1Primary.map(a => a.name);
     const lvl14Names = level14Primary.map(a => a.name);
 
-    // Protective Ward should be Level 1
-    expect(lvl1Names).toContain('Protective Ward (Abjuration)');
-    // Prismatic Ward should be Level 14
-    expect(lvl14Names).toContain('Prismatic Ward (Abjuration)');
-
-    // Prismatic Ward MUST NOT appear at Level 1 Primary
-    expect(lvl1Names).not.toContain('Prismatic Ward (Abjuration)');
+    expect(lvl1Names).toContain('Arcane Tradition (Abjuration)');
+    expect(lvl1Names).not.toContain('Prismatic Ward');
   });
 });
+

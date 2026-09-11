@@ -89,7 +89,7 @@ export function requestGoogleSignIn(): Promise<string> {
         }
       };
     }
-    tokenClient.requestAccessToken({ prompt: 'consent' });
+    tokenClient.requestAccessToken({ prompt: '' });
   });
 }
 
