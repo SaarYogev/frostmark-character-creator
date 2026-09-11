@@ -117,17 +117,32 @@ export const Layout: React.FC<LayoutProps> = ({
       <main className="main-content">
         {/* Top Action Bar in Main Builder View */}
         <div
+          className="builder-top-bar"
           style={{
             display: 'flex',
-            justify: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: '1rem',
-            paddingBottom: '0.75rem',
+            padding: '0.75rem 1.25rem',
             borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
           }}
         >
-          <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
+          <div
+            className="builder-mobile-brand"
+            onClick={onNavigateHome}
+            style={{ display: 'none', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
+            title="Return to Home Dashboard"
+          >
+            <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark Mobile" style={{ height: '32px' }} />
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Frostmark</span>
+          </div>
+
+
+          <div style={{ marginLeft: 'auto' }}>
+            <AutoSaveIndicator status={saveStatus} isCloud={isCloud} onRetry={onRetrySave} />
+          </div>
         </div>
+
 
         <div className="step-container">{children}</div>
         <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />

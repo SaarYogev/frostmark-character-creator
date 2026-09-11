@@ -106,4 +106,25 @@ describe('Layout', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(0);
   });
+
+  it('calls onNavigateHome when clicking Frostmark logo', () => {
+    const mockNavigateHome = vi.fn();
+    render(
+      <CharacterProvider>
+        <Layout currentStep={0} onNavigate={() => {}} onNavigateHome={mockNavigateHome}>
+          <div>Test Content</div>
+        </Layout>
+      </CharacterProvider>
+    );
+
+    const desktopLogo = screen.getByAltText('Frostmark');
+    fireEvent.click(desktopLogo);
+    expect(mockNavigateHome).toHaveBeenCalledTimes(1);
+
+    const mobileLogo = screen.getByAltText('Frostmark Mobile');
+    fireEvent.click(mobileLogo);
+    expect(mockNavigateHome).toHaveBeenCalledTimes(2);
+  });
 });
+
+
