@@ -15,17 +15,21 @@ let accessToken: string | null = null;
 let tokenClient: any = null;
 
 export function getStoredAccessToken(): string | null {
-  return accessToken || sessionStorage.getItem('frostmark_gdrive_token');
+  /* Use localStorage so the user remains connected across new browser tabs and sessions */
+  return accessToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('frostmark_gdrive_token') : null);
 }
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
+  if (typeof localStorage === 'undefined') return;
+
   if (token) {
-    sessionStorage.setItem('frostmark_gdrive_token', token);
+    localStorage.setItem('frostmark_gdrive_token', token);
   } else {
-    sessionStorage.removeItem('frostmark_gdrive_token');
+    localStorage.removeItem('frostmark_gdrive_token');
   }
 }
+
 
 export function isGoogleSignedIn(): boolean {
   return Boolean(getStoredAccessToken());

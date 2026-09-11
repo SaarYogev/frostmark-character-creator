@@ -18,4 +18,18 @@ describe('HomePage', () => {
     fireEvent.click(createBtn);
     expect(onCreateNew).toHaveBeenCalledTimes(1);
   });
+
+  it('renders only the warning banner cloud connection button and not the blue header button when signed out', () => {
+    const onSelectCharacter = vi.fn();
+    const onCreateNew = vi.fn();
+
+    render(<HomePage onSelectCharacter={onSelectCharacter} onCreateNew={onCreateNew} />);
+
+    // Should NOT have the blue "Sign in with Google Drive" button in the header
+    expect(screen.queryByText(/Sign in with Google Drive/i)).not.toBeInTheDocument();
+
+    // Should have the single yellow "Connect Cloud Backup" button in warning banner
+    expect(screen.getByText('Connect Cloud Backup')).toBeInTheDocument();
+  });
 });
+

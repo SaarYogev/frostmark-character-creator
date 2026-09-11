@@ -136,22 +136,23 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
     <div className="homepage-container" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2.5rem 2rem' }}>
       {/* Top Header Navigation */}
       <header
+        className="homepage-header"
         style={{
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           width: '100%',
-          gap: '2rem',
+          gap: '1.5rem',
           flexWrap: 'wrap',
           marginBottom: '2.5rem',
           paddingBottom: '1.5rem',
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-          <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark Logo" style={{ height: '52px' }} />
-          <div>
-            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.02em' }}>Frostmark RPG</h1>
+        <div className="homepage-brand" style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark Logo" style={{ height: '52px', maxWidth: '100%', objectFit: 'contain' }} />
+          <div style={{ minWidth: '200px' }}>
+            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>Frostmark RPG</h1>
             <p style={{ margin: 0, color: '#a0a5c0', fontSize: '0.92rem' }}>Character Management Vault</p>
           </div>
         </div>
@@ -196,8 +197,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
           >
             <GitHubIcon size={18} />
           </a>
-          {isSignedIn ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {isSignedIn && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.85rem', color: '#4ade80', background: 'rgba(74,222,128,0.12)', padding: '0.4rem 0.8rem', borderRadius: '12px', border: '1px solid rgba(74,222,128,0.25)' }}>
                 ☁️ Google Drive Connected
               </span>
@@ -205,10 +206,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
                 Sign Out
               </button>
             </div>
-          ) : (
-            <button className="btn btn-primary" onClick={handleSignIn} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 1.1rem', fontSize: '0.92rem' }}>
-              🔑 Sign in with Google Drive
-            </button>
           )}
         </div>
       </header>
@@ -221,28 +218,32 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
             background: 'rgba(234, 179, 8, 0.12)',
             border: '1px solid rgba(234, 179, 8, 0.35)',
             borderRadius: '10px',
-            padding: '1rem 1.25rem',
+            padding: '1.25rem 1.5rem',
             marginBottom: '2rem',
             display: 'flex',
-            alignItems: 'center',
-            justify: 'space-between',
+            flexDirection: 'column',
             gap: '1rem',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{ fontSize: '1.4rem' }}>⚠️</span>
-            <div>
-              <strong style={{ color: '#facc15' }}>Operating in Local Guest Mode</strong>
-              <p style={{ margin: 0, fontSize: '0.88rem', color: '#d1d5db' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+            <span style={{ fontSize: '1.6rem', lineHeight: 1, flexShrink: 0 }}>⚠️</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#facc15', fontSize: '1.05rem', display: 'block', marginBottom: '0.35rem' }}>
+                Operating in Local Guest Mode
+              </strong>
+              <p style={{ margin: 0, fontSize: '0.92rem', color: '#d1d5db', lineHeight: 1.5 }}>
                 Characters created without signing into Google are saved strictly in this browser. They are not backed up to cloud storage and will be lost if browser cache is cleared.
               </p>
             </div>
           </div>
-          <button className="btn btn-accent" onClick={handleSignIn} style={{ whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
-            Connect Cloud Backup
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '0.25rem' }}>
+            <button className="btn btn-accent" onClick={handleSignIn} style={{ whiteSpace: 'nowrap', fontSize: '0.9rem', padding: '0.55rem 1.2rem' }}>
+              Connect Cloud Backup
+            </button>
+          </div>
         </div>
       )}
+
 
       {errorMsg && (
         <div

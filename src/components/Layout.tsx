@@ -181,6 +181,9 @@ export const Layout: React.FC<LayoutProps> = ({
           src={`${import.meta.env.BASE_URL}frostmark-logo.png`}
           alt="Frostmark Mobile"
           className="mobile-header-logo"
+          onClick={onNavigateHome}
+          style={{ cursor: 'pointer' }}
+          title="Return to Home Dashboard"
         />
         <select
           className="mobile-step-dropdown"
@@ -287,7 +290,6 @@ export const Layout: React.FC<LayoutProps> = ({
         </div>
         <CharacterSummaryPanel isDrawer onNavigateHome={onNavigateHome} />
       </div>
-
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />
 
