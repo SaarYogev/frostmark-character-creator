@@ -173,33 +173,7 @@ export function getHeuristicSpell(name, level, school) {
     damageTypes.push('slashing');
   }
 
-  let ritual = false;
-  if (
-    nameLower.includes('ritual') ||
-    nameLower.includes('identify') ||
-    nameLower.includes('alarm') ||
-    nameLower.includes('ceremony') ||
-    nameLower.includes('comprehend') ||
-    nameLower.includes('detect magic') ||
-    nameLower.includes('detect poison') ||
-    nameLower.includes('find familiar') ||
-    nameLower.includes('unseen servant') ||
-    nameLower.includes('augury') ||
-    nameLower.includes('beast bond') ||
-    nameLower.includes('gentle repose') ||
-    nameLower.includes('locate animals') ||
-    nameLower.includes('silence') ||
-    nameLower.includes('phantom steed') ||
-    nameLower.includes('water breathing') ||
-    nameLower.includes('water walk') ||
-    nameLower.includes('divination') ||
-    nameLower.includes('commune') ||
-    nameLower.includes('contact other') ||
-    nameLower.includes('telepathic bond') ||
-    nameLower.includes('forbiddance')
-  ) {
-    ritual = true;
-  }
+  let ritual = nameLower.includes('ritual');
 
   const levelStr = level === 0 ? 'cantrip' : `level ${level} spell`;
   const desc = `A powerful ${school} ${levelStr} that targets a range of ${rangeLabel} with a duration of ${duration}.`;
@@ -291,6 +265,7 @@ export async function fetchSpellDetails(spellName) {
       conj: 'Conjuration',
       div: 'Divination',
       enc: 'Enchantment',
+      ench: 'Enchantment',
       evo: 'Evocation',
       ill: 'Illusion',
       trans: 'Transmutation',
@@ -324,6 +299,19 @@ export async function fetchSpellDetails(spellName) {
     let school = null;
     let parentheticalConc = false;
     let parentheticalRitual = false;
+
+    // Check header parenthetical for metadata (e.g. "(1st, div., conc., ritual)")
+    const headerParenMatch = cleanHtml.slice(0, 500).match(/\(([^)]+)\)/);
+    if (headerParenMatch) {
+      const parenContent = headerParenMatch[1];
+      if (/\bconc/i.test(parenContent)) {
+        parentheticalConc = true;
+      }
+      if (/\britual\b/i.test(parenContent)) {
+        parentheticalRitual = true;
+      }
+    }
+
     if (metaMatch) {
       const rawLevel = metaMatch[1].toLowerCase();
       const rawSchool = metaMatch[2].toLowerCase();
