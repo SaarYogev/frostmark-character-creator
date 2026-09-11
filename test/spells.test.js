@@ -138,6 +138,6 @@ describe('Spells and Cantrips Metadata verification', () => {
     expect(counterspell.castingTime).toBe('Reaction*');
     expect(counterspell.level).toBe(3);
     expect(counterspell.school).toBe('Abjuration');
-  });
+  }, 30000);
 });
 

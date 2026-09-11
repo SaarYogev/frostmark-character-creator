@@ -6,187 +6,20 @@ import * as smolToml from 'smol-toml';
 // Helper to get __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const SPELLS_JS_PATH = path.join(__dirname, '../js/data/spells.js');
 const SPELLS_TOML_PATH = path.join(__dirname, '../src/data/toml/spells.toml');
 
-// Duplicate of heuristic fallback logic from spells.js (to enrich missing spells)
-export function getHeuristicSpell(name, level, school) {
-  const nameLower = name.toLowerCase();
-
-  let castingTime = '1 action';
-  if (
-    nameLower.includes('shield') ||
-    nameLower.includes('counter') ||
-    nameLower.includes('absorb') ||
-    nameLower.includes('rebuke') ||
-    nameLower.includes('feather fall')
-  ) {
-    castingTime = '1 reaction';
-  } else if (
-    nameLower.includes('healing word') ||
-    nameLower.includes('misty') ||
-    nameLower.includes('smite') ||
-    nameLower.includes('hunter\'s') ||
-    nameLower.includes('weapon') ||
-    nameLower.includes('retreat')
-  ) {
-    castingTime = '1 bonus action';
-  } else if (
-    nameLower.includes('ritual') ||
-    nameLower.includes('identify') ||
-    nameLower.includes('find') ||
-    nameLower.includes('commune') ||
-    nameLower.includes('teleportation circle')
-  ) {
-    castingTime = '10 minutes';
-  }
-
-  let range = 18;
-  if (nameLower.includes('self')) {
-    range = 0;
-  } else if (
-    nameLower.includes('touch') ||
-    nameLower.includes('cure') ||
-    nameLower.includes('inflict') ||
-    nameLower.includes('lay') ||
-    nameLower.includes('hands')
-  ) {
-    range = 0;
-  } else if (
-    nameLower.includes('bolt') ||
-    nameLower.includes('ray') ||
-    nameLower.includes('arrow') ||
-    nameLower.includes('missile') ||
-    nameLower.includes('fire')
-  ) {
-    range = 36;
-  } else if (level >= 5) {
-    range = 36;
-  } else if (level >= 3) {
-    range = 27;
-  }
-  
-  let rangeLabel = range === 0 ? 'Self/Touch' : (range >= 36 ? '36m+' : `${range}m`);
-
-  let concentration = false;
-  if (
-    school === 'Divination' ||
-    school === 'Illusion' ||
-    nameLower.includes('detect') ||
-    nameLower.includes('hold') ||
-    nameLower.includes('suggest') ||
-    nameLower.includes('bless') ||
-    nameLower.includes('bane') ||
-    nameLower.includes('hex') ||
-    nameLower.includes('mark') ||
-    nameLower.includes('aura') ||
-    nameLower.includes('fly') ||
-    nameLower.includes('haste') ||
-    nameLower.includes('slow') ||
-    nameLower.includes('wall') ||
-    nameLower.includes('sphere') ||
-    nameLower.includes('cloud') ||
-    nameLower.includes('pattern') ||
-    nameLower.includes('polymorph') ||
-    nameLower.includes('control') ||
-    nameLower.includes('animate')
-  ) {
-    concentration = true;
-  }
-
-  let duration = 'Instantaneous';
-  if (concentration) {
-    if (level === 0 || level === 1) {
-      duration = 'Up to 1 minute';
-    } else if (level >= 2 && level <= 4) {
-      duration = 'Up to 10 minutes';
-    } else {
-      duration = 'Up to 1 hour';
-    }
-  } else {
-    if (
-      nameLower.includes('armor') ||
-      nameLower.includes('ward') ||
-      nameLower.includes('mind')
-    ) {
-      duration = '8 hours';
-    } else if (
-      nameLower.includes('shield') ||
-      nameLower.includes('strike') ||
-      nameLower.includes('touch')
-    ) {
-      duration = '1 round';
-    } else if (
-      nameLower.includes('charm') ||
-      nameLower.includes('sleep')
-    ) {
-      duration = '1 hour';
-    }
-  }
-
-  const damageTypes = [];
-  if (nameLower.includes('fire') || nameLower.includes('flame') || nameLower.includes('burn') || nameLower.includes('bonfire') || nameLower.includes('scorch') || nameLower.includes('meteor')) {
-    damageTypes.push('fire');
-  }
-  if (nameLower.includes('ice') || nameLower.includes('frost') || nameLower.includes('snow') || nameLower.includes('cold') || nameLower.includes('sleet')) {
-    damageTypes.push('cold');
-  }
-  if (nameLower.includes('thunder') || nameLower.includes('shatter') || nameLower.includes('clap') || nameLower.includes('wave')) {
-    damageTypes.push('thunder');
-  }
-  if (nameLower.includes('lightning') || nameLower.includes('shock') || nameLower.includes('bolt')) {
-    damageTypes.push('lightning');
-  }
-  if (nameLower.includes('acid')) {
-    damageTypes.push('acid');
-  }
-  if (nameLower.includes('poison') || nameLower.includes('sick')) {
-    damageTypes.push('poison');
-  }
-  if (
-    nameLower.includes('necro') ||
-    nameLower.includes('death') ||
-    nameLower.includes('vampiric') ||
-    nameLower.includes('chill') ||
-    nameLower.includes('harm') ||
-    nameLower.includes('blight')
-  ) {
-    damageTypes.push('necrotic');
-  }
-  if (nameLower.includes('radiant') || nameLower.includes('sacred') || nameLower.includes('guiding') || nameLower.includes('sun') || nameLower.includes('dawn')) {
-    damageTypes.push('radiant');
-  }
-  if (nameLower.includes('psychic') || nameLower.includes('mind') || nameLower.includes('intellect') || nameLower.includes('mockery') || nameLower.includes('madness') || nameLower.includes('blast')) {
-    damageTypes.push('psychic');
-  }
-  if (nameLower.includes('force') || nameLower.includes('magic') || nameLower.includes('missile')) {
-    damageTypes.push('force');
-  }
-  if (nameLower.includes('bludgeon') || nameLower.includes('strike') || nameLower.includes('earthquake') || nameLower.includes('stone') || nameLower.includes('meteor') || nameLower.includes('erupt')) {
-    damageTypes.push('bludgeoning');
-  }
-  if (nameLower.includes('pierc') || nameLower.includes('spike') || nameLower.includes('thorn') || nameLower.includes('knife') || nameLower.includes('arrow')) {
-    damageTypes.push('piercing');
-  }
-  if (nameLower.includes('slash') || nameLower.includes('blade') || nameLower.includes('sword')) {
-    damageTypes.push('slashing');
-  }
-
-  let ritual = nameLower.includes('ritual');
-
+// Generic neutral default fallback used only when a spell field is entirely absent from wiki page and master index
+export function getHeuristicSpell(name, level = 1, school = 'Abjuration') {
   const levelStr = level === 0 ? 'cantrip' : `level ${level} spell`;
-  const desc = `A powerful ${school} ${levelStr} that targets a range of ${rangeLabel} with a duration of ${duration}.`;
-
   return {
-    castingTime,
-    range,
-    rangeLabel,
-    damageTypes: [...new Set(damageTypes)],
-    duration,
-    concentration,
-    ritual,
-    desc
+    castingTime: '1 action',
+    range: 18,
+    rangeLabel: '18m',
+    damageTypes: [],
+    duration: 'Instantaneous',
+    concentration: false,
+    ritual: false,
+    desc: `A ${school} ${levelStr}.`
   };
 }
 
@@ -279,7 +112,8 @@ export async function fetchSpellDetails(spellName, fallbackLevel = null, fallbac
       if (data.error) throw new Error(data.error.info || 'API Error');
     }
 
-    const html = data.parse.text['*'];
+    const html = data?.parse?.text?.['*'];
+    if (!html) throw new Error('Parsed HTML content missing from API response');
     const cleanHtml = html
       .replace(/<[^>]+>/g, ' ')
       .replace(/&#160;/g, ' ')
@@ -499,27 +333,7 @@ export async function fetchSpellDetails(spellName, fallbackLevel = null, fallbac
 async function main() {
   const existingSpellsMap = smolToml.parse(fs.readFileSync(SPELLS_TOML_PATH, 'utf8'));
   const spellNames = Object.keys(existingSpellsMap);
-  
-  let fallbackSchoolLevelMap = {};
-  
-  // Try to parse from spells.js if it contains SPELLS_BY_SCHOOL
-  try {
-    const originalSpellsJsContent = fs.readFileSync(SPELLS_JS_PATH, 'utf8');
-    const spellsBySchoolMatch = originalSpellsJsContent.match(/const SPELLS_BY_SCHOOL = (\{[\s\S]*?\n\});/);
-    if (spellsBySchoolMatch) {
-      const SPELLS_BY_SCHOOL = Function(`return ${spellsBySchoolMatch[1]}`)();
-      for (const [school, levels] of Object.entries(SPELLS_BY_SCHOOL)) {
-        for (const [levelStr, names] of Object.entries(levels)) {
-          const level = parseInt(levelStr, 10);
-          for (const name of names) {
-            fallbackSchoolLevelMap[name] = { school, level };
-          }
-        }
-      }
-    }
-  } catch (err) {
-    // Ignore, spells.js might already have been cleaned
-  }
+  const fallbackSchoolLevelMap = {};
   
   console.log(`Found ${spellNames.length} spells in spells.toml.`);
   
@@ -560,7 +374,7 @@ async function main() {
   console.log(`Total number of spells: ${spellNames.length}`);
   console.log(`Number of spells successfully scraped: ${scrapedCount}`);
   console.log(`Number of spells failed/missing (fell back to heuristics): ${fallbackCount}`);
-  console.log('Spells details map has been successfully updated in js/data/spells.toml');
+  console.log('Spells details map has been successfully updated in src/data/toml/spells.toml');
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
