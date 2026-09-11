@@ -6,187 +6,20 @@ import * as smolToml from 'smol-toml';
 // Helper to get __dirname in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const SPELLS_JS_PATH = path.join(__dirname, '../js/data/spells.js');
 const SPELLS_TOML_PATH = path.join(__dirname, '../src/data/toml/spells.toml');
 
-// Duplicate of heuristic fallback logic from spells.js (to enrich missing spells)
-export function getHeuristicSpell(name, level, school) {
-  const nameLower = name.toLowerCase();
-
-  let castingTime = '1 action';
-  if (
-    nameLower.includes('shield') ||
-    nameLower.includes('counter') ||
-    nameLower.includes('absorb') ||
-    nameLower.includes('rebuke') ||
-    nameLower.includes('feather fall')
-  ) {
-    castingTime = '1 reaction';
-  } else if (
-    nameLower.includes('healing word') ||
-    nameLower.includes('misty') ||
-    nameLower.includes('smite') ||
-    nameLower.includes('hunter\'s') ||
-    nameLower.includes('weapon') ||
-    nameLower.includes('retreat')
-  ) {
-    castingTime = '1 bonus action';
-  } else if (
-    nameLower.includes('ritual') ||
-    nameLower.includes('identify') ||
-    nameLower.includes('find') ||
-    nameLower.includes('commune') ||
-    nameLower.includes('teleportation circle')
-  ) {
-    castingTime = '10 minutes';
-  }
-
-  let range = 18;
-  if (nameLower.includes('self')) {
-    range = 0;
-  } else if (
-    nameLower.includes('touch') ||
-    nameLower.includes('cure') ||
-    nameLower.includes('inflict') ||
-    nameLower.includes('lay') ||
-    nameLower.includes('hands')
-  ) {
-    range = 0;
-  } else if (
-    nameLower.includes('bolt') ||
-    nameLower.includes('ray') ||
-    nameLower.includes('arrow') ||
-    nameLower.includes('missile') ||
-    nameLower.includes('fire')
-  ) {
-    range = 36;
-  } else if (level >= 5) {
-    range = 36;
-  } else if (level >= 3) {
-    range = 27;
-  }
-  
-  let rangeLabel = range === 0 ? 'Self/Touch' : (range >= 36 ? '36m+' : `${range}m`);
-
-  let concentration = false;
-  if (
-    school === 'Divination' ||
-    school === 'Illusion' ||
-    nameLower.includes('detect') ||
-    nameLower.includes('hold') ||
-    nameLower.includes('suggest') ||
-    nameLower.includes('bless') ||
-    nameLower.includes('bane') ||
-    nameLower.includes('hex') ||
-    nameLower.includes('mark') ||
-    nameLower.includes('aura') ||
-    nameLower.includes('fly') ||
-    nameLower.includes('haste') ||
-    nameLower.includes('slow') ||
-    nameLower.includes('wall') ||
-    nameLower.includes('sphere') ||
-    nameLower.includes('cloud') ||
-    nameLower.includes('pattern') ||
-    nameLower.includes('polymorph') ||
-    nameLower.includes('control') ||
-    nameLower.includes('animate')
-  ) {
-    concentration = true;
-  }
-
-  let duration = 'Instantaneous';
-  if (concentration) {
-    if (level === 0 || level === 1) {
-      duration = 'Up to 1 minute';
-    } else if (level >= 2 && level <= 4) {
-      duration = 'Up to 10 minutes';
-    } else {
-      duration = 'Up to 1 hour';
-    }
-  } else {
-    if (
-      nameLower.includes('armor') ||
-      nameLower.includes('ward') ||
-      nameLower.includes('mind')
-    ) {
-      duration = '8 hours';
-    } else if (
-      nameLower.includes('shield') ||
-      nameLower.includes('strike') ||
-      nameLower.includes('touch')
-    ) {
-      duration = '1 round';
-    } else if (
-      nameLower.includes('charm') ||
-      nameLower.includes('sleep')
-    ) {
-      duration = '1 hour';
-    }
-  }
-
-  const damageTypes = [];
-  if (nameLower.includes('fire') || nameLower.includes('flame') || nameLower.includes('burn') || nameLower.includes('bonfire') || nameLower.includes('scorch') || nameLower.includes('meteor')) {
-    damageTypes.push('fire');
-  }
-  if (nameLower.includes('ice') || nameLower.includes('frost') || nameLower.includes('snow') || nameLower.includes('cold') || nameLower.includes('sleet')) {
-    damageTypes.push('cold');
-  }
-  if (nameLower.includes('thunder') || nameLower.includes('shatter') || nameLower.includes('clap') || nameLower.includes('wave')) {
-    damageTypes.push('thunder');
-  }
-  if (nameLower.includes('lightning') || nameLower.includes('shock') || nameLower.includes('bolt')) {
-    damageTypes.push('lightning');
-  }
-  if (nameLower.includes('acid')) {
-    damageTypes.push('acid');
-  }
-  if (nameLower.includes('poison') || nameLower.includes('sick')) {
-    damageTypes.push('poison');
-  }
-  if (
-    nameLower.includes('necro') ||
-    nameLower.includes('death') ||
-    nameLower.includes('vampiric') ||
-    nameLower.includes('chill') ||
-    nameLower.includes('harm') ||
-    nameLower.includes('blight')
-  ) {
-    damageTypes.push('necrotic');
-  }
-  if (nameLower.includes('radiant') || nameLower.includes('sacred') || nameLower.includes('guiding') || nameLower.includes('sun') || nameLower.includes('dawn')) {
-    damageTypes.push('radiant');
-  }
-  if (nameLower.includes('psychic') || nameLower.includes('mind') || nameLower.includes('intellect') || nameLower.includes('mockery') || nameLower.includes('madness') || nameLower.includes('blast')) {
-    damageTypes.push('psychic');
-  }
-  if (nameLower.includes('force') || nameLower.includes('magic') || nameLower.includes('missile')) {
-    damageTypes.push('force');
-  }
-  if (nameLower.includes('bludgeon') || nameLower.includes('strike') || nameLower.includes('earthquake') || nameLower.includes('stone') || nameLower.includes('meteor') || nameLower.includes('erupt')) {
-    damageTypes.push('bludgeoning');
-  }
-  if (nameLower.includes('pierc') || nameLower.includes('spike') || nameLower.includes('thorn') || nameLower.includes('knife') || nameLower.includes('arrow')) {
-    damageTypes.push('piercing');
-  }
-  if (nameLower.includes('slash') || nameLower.includes('blade') || nameLower.includes('sword')) {
-    damageTypes.push('slashing');
-  }
-
-  let ritual = nameLower.includes('ritual');
-
+// Generic neutral default fallback used only when a spell field is entirely absent from wiki page and master index
+export function getHeuristicSpell(name, level = 1, school = 'Abjuration') {
   const levelStr = level === 0 ? 'cantrip' : `level ${level} spell`;
-  const desc = `A powerful ${school} ${levelStr} that targets a range of ${rangeLabel} with a duration of ${duration}.`;
-
   return {
-    castingTime,
-    range,
-    rangeLabel,
-    damageTypes: [...new Set(damageTypes)],
-    duration,
-    concentration,
-    ritual,
-    desc
+    castingTime: '1 action',
+    range: 18,
+    rangeLabel: '18m',
+    damageTypes: [],
+    duration: 'Instantaneous',
+    concentration: false,
+    ritual: false,
+    desc: `A ${school} ${levelStr}.`
   };
 }
 
@@ -194,37 +27,83 @@ function escapeRegex(string) {
   return string.replace(/[/\-\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
-export async function fetchSpellDetails(spellName) {
-  // Normalize spelling to match wiki URL keys
-  // Normalize spelling to match wiki URL keys
-  let normalizedName = spellName
-    .replace(/\u0027/g, '\u2019'); // convert normal quote to typographic apostrophe
+let cachedSpellIndex = null;
 
-  // Handle special case override mappings
-  if (normalizedName === "True Strike") {
-    normalizedName = "Truestrike";
+export async function fetchSpellIndex() {
+  if (cachedSpellIndex) return cachedSpellIndex;
+  const indexUrl = 'https://frostmark-rpg.fandom.com/api.php?action=parse&page=Spell_List&format=json';
+  try {
+    const res = await fetch(indexUrl);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const html = data?.parse?.text?.['*'] || '';
+    const schools = ['Abjuration', 'Conjuration', 'Divination', 'Enchantment', 'Evocation', 'Illusion', 'Transmutation', 'Vismancy'];
+    const spellMap = {};
+    const schoolSections = html.split(/<h2[^>]*>/i);
+
+    for (const sSec of schoolSections) {
+      const schoolName = schools.find(s => sSec.includes(`id="${s}"`));
+      if (!schoolName) continue;
+
+      const levelSections = sSec.split(/<h3[^>]*>/i);
+      for (const lSec of levelSections) {
+        let level = null;
+        if (/Cantrips/i.test(lSec.slice(0, 100))) {
+          level = 0;
+        } else {
+          const lvlMatch = lSec.slice(0, 100).match(/Level\s*(\d+)/i);
+          if (lvlMatch) level = parseInt(lvlMatch[1], 10);
+        }
+        if (level === null) continue;
+
+        const linkRegex = /<a\s+[^>]*title="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+        let m;
+        while ((m = linkRegex.exec(lSec)) !== null) {
+          const title = m[1].replace(/ \(page does not exist\)/g, '').trim();
+          const text = m[2].replace(/<[^>]+>/g, '').trim();
+          spellMap[title.toLowerCase()] = { school: schoolName, level };
+          spellMap[text.toLowerCase()] = { school: schoolName, level };
+        }
+      }
+    }
+    cachedSpellIndex = spellMap;
+    return spellMap;
+  } catch (err) {
+    return {};
   }
-  if (normalizedName === "Arms Of An’her") {
-    normalizedName = "Arms_of_An’her";
-  }
-  if (normalizedName === "Hunger Of An’her") {
-    normalizedName = "Hunger_of_An’her";
-  }
+}
+
+export async function fetchSpellDetails(spellName, fallbackLevel = null, fallbackSchool = null) {
+  // Normalize typography: standard ASCII apostrophe to typographic right single quote
+  let normalizedName = spellName.replace(/\u0027/g, '\u2019');
 
   const apiUrl = `https://frostmark-rpg.fandom.com/api.php?action=parse&page=${encodeURIComponent(normalizedName.replace(/\s+/g, '_'))}&format=json`;
   
   try {
-    // First attempt: use normalizedName
     let res = await fetch(apiUrl);
     if (!res.ok) throw new Error(`HTTP error ${res.status}`);
     let data = await res.json();
+
+    // If direct match failed, try lowercase for minor grammatical words ("of", "the", "and", etc.)
     if (data.error) {
-      // Fallback: search for correct title
-      const searchUrl = `https://frostmark-rpg.fandom.com/api.php?action=query&list=search&srsearch=${encodeURIComponent(spellName)}&format=json`;
+      const titleCased = normalizedName.replace(/\b(Of|The|And|In|A|An|From|To)\b/g, m => m.toLowerCase());
+      if (titleCased !== normalizedName) {
+        const casedUrl = `https://frostmark-rpg.fandom.com/api.php?action=parse&page=${encodeURIComponent(titleCased.replace(/\s+/g, '_'))}&format=json`;
+        const cres = await fetch(casedUrl);
+        if (cres.ok) {
+          const cdata = await cres.json();
+          if (!cdata.error) data = cdata;
+        }
+      }
+    }
+
+    // If still not found, search the wiki for the closest matching page title
+    if (data.error) {
+      const searchUrl = `https://frostmark-rpg.fandom.com/api.php?action=query&list=search&srsearch=${encodeURIComponent(normalizedName)}&format=json`;
       const sres = await fetch(searchUrl);
       if (!sres.ok) throw new Error(`Search HTTP error ${sres.status}`);
       const sdata = await sres.json();
-      const pageTitle = sdata.query.search[0]?.title;
+      const pageTitle = sdata.query?.search?.[0]?.title;
       if (!pageTitle) throw new Error('No search result for title correction');
       const correctedUrl = `https://frostmark-rpg.fandom.com/api.php?action=parse&page=${encodeURIComponent(pageTitle.replace(/\s+/g, '_'))}&format=json`;
       res = await fetch(correctedUrl);
@@ -232,29 +111,40 @@ export async function fetchSpellDetails(spellName) {
       data = await res.json();
       if (data.error) throw new Error(data.error.info || 'API Error');
     }
-    const html = data.parse.text['*'];
+
+    const html = data?.parse?.text?.['*'];
+    if (!html) throw new Error('Parsed HTML content missing from API response');
     const cleanHtml = html
-      .replace(/<[^>]+>/g, ' ')
+      .replace(/<[^>]+>/g, '')
       .replace(/&#160;/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ');
     
-    // Casting Time: matches words after "Casting Time" up to first space or boundary
-    const castingTimeMatch = cleanHtml.match(/Casting\s+Time\s*:\s*(\d+\s+\w+|[\w*]+)/i);
-    let castingTime = castingTimeMatch ? castingTimeMatch[1].trim() : null;
-    
-    // Clean complex casting time (e.g. Counterspell reaction text)
-    if (castingTime && castingTime.toLowerCase().startsWith('reaction')) {
-      castingTime = 'Reaction*';
+    const castingTimeMatch = cleanHtml.match(/Casting\s+Time\s*:\s*([^]+?)(?:Range(?:\/Area)?|Duration|Components|Attack|Effect|\[|$)/i);
+    let rawCastingTime = castingTimeMatch ? castingTimeMatch[1].trim() : null;
+    let castingTime = rawCastingTime;
+    if (castingTime) {
+      if (castingTime.includes('*')) {
+        castingTime = 'Reaction*';
+      } else {
+        castingTime = castingTime.replace(/\s+or\s+ritual\b/i, '').trim();
+        const match = castingTime.match(/^([a-zA-Z0-9\s]+?)(?:,|$)/);
+        if (match) castingTime = match[1].trim();
+        if (/^reaction$/i.test(castingTime)) {
+          castingTime = 'Reaction*';
+        }
+      }
     }
 
-    // Range/Area: matches words/digits after "Range" or "Range/Area" up to next space or label
-    const rangeMatch = cleanHtml.match(/Range(?:\/Area)?\s*:\s*([^\s]+)/i);
+    const rangeMatch = cleanHtml.match(/Range(?:\/Area)?\s*:\s*([^]+?)(?:Duration|Components|Attack|Effect|\[|$)/i);
     const rawRange = rangeMatch ? rangeMatch[1].trim() : null;
     
-    // Duration: matches text after "Duration" up to the next section keyword (Attack/Save, Components, etc.)
-    const durationMatch = cleanHtml.match(/Duration\s*:\s*(.*?)\s*(?:Attack\/Save|Components|Effect|Choose|$)/i);
-    const rawDuration = durationMatch ? durationMatch[1].trim() : null;
+    const durationMatch = cleanHtml.match(/Duration\s*:\s*([^]+?)(?:Attack(?:\/Save)?|Components|Effect|Choose|\[|$)/i);
+    let rawDuration = durationMatch ? durationMatch[1].trim() : null;
+    if (rawDuration && rawDuration.length > 50) {
+      const cut = rawDuration.match(/^([a-zA-Z0-9.,\s-]{1,50}?)(?:\s+[A-Z][a-z]+|\.|$)/);
+      if (cut) rawDuration = cut[1].trim();
+    }
 
     // Parse level, school, and concentration from parenthetical header metadata
     // (e.g. "(1st, div., conc., ritual)" — allow trailing text after school/conc)
@@ -325,20 +215,36 @@ export async function fetchSpellDetails(spellName) {
       }
     }
     
-    // If essential metadata can't be parsed (non-standard wiki layouts), fall back
-    // to the heuristic for those fields but KEEP the real fetched description.
+    // Resolve missing school or level: first try wiki master spell index, then explicit fallbacks
+    if (level === null || school === null) {
+      const index = await fetchSpellIndex();
+      const indexed = index[spellName.toLowerCase()] || index[normalizedName.toLowerCase()];
+      if (indexed) {
+        if (level === null) level = indexed.level;
+        if (school === null) school = indexed.school;
+      }
+      if (level === null && fallbackLevel !== null && fallbackLevel !== undefined) {
+        level = fallbackLevel;
+      }
+      if (school === null && fallbackSchool) {
+        school = fallbackSchool;
+      }
+    }
+
+    // Fallback to heuristic values for missing non-standard layout sections while retaining scraped description
     if (!castingTime || !rawRange || !rawDuration || level === null || school === null) {
-      const heuristic = getHeuristicSpell(spellName, level ?? 1, school ?? 'Abjuration');
+      const heuristicLevel = level ?? (fallbackLevel !== null && fallbackLevel !== undefined ? fallbackLevel : 1);
+      const heuristicSchool = school ?? fallbackSchool ?? 'Abjuration';
+      const heuristic = getHeuristicSpell(spellName, heuristicLevel, heuristicSchool);
       if (!castingTime) castingTime = heuristic.castingTime;
       if (!rawRange) rawRange = `${heuristic.range}m`;
       if (!rawDuration) rawDuration = heuristic.duration;
-      if (level === null) level = heuristic.level;
-      if (school === null) school = heuristic.school;
+      if (level === null) level = heuristicLevel;
+      if (school === null) school = heuristicSchool;
       if (!parentheticalConc) parentheticalConc = heuristic.concentration;
       if (!parentheticalRitual) parentheticalRitual = heuristic.ritual;
     }
     
-    // Concentration & Ritual
     let concentration = parentheticalConc;
     let duration = rawDuration;
     if (/concentration/i.test(rawDuration) || /conc/i.test(rawDuration)) {
@@ -353,8 +259,7 @@ export async function fetchSpellDetails(spellName) {
       ritual = true;
     }
     
-    // Parse range and rangeLabel
-    let range = 18; // default
+    let range = 18;
     let rangeLabel = rawRange;
     if (/self/i.test(rawRange)) {
       range = 0;
@@ -396,7 +301,6 @@ export async function fetchSpellDetails(spellName) {
     
     const desc = descParagraphs.join(' ');
     
-    // Scan damage types
     const DAMAGE_TYPES_LIST = [
       'acid', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'poison',
       'psychic', 'radiant', 'thunder', 'bludgeoning', 'piercing', 'slashing'
@@ -429,27 +333,7 @@ export async function fetchSpellDetails(spellName) {
 async function main() {
   const existingSpellsMap = smolToml.parse(fs.readFileSync(SPELLS_TOML_PATH, 'utf8'));
   const spellNames = Object.keys(existingSpellsMap);
-  
-  let fallbackSchoolLevelMap = {};
-  
-  // Try to parse from spells.js if it contains SPELLS_BY_SCHOOL
-  try {
-    const originalSpellsJsContent = fs.readFileSync(SPELLS_JS_PATH, 'utf8');
-    const spellsBySchoolMatch = originalSpellsJsContent.match(/const SPELLS_BY_SCHOOL = (\{[\s\S]*?\n\});/);
-    if (spellsBySchoolMatch) {
-      const SPELLS_BY_SCHOOL = Function(`return ${spellsBySchoolMatch[1]}`)();
-      for (const [school, levels] of Object.entries(SPELLS_BY_SCHOOL)) {
-        for (const [levelStr, names] of Object.entries(levels)) {
-          const level = parseInt(levelStr, 10);
-          for (const name of names) {
-            fallbackSchoolLevelMap[name] = { school, level };
-          }
-        }
-      }
-    }
-  } catch (err) {
-    // Ignore, spells.js might already have been cleaned
-  }
+  const fallbackSchoolLevelMap = {};
   
   console.log(`Found ${spellNames.length} spells in spells.toml.`);
   
@@ -459,14 +343,16 @@ async function main() {
   
   for (const spellName of spellNames) {
     console.log(`Processing spell: ${spellName}...`);
-    let details = await fetchSpellDetails(spellName);
-    
     const existingSpell = existingSpellsMap[spellName];
     const fallbackInfo = fallbackSchoolLevelMap[spellName] || {};
     const fallbackSchool = existingSpell?.school || fallbackInfo.school || 'Abjuration';
     const fallbackLevel = existingSpell?.level !== undefined ? existingSpell.level : (fallbackInfo.level !== undefined ? fallbackInfo.level : 1);
-    
+
+    let details = await fetchSpellDetails(spellName, fallbackLevel, fallbackSchool);
+
     if (details) {
+      details.school = details.school || fallbackSchool;
+      details.level = details.level !== undefined && details.level !== null ? details.level : fallbackLevel;
       newSpellDetailsMap[spellName] = details;
       scrapedCount++;
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -488,7 +374,7 @@ async function main() {
   console.log(`Total number of spells: ${spellNames.length}`);
   console.log(`Number of spells successfully scraped: ${scrapedCount}`);
   console.log(`Number of spells failed/missing (fell back to heuristics): ${fallbackCount}`);
-  console.log('Spells details map has been successfully updated in js/data/spells.toml');
+  console.log('Spells details map has been successfully updated in src/data/toml/spells.toml');
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
