@@ -112,4 +112,32 @@ describe('Spells and Cantrips Metadata verification', () => {
       });
     });
   });
+
+  test('Verify generic ingestion of previously hardcoded spells without special overrides', async () => {
+    const { fetchSpellDetails } = await import('../scripts/enrich_spells.js');
+
+    const trueStrike = await fetchSpellDetails('True Strike');
+    expect(trueStrike).toBeDefined();
+    expect(trueStrike.level).toBe(0);
+    expect(trueStrike.school).toBe('Divination');
+    expect(trueStrike.castingTime).toBe('1 action');
+
+    const armsOfAnher = await fetchSpellDetails("Arms of An'her");
+    expect(armsOfAnher).toBeDefined();
+    expect(armsOfAnher.level).toBe(1);
+    expect(armsOfAnher.school).toBe('Conjuration');
+
+    const hungerOfAnher = await fetchSpellDetails("Hunger of An'her");
+    expect(hungerOfAnher).toBeDefined();
+    expect(hungerOfAnher.level).toBe(3);
+    expect(hungerOfAnher.school).toBe('Conjuration');
+    expect(hungerOfAnher.concentration).toBe(true);
+
+    const counterspell = await fetchSpellDetails('Counterspell');
+    expect(counterspell).toBeDefined();
+    expect(counterspell.castingTime).toBe('Reaction*');
+    expect(counterspell.level).toBe(3);
+    expect(counterspell.school).toBe('Abjuration');
+  });
 });
+
