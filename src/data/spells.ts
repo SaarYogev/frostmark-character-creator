@@ -10,6 +10,7 @@ export interface SpellData {
   rangeLabel?: string;
   duration: string;
   concentration: boolean;
+  ritual: boolean;
   damageTypes?: string[];
   desc: string;
 }
@@ -24,13 +25,13 @@ for (const [name, override] of Object.entries(tomlOverrides as any)) {
 
 // Export sorted list of cantrips (level 0)
 export const CANTRIPS: SpellData[] = Object.entries(merged)
-  .map(([name, data]) => ({ name, ...data }))
+  .map(([name, data]) => ({ name, ...(data as any), ritual: Boolean((data as any)?.ritual) }))
   .filter(spell => spell.level === 0)
   .sort((a, b) => a.name.localeCompare(b.name));
 
 // Export list of active spells (level 1-9)
 export const SPELLS: SpellData[] = Object.entries(merged)
-  .map(([name, data]) => ({ name, ...data }))
+  .map(([name, data]) => ({ name, ...(data as any), ritual: Boolean((data as any)?.ritual) }))
   .filter(spell => spell.level > 0);
 
 // Export spell limit rules matching slot types
