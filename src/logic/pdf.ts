@@ -11,6 +11,7 @@ import {
   getHitDiceBreakdown,
   calculatePotentialGained,
 } from './state';
+import { resolveIdentityField } from '../types/Character';
 export { importFromPDF } from './pdfImport';
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
@@ -101,8 +102,12 @@ export async function exportToPDF(state: any, racesData: any[], backgroundsData:
 }
 
 function fillIdentity(form: any, state: any, finalStats: Record<string, number>) {
-  const charName = state.characterName ?? state.identity?.characterName ?? '';
-  const playerName = state.playerName ?? state.identity?.playerName ?? '';
+  /*
+   * Prioritize user edits in state.identity while falling back to root-level properties
+   * for backward compatibility with older saved state models and headless test states.
+   */
+  const charName = resolveIdentityField(state.identity?.characterName, state.characterName);
+  const playerName = resolveIdentityField(state.identity?.playerName, state.playerName);
 
   let raceStr = '—';
   if (typeof state.race === 'string') {
@@ -132,12 +137,12 @@ function fillIdentity(form: any, state: any, finalStats: Record<string, number>)
   safeSetText(form, 'BACKGROUND', bgStr);
   safeSetText(form, 'AOs  LEVEL', buildAOLevelString(state));
 
-  const appearance = state.appearance ?? state.identity?.appearance ?? {};
+  const appearance = state.identity?.appearance ?? state.appearance ?? {};
   safeSetText(form, 'Appearance Age', appearance.age ?? '');
   safeSetText(form, 'Appearance Height', appearance.height ?? '');
   safeSetText(form, 'Appearance Weight', appearance.weight ?? '');
   safeSetText(form, 'Appearance Additional', appearance.notes ?? '');
-  safeSetText(form, 'Personality and Backstory', state.personalityBackstory ?? state.identity?.personalityBackstory ?? '');
+  safeSetText(form, 'Personality and Backstory', state.identity?.personalityBackstory ?? state.personalityBackstory ?? '');
 
   const profsList: string[] = [];
   if (state.languages && state.languages.length) {

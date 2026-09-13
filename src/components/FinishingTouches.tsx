@@ -88,7 +88,7 @@ const FinishingTouches: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Name</span>
-              <strong style={{ color: '#fff' }}>{state.characterName || '—'}</strong>
+              <strong style={{ color: '#fff' }}>{state.identity?.characterName || state.characterName || '—'}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Race</span>
