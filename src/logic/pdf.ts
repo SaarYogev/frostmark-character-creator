@@ -1,7 +1,14 @@
 import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants';
 import { getAbilityById } from '../data/abilities';
-import { getFinalCharacteristics, getCharacteristicModifier, getProficiencyBonus, calculateSpentAccomplishmentPoints } from './state';
+import { ORIGINS } from '../data/origins';
+import {
+  getFinalCharacteristics,
+  getCharacteristicModifier,
+  getProficiencyBonus,
+  calculateHPBonus,
+  calculatePotentialGained,
+} from './state';
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
@@ -19,7 +26,7 @@ function safeSetText(form: any, fieldName: string, value: any, fontSize?: number
       field.setFontSize(fontSize);
     }
   } catch {
-    // Field may not exist in all sheet versions; skip silently
+    /* Silent catch preserves compatibility with varying PDF template versions lacking specific optional fields */
   }
 }
 
@@ -28,7 +35,7 @@ function safeCheck(form: any, fieldName: string, checked: boolean) {
     const field = form.getCheckBox(fieldName);
     if (checked) field.check(); else field.uncheck();
   } catch {
-    // Same rationale as safeSetText
+    /* Silent catch preserves compatibility with varying PDF template versions lacking specific checkboxes */
   }
 }
 
@@ -42,6 +49,34 @@ function formatModifier(mod: number): string {
   return mod >= 0 ? `+${mod}` : `${mod}`;
 }
 
+const SAVE_FIELD_MAP: Record<string, { text: string; check: string }> = {
+  Brawn: { text: 'Brawn Save', check: 'Brawn Save Check' },
+  Dexterity: { text: 'Dex Save', check: 'Dex Save Check' },
+  Vitality: { text: 'Vita Save', check: 'Vit Save Check' },
+  Intelligence: { text: 'Int Save', check: 'Int Save Check' },
+  Cunning: { text: 'Cun Save', check: 'Cun Save Check' },
+  Resolve: { text: 'Reso Save', check: 'Reso Save Check' },
+  Presence: { text: 'Presence Save', check: 'Presc Save Check' },
+  Manipulation: { text: 'Mani Save', check: 'Mani Save Check' },
+  Composure: { text: 'Comp Save', check: 'Comp Save Check' },
+};
+
+const SKILL_STAT_FIELD_MAP: Record<string, string[]> = {
+  AH: ['AH Cun', 'AH Pre'],
+  Perc: ['Perc Int', 'Perc Com'],
+  Ath: ['Ath Br', 'Ath Dex'],
+  Persu: ['Persu Int', 'Persu Com'],
+  Decep: ['Decep Pre', 'Decep Man'],
+  Sub: ['Sub Dex', 'Sub Cun'],
+  Emp: ['Emp Man', 'Emp Com'],
+  Stealth: ['Stealth Dex', 'Stealth Cun'],
+  Inv: ['Inv Cun'],
+  Surv: ['Surv Int', 'Surv Cun'],
+  Lead: ['Lead Pre', 'Lead Man'],
+  Med: ['Med Int', 'Med Cun'],
+  Occ: ['Occ Int', 'Occ Cun'],
+};
+
 export async function exportToPDF(state: any, racesData: any[], backgroundsData: any[]) {
   const pdfDoc = await loadTemplate();
   const form = pdfDoc.getForm();
@@ -52,7 +87,7 @@ export async function exportToPDF(state: any, racesData: any[], backgroundsData:
   fillAbilityScores(form, finalStats, profBonus, state);
   fillSavingThrows(form, finalStats, profBonus, state);
   fillSkills(form, finalStats, profBonus, state);
-  fillCombat(form, state, finalStats);
+  fillCombat(form, state, finalStats, racesData, profBonus);
   fillSpellcasting(form, state, finalStats, profBonus);
   fillEquipment(form, state, backgroundsData);
   fillMisc(form, state);
@@ -113,7 +148,9 @@ function fillIdentity(form: any, state: any, finalStats: Record<string, number>)
   if (state.weaponProficiencies && state.weaponProficiencies.length) {
     profsList.push(`Weapons: ${state.weaponProficiencies.join(', ')}`);
   }
-  safeSetText(form, 'Other Proficiencies & Languages', profsList.join('\n'));
+  const profsText = profsList.join('\n');
+  safeSetText(form, 'Lang/profs column', profsText);
+  safeSetText(form, 'Other Proficiencies & Languages', profsText);
 }
 
 function buildAOLevelString(state: any): string {
@@ -132,6 +169,11 @@ function fillAbilityScores(form: any, finalStats: Record<string, number>, profBo
   CHARACTERISTICS.forEach(c => {
     const score = finalStats[c.key] ?? 10;
     const mod = getCharacteristicModifier(score);
+
+    safeSetText(form, `${c.key} Ability Score`, String(score));
+    const modFieldName = c.key === 'Dexterity' ? 'Dex Ability Modifier' : `${c.key} Ability Modifier`;
+    safeSetText(form, modFieldName, formatModifier(mod));
+
     safeSetText(form, c.key, String(score));
     safeSetText(form, `${c.key} Mod`, formatModifier(mod));
   });
@@ -144,6 +186,12 @@ function fillSavingThrows(form: any, finalStats: Record<string, number>, profBon
     const statMod = getCharacteristicModifier(score);
     const isProf = Boolean(savingThrows[c.key]);
     const saveBonus = statMod + (isProf ? profBonus : 0);
+
+    const mapping = SAVE_FIELD_MAP[c.key];
+    if (mapping) {
+      safeSetText(form, mapping.text, formatModifier(saveBonus));
+      safeCheck(form, mapping.check, isProf);
+    }
     safeSetText(form, `${c.key} Save Mod`, formatModifier(saveBonus));
     safeCheck(form, `${c.key} Save Checkbox`, isProf);
   });
@@ -151,6 +199,8 @@ function fillSavingThrows(form: any, finalStats: Record<string, number>, profBon
 
 function fillSkills(form: any, finalStats: Record<string, number>, profBonus: number, state: any) {
   const skillRanks = state.skills?.skillRanks ?? state.skillRanks ?? {};
+  let perceptionTotalMod = 0;
+
   SKILLS.forEach(sk => {
     const primaryStat = sk.stats[0];
     const secondaryStat = sk.stats[1];
@@ -159,10 +209,14 @@ function fillSkills(form: any, finalStats: Record<string, number>, profBonus: nu
     const mod2 = getCharacteristicModifier(finalStats[secondaryStat] ?? 10);
 
     const rank = skillRanks[sk.name] ?? 0;
+    fillRankCheckboxes(form, sk.key, rank);
     fillRankCheckboxes(form, sk.name, rank);
 
-    const baseBonus = mod1 + mod2;
+    const statFields = SKILL_STAT_FIELD_MAP[sk.key] ?? [];
+    if (statFields[0]) safeSetText(form, statFields[0], formatModifier(mod1));
+    if (statFields[1]) safeSetText(form, statFields[1], formatModifier(mod2));
 
+    const baseBonus = mod1 + mod2;
     safeSetText(form, `${sk.name} Base Mod`, formatModifier(baseBonus));
 
     let rankBonus = 0;
@@ -174,30 +228,68 @@ function fillSkills(form: any, finalStats: Record<string, number>, profBonus: nu
 
     safeSetText(form, `${sk.name} Rank Bonus`, rankBonus > 0 ? `+${rankBonus}` : '0');
     safeSetText(form, `${sk.name} Total Mod`, formatModifier(baseBonus + rankBonus));
+
+    if (sk.name === 'Perception') {
+      perceptionTotalMod = baseBonus + rankBonus;
+    }
+  });
+
+  safeSetText(form, 'Passive Perception', String(10 + perceptionTotalMod));
+
+  const academics = state.skills?.academicsEntries ?? state.academicsEntries ?? [];
+  const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
+  const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
+  academics.slice(0, 3).forEach((entry: any, i: number) => {
+    const n = i + 1;
+    safeSetText(form, `Aca ${n} label`, entry.name ?? '');
+    fillRankCheckboxes(form, `Aca ${n}`, entry.rank ?? 0);
+    safeSetText(form, `Aca ${n} Left Stat`, 'Int');
+    safeSetText(form, `Aca ${n} Left Score`, formatModifier(intMod));
+    safeSetText(form, `Aca ${n} Right Stat`, 'Cun');
+    safeSetText(form, `Aca ${n} Right Score`, formatModifier(cunMod));
   });
 }
 
-function fillCombat(form: any, state: any, finalStats: Record<string, number>) {
+function fillCombat(form: any, state: any, finalStats: Record<string, number>, racesData: any[], profBonus: number) {
   const dexMod = getCharacteristicModifier(finalStats.Dexterity ?? 10);
   const vitMod = getCharacteristicModifier(finalStats.Vitality ?? 10);
   const currentLevel = state.identity?.level ?? state.level ?? 1;
 
+  safeSetText(form, 'Initiative', formatModifier(dexMod));
   safeSetText(form, 'Initiative Mod', formatModifier(dexMod));
-  safeSetText(form, 'Speed', String(state.customRace?.speed ?? 6));
 
-  const totalHP = (state.hpBonus ?? 0) + (vitMod * currentLevel);
-  safeSetText(form, 'HP Max', String(Math.max(1, totalHP)));
-  safeSetText(form, 'Current HP', String(Math.max(1, totalHP)));
+  const raceName = typeof state.race === 'string' ? state.race : state.race?.race;
+  const raceObj = racesData?.find((r: any) => r.name === raceName);
+  const speed = state.customRace?.speed ?? raceObj?.speed ?? 6;
+  safeSetText(form, 'Speed', String(speed));
 
-  fillWeaponsAndDefenses(form, state, finalStats);
+  const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
+  const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
+  const origin = primaryAO === 'Custom' ? customPrimaryAO : ORIGINS.find(o => o.name === primaryAO);
+  const primaryHD = origin?.hd ?? 8;
+
+  let totalHP = (state.hpBonus ?? 0) + (vitMod * currentLevel);
+  if (totalHP <= 0) {
+    totalHP = primaryHD + vitMod + calculateHPBonus(state, ORIGINS, finalStats);
+  }
+  const finalHPVal = String(Math.max(1, totalHP));
+  safeSetText(form, 'Max HP', finalHPVal);
+  safeSetText(form, 'HP Max', finalHPVal);
+  safeSetText(form, 'Current HP', finalHPVal);
+
+  safeSetText(form, 'Total HD', `${currentLevel}d${primaryHD}`);
+  safeSetText(form, 'HD', `d${primaryHD}`);
+  safeSetText(form, 'Proficiency Bonus', formatModifier(profBonus));
+
+  fillWeaponsAndDefenses(form, state, finalStats, dexMod);
 }
 
-function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string, number>) {
+function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string, number>, dexMod: number) {
   const equipmentList = state.equipment?.equipmentList ?? state.equipmentList ?? [];
   const weapons = equipmentList.filter((i: any) => i.isWeapon || i.damage);
   const armors = equipmentList.filter((i: any) => i.isArmor || i.av != null || i.category);
 
-  weapons.slice(0, 5).forEach((w: any, idx: number) => {
+  weapons.slice(0, 4).forEach((w: any, idx: number) => {
     const n = idx + 1;
     safeSetText(form, `Weapon ${n}`, w.name ?? '');
     safeSetText(form, `Weapon ${n} Hit`, w.hit ?? w.atkMod ?? '+0');
@@ -205,12 +297,32 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
     safeSetText(form, `Weapon ${n} Damage`, w.damage ?? '');
   });
 
-  armors.slice(0, 3).forEach((a: any, idx: number) => {
+  let calculatedAC = 10 + dexMod;
+  let hasBodyArmor = false;
+  let shieldBonus = 0;
+
+  armors.slice(0, 6).forEach((a: any, idx: number) => {
     const n = idx + 1;
     safeSetText(form, `Defenses ${n}`, a.name ?? '');
     safeSetText(form, `Defense ${n} AV`, a.av != null ? String(a.av) : '');
     safeSetText(form, `Defense ${n} Type`, a.category ?? a.type ?? '');
+
+    if (a.name === 'Shield' || a.category === 'Shield') {
+      shieldBonus += Number(a.av ?? a.baseAC ?? 2);
+    } else if (!hasBodyArmor && (a.av != null || a.baseAC != null)) {
+      hasBodyArmor = true;
+      const av = Number(a.av ?? a.baseAC);
+      if (a.category === 'Heavy' || a.addsDexMod === false) {
+        calculatedAC = av;
+      } else if (a.category === 'Medium') {
+        calculatedAC = av + Math.min(2, Math.max(0, dexMod));
+      } else {
+        calculatedAC = av + dexMod;
+      }
+    }
   });
+
+  safeSetText(form, 'Armor Class', String(calculatedAC + shieldBonus));
 }
 
 function fillSpellcasting(form: any, state: any, finalStats: Record<string, number>, profBonus: number) {
@@ -225,11 +337,13 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
   const spellAtkMod = profBonus + statMod;
 
   safeSetText(form, 'Spellcasting ability', statName);
+  safeSetText(form, 'Spell save', String(spellDC));
   safeSetText(form, 'Spell Save DC', String(spellDC));
+  safeSetText(form, 'Spellcasting mod', formatModifier(spellAtkMod));
   safeSetText(form, 'Spell Attack Bonus', formatModifier(spellAtkMod));
 
   const cantrips = spellcastingState.cantrips ?? [];
-  cantrips.slice(0, 6).forEach((name: string, i: number) => {
+  cantrips.slice(0, 5).forEach((name: string, i: number) => {
     safeSetText(form, `Cantrip ${i + 1}`, name);
   });
 
@@ -238,12 +352,19 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
 
   for (let lvl = 1; lvl <= 9; lvl++) {
     const maxSlots = slots[lvl] ?? getSpellSlotsForLevel(lvl);
+    safeSetText(form, `Level ${lvl} slot total`, String(maxSlots));
     safeSetText(form, `Level ${lvl} Slots Total`, String(maxSlots));
 
     const spellsOfLvl = spells.filter((s: any) => s.level === lvl);
-    spellsOfLvl.slice(0, 4).forEach((s: any, i: number) => {
+    spellsOfLvl.forEach((s: any, i: number) => {
+      safeSetText(form, `Level ${lvl} Slot ${i + 1}`, s.name);
       safeSetText(form, `Level ${lvl} Spell ${i + 1}`, s.name);
     });
+  }
+
+  const potentialLimit = calculatePotentialGained(state, ORIGINS);
+  if (potentialLimit > 0) {
+    safeSetText(form, 'Potential', String(potentialLimit));
   }
 }
 
@@ -308,8 +429,15 @@ function fillMisc(form: any, state: any) {
   if (features[0]) safeSetText(form, 'Essential Abilities 1', features[0]);
   if (features[1]) safeSetText(form, 'Essential Abilities 2', features[1]);
 
-  const additionalFeatures = features.slice(2).join('\n');
-  safeSetText(form, 'Additional Abilities column 1', additionalFeatures);
+  const remainingFeatures = features.slice(2);
+  const mid = Math.ceil(remainingFeatures.length / 2);
+  const col1Features = remainingFeatures.slice(0, mid).join('\n\n');
+  const col2Features = remainingFeatures.slice(mid).join('\n\n');
+
+  safeSetText(form, 'Additional Abilities column 1', col1Features || remainingFeatures.join('\n\n'));
+  if (col2Features) {
+    safeSetText(form, 'Additional Abilities column 2', col2Features);
+  }
 }
 
 export function downloadPDF(pdfBytes: Uint8Array, filename = 'frostmark-character.pdf') {

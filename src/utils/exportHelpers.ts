@@ -2,10 +2,12 @@ import { exportToPDF, downloadPDF } from '../logic/pdf';
 import { RACES } from '../data/races';
 import { BACKGROUNDS } from '../data/backgrounds';
 import { CharacterState } from '../types/Character';
+import { exportCharacterJSON } from '../logic/state';
 
 export function handleExportJSON(state: CharacterState) {
   const charName = state.identity?.characterName || (state as any).characterName || 'character';
-  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+  const json = exportCharacterJSON(state, RACES);
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(json);
   const downloadAnchor = document.createElement('a');
   downloadAnchor.setAttribute('href', dataStr);
   downloadAnchor.setAttribute('download', `${charName}.json`);
