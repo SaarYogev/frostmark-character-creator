@@ -30,4 +30,12 @@ describe('FinishingTouches', () => {
 
     expect(textarea).toHaveValue('Lucky feat\nDarkvision');
   });
+
+  it('renders Hit Points (HP) and Hit Dice in the character summary overview', () => {
+    renderWithProvider();
+
+    expect(screen.getByText('Hit Points (HP)')).toBeInTheDocument();
+    expect(screen.getByText('Hit Dice')).toBeInTheDocument();
+    expect(screen.getByText(/Max/)).toBeInTheDocument();
+  });
 });

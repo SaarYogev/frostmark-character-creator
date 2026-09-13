@@ -8,6 +8,8 @@ import {
   getFinalCharacteristics,
   getProficiencyBonus,
   getCharacteristicModifier,
+  calculateTotalHP,
+  getHitDiceBreakdown,
 } from '../logic/state';
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
@@ -36,6 +38,8 @@ export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHom
   const currentLevel = state.identity?.level ?? state.level ?? 1;
   const profBonus = getProficiencyBonus(currentLevel);
   const finalStats = getFinalCharacteristics(state, RACES);
+  const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
+  const totalHD = getHitDiceBreakdown(state, ORIGINS);
 
   const charName = state.identity?.characterName || '—';
 
@@ -127,9 +131,17 @@ export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHom
           <span className="summary-label" style={{ color: '#a0a5c0' }}>Ability Origins</span>
           <span className="summary-val" style={{ fontWeight: 'bold' }}>{aoDisplay}</span>
         </div>
-        <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
           <span className="summary-label" style={{ color: '#a0a5c0' }}>Level / Prof</span>
           <span className="summary-val" style={{ fontWeight: 'bold' }}>{currentLevel} / +{profBonus}</span>
+        </div>
+        <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+          <span className="summary-label" style={{ color: '#a0a5c0' }}>Hit Points (HP)</span>
+          <span className="summary-val" style={{ fontWeight: 'bold', color: 'var(--accent-color, #4a90e2)' }}>{totalHP} Max</span>
+        </div>
+        <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <span className="summary-label" style={{ color: '#a0a5c0' }}>Hit Dice</span>
+          <span className="summary-val" style={{ fontWeight: 'bold' }}>{totalHD}</span>
         </div>
 
         <div
