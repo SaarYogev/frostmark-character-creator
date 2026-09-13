@@ -49,10 +49,12 @@ describe('Layout', () => {
     expect(screen.getByTestId('main-content')).toBeInTheDocument();
   });
 
-  it('renders character summary aside', () => {
+  it('renders character summary aside with HP and HD stats', () => {
     renderLayout(0);
 
     expect(screen.getByText('Character Summary')).toBeInTheDocument();
+    expect(screen.getAllByText('Hit Points (HP)')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Hit Dice')[0]).toBeInTheDocument();
     expect(screen.getAllByText(/Save Data/)[0]).toBeInTheDocument();
     expect(screen.getAllByText(/Download Character Sheet/)[0]).toBeInTheDocument();
   });

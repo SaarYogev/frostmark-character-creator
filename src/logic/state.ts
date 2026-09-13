@@ -513,47 +513,126 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
   return total;
 }
 
-export function calculateHPBonus(state: any, originsData: OriginData[], finalStats: Record<string, number>): number {
-  const vit = finalStats?.Vitality ?? 10;
-  const vitMod = Math.floor((vit - 10) / 2);
-  
-  const level = state.identity?.level ?? state.level ?? 1;
-  let total = 0;
+export function getPrimaryHDForLevel(
+  level: number,
+  state: any,
+  originsData: OriginData[]
+): number {
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
   const hasLevelSelections = levelSelections && Object.keys(levelSelections).length > 0;
 
-  for (let i = 2; i <= level; i++) {
-    let hd = 8;
-    if (hasLevelSelections) {
-      const selection = levelSelections[i];
-      if (selection && selection.primaryAO) {
-        let origin = originsData.find(o => o.name === selection.primaryAO);
-        if (!origin && selection.primaryAO === 'Custom') {
-          origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-        } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
-          const customList = state.ao?.customAOs ?? state.customAOs;
-          origin = customList.find((o: any) => o.name === selection.primaryAO);
-        }
-        hd = origin?.hd ?? 8;
-      } else {
-        const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-        const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-        const origin = primaryAO === 'Custom'
-          ? customPrimaryAO
-          : originsData.find(o => o.name === primaryAO);
-        hd = origin?.hd ?? 8;
-      }
-    } else {
-      const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-      const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-      const origin = primaryAO === 'Custom'
-        ? customPrimaryAO
-        : originsData.find(o => o.name === primaryAO);
-      hd = origin?.hd ?? 8;
+  if (hasLevelSelections && levelSelections[level]?.primaryAO) {
+    const primaryName = levelSelections[level].primaryAO;
+    let origin = originsData.find(o => o.name === primaryName);
+    if (!origin && primaryName === 'Custom') {
+      origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
+    } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
+      const customList = state.ao?.customAOs ?? state.customAOs;
+      origin = customList.find((o: any) => o.name === primaryName);
     }
+    return origin?.hd ?? 8;
+  }
+
+  const fallbackPrimary = state.ao?.primaryAO ?? state.primaryAO;
+  const customPrimary = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
+  const origin = fallbackPrimary === 'Custom'
+    ? customPrimary
+    : originsData.find(o => o.name === fallbackPrimary);
+  return origin?.hd ?? 8;
+}
+
+export function hasDwarvenToughness(state: any, raceData?: any[]): boolean {
+  const raceState = state?.race ?? {};
+  const raceName = typeof state?.race === 'string' ? state.race : raceState.race;
+  const subraceName = typeof state?.subrace === 'string' ? state.subrace : raceState.subrace;
+
+  if (raceName === 'Custom') {
+    const customTraits = raceState.customRace?.traits ?? state?.customRace?.traits ?? [];
+    return customTraits.some((t: any) => t.name === 'Dwarven Toughness');
+  }
+
+  if (raceName === 'Dwarf' && subraceName === 'Hill Dwarf') {
+    return true;
+  }
+
+  if (raceData && raceName) {
+    const raceObj = raceData.find((r: any) => r.name === raceName);
+    if (raceObj?.subraces && subraceName) {
+      const sub = raceObj.subraces.find((s: any) => s.name === subraceName);
+      if (sub?.traits?.some((t: any) => t.name === 'Dwarven Toughness')) {
+        return true;
+      }
+    }
+    if (raceObj?.traits?.some((t: any) => t.name === 'Dwarven Toughness')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function calculateHPBonus(state: any, originsData: OriginData[], finalStats: Record<string, number>): number {
+  const vit = finalStats?.Vitality ?? 10;
+  const vitMod = Math.floor((vit - 10) / 2);
+  const level = state.identity?.level ?? state.level ?? 1;
+  let total = 0;
+
+  for (let i = 2; i <= level; i++) {
+    const hd = getPrimaryHDForLevel(i, state, originsData);
     total += Math.max(1, Math.ceil(hd / 2) + vitMod);
   }
   return total;
+}
+
+export function calculateTotalHP(
+  state: any,
+  originsData: OriginData[],
+  finalStats: Record<string, number>,
+  raceData?: any[]
+): number {
+  const level = state.identity?.level ?? state.level ?? 1;
+  const vit = finalStats?.Vitality ?? 10;
+  const vitMod = Math.floor((vit - 10) / 2);
+  const toughnessBonus = hasDwarvenToughness(state, raceData) ? level : 0;
+
+  /*
+   * Custom hpBonus override: if explicitly set in state, respect it as the
+   * level-up rolled HP bonus while adding the level 1 maximum HD, vitality modifier, and racial bonus.
+   */
+  if (state.hpBonus != null && typeof state.hpBonus === 'number') {
+    const level1HD = getPrimaryHDForLevel(1, state, originsData);
+    const total = level1HD + vitMod + state.hpBonus + toughnessBonus;
+    return Math.max(1, total);
+  }
+
+  const level1HD = getPrimaryHDForLevel(1, state, originsData);
+  let totalHP = level1HD + vitMod;
+
+  for (let i = 2; i <= level; i++) {
+    const hd = getPrimaryHDForLevel(i, state, originsData);
+    totalHP += Math.max(1, Math.ceil(hd / 2) + vitMod);
+  }
+
+  totalHP += toughnessBonus;
+  return Math.max(1, totalHP);
+}
+
+export function getHitDiceBreakdown(state: any, originsData: OriginData[]): string {
+  const level = state.identity?.level ?? state.level ?? 1;
+  const counts: Record<number, number> = {};
+
+  for (let i = 1; i <= level; i++) {
+    const hd = getPrimaryHDForLevel(i, state, originsData);
+    counts[hd] = (counts[hd] ?? 0) + 1;
+  }
+
+  /*
+   * Sort hit dice in descending order (e.g. 1d12, 2d8) for consistent display
+   */
+  return Object.entries(counts)
+    .sort(([hdA], [hdB]) => Number(hdB) - Number(hdA))
+    .map(([hd, count]) => `${count}d${hd}`)
+    .join(', ');
 }
 
 export function getMaxSkillRank(level: number): number {

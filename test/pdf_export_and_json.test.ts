@@ -159,7 +159,10 @@ describe('PDF Export and JSON Synchronization', () => {
         expect(form.getCheckBox('Vit Save Check').isChecked()).toBe(true);
 
         // Combat fields
-        expect(form.getTextField('Max HP').getText()).toBeDefined();
+        expect(form.getTextField('Max HP').getText()).toBe('10');
+        expect(form.getTextField('Current HP').getText()).toBe('10');
+        expect(form.getTextField('Total HD').getText()).toBe('1d8');
+        expect(form.getTextField('HD').getText()).toBe('d8');
         expect(form.getTextField('Initiative').getText()).toBe('+1');
         expect(form.getTextField('Speed').getText()).toBe('6');
         expect(form.getTextField('Proficiency Bonus').getText()).toBe('+2');

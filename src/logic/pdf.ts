@@ -7,6 +7,8 @@ import {
   getCharacteristicModifier,
   getProficiencyBonus,
   calculateHPBonus,
+  calculateTotalHP,
+  getHitDiceBreakdown,
   calculatePotentialGained,
 } from './state';
 
@@ -268,16 +270,14 @@ function fillCombat(form: any, state: any, finalStats: Record<string, number>, r
   const origin = primaryAO === 'Custom' ? customPrimaryAO : ORIGINS.find(o => o.name === primaryAO);
   const primaryHD = origin?.hd ?? 8;
 
-  let totalHP = (state.hpBonus ?? 0) + (vitMod * currentLevel);
-  if (totalHP <= 0) {
-    totalHP = primaryHD + vitMod + calculateHPBonus(state, ORIGINS, finalStats);
-  }
-  const finalHPVal = String(Math.max(1, totalHP));
+  const totalHP = calculateTotalHP(state, ORIGINS, finalStats, racesData);
+  const finalHPVal = String(totalHP);
   safeSetText(form, 'Max HP', finalHPVal);
   safeSetText(form, 'HP Max', finalHPVal);
   safeSetText(form, 'Current HP', finalHPVal);
 
-  safeSetText(form, 'Total HD', `${currentLevel}d${primaryHD}`);
+  const totalHDStr = getHitDiceBreakdown(state, ORIGINS);
+  safeSetText(form, 'Total HD', totalHDStr);
   safeSetText(form, 'HD', `d${primaryHD}`);
   safeSetText(form, 'Proficiency Bonus', formatModifier(profBonus));
 

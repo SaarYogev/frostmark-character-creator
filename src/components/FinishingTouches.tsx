@@ -2,12 +2,23 @@ import React from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
+import { RACES } from '../data/races';
+import { ORIGINS } from '../data/origins';
+import {
+  getFinalCharacteristics,
+  calculateTotalHP,
+  getHitDiceBreakdown,
+} from '../logic/state';
 
 const FinishingTouches: React.FC = () => {
   const { state, dispatch } = useCharacter();
 
   const { apRemaining, apLimit } = getGlobalAPSummary(state);
   const customFeatures: string[] = (state as any).customFeatures ?? [];
+
+  const finalStats = getFinalCharacteristics(state, RACES);
+  const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
+  const totalHD = getHitDiceBreakdown(state, ORIGINS);
 
   const handleCustomFeaturesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const lines = e.target.value.split('\n');
@@ -104,9 +115,17 @@ const FinishingTouches: React.FC = () => {
                   : (state.primaryAO as any)?.name ?? (state.primaryAO as any)?.primaryAO ?? '—'}
               </strong>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.4rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Level</span>
               <strong style={{ color: '#fff' }}>Level {state.level}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
+              <span style={{ color: '#a0a5c0' }}>Hit Points (HP)</span>
+              <strong style={{ color: 'var(--accent-color, #4a90e2)' }}>{totalHP} Max</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.4rem' }}>
+              <span style={{ color: '#a0a5c0' }}>Hit Dice</span>
+              <strong style={{ color: '#fff' }}>{totalHD}</strong>
             </div>
           </div>
         </div>
