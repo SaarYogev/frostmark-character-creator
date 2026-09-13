@@ -24,12 +24,14 @@ function BuilderContent({
   onNavigateHome,
   activeMeta,
   setActiveMeta,
+  autoOpenLevelUp,
 }: {
   currentStep: number;
   onNavigate: (step: number) => void;
   onNavigateHome: () => void;
   activeMeta: SavedCharacterMeta | null;
   setActiveMeta: (meta: SavedCharacterMeta | null) => void;
+  autoOpenLevelUp?: boolean;
 }) {
   const { state } = useCharacter();
   const [saveStatus, setSaveStatus] = useState<StorageStatus>('idle');
@@ -130,6 +132,7 @@ function BuilderContent({
       saveStatus={saveStatus}
       isCloud={isCloud}
       onRetrySave={() => triggerSave(state)}
+      autoOpenLevelUp={autoOpenLevelUp}
     >
       {renderStep()}
     </Layout>
@@ -139,15 +142,21 @@ function BuilderContent({
 export default function App() {
   const [currentView, setCurrentView] = useState<'home' | 'builder'>('home');
   const [currentStep, setCurrentStep] = useState(0);
+  const [autoOpenLevelUp, setAutoOpenLevelUp] = useState<boolean>(false);
   const [initialCharacterState, setInitialCharacterState] = useState<Partial<CharacterState>>(DEFAULT_CHARACTER);
   const [activeMeta, setActiveMeta] = useState<SavedCharacterMeta | null>(null);
   const [sessionKey, setSessionKey] = useState<string>('session_init');
 
-  const handleSelectCharacter = (loadedState: CharacterState, meta?: SavedCharacterMeta) => {
+  const handleSelectCharacter = (
+    loadedState: CharacterState,
+    meta?: SavedCharacterMeta,
+    options?: { initialStep?: number; openLevelUp?: boolean }
+  ) => {
     setInitialCharacterState(loadedState);
     setActiveMeta(meta || null);
     setSessionKey(`session_${Date.now()}`);
-    setCurrentStep(0);
+    setCurrentStep(options?.initialStep ?? 0);
+    setAutoOpenLevelUp(options?.openLevelUp ?? false);
     setCurrentView('builder');
   };
 
@@ -157,6 +166,7 @@ export default function App() {
     setActiveMeta(initialMeta);
     setSessionKey(`session_${Date.now()}`);
     setCurrentStep(0);
+    setAutoOpenLevelUp(false);
     setCurrentView('builder');
   };
 
@@ -176,6 +186,7 @@ export default function App() {
             onNavigateHome={handleNavigateHome}
             activeMeta={activeMeta}
             setActiveMeta={setActiveMeta}
+            autoOpenLevelUp={autoOpenLevelUp}
           />
         </CharacterProvider>
       )}

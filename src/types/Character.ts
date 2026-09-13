@@ -3,7 +3,9 @@ import { RaceState, DEFAULT_RACE_STATE } from './Race';
 import { Background, DEFAULT_BACKGROUND } from './Background';
 import { BACKGROUNDS } from '../data/backgrounds';
 import { RACES } from '../data/races';
+import { ORIGINS } from '../data/origins';
 import { getRacialStatBonuses } from '../logic/state';
+import { levelUp } from '../logic/levelUp';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
 import { AOState, DEFAULT_AO_STATE } from './AO';
 import { SkillsState, DEFAULT_SKILLS_STATE } from './Skills';
@@ -17,6 +19,28 @@ export interface CharacterState {
   baseCharacteristics: BaseCharacteristics;
   ao: AOState;
   skills: SkillsState;
+  characterName?: string;
+  playerName?: string;
+  level?: number;
+  maxHP?: number;
+  currentHP?: number;
+  tempHP?: number;
+  armorClass?: number;
+  hpBonus?: number;
+  goldAmount?: number;
+  silverAmount?: number;
+  copperAmount?: number;
+  equipmentList?: any[];
+  manualSkills?: boolean;
+  manualProficiencies?: boolean;
+  manualEquipment?: boolean;
+  manualAbilityScores?: boolean;
+  manualHP?: boolean;
+  manualSpells?: boolean;
+  potentialGained?: number;
+  combat?: Record<string, any>;
+  customFeatures?: any[];
+  [key: string]: any;
 }
 
 export const DEFAULT_CHARACTER: CharacterState = {
@@ -40,6 +64,9 @@ export type CharacterAction =
   | { type: 'SET_SKILLS'; payload: Partial<SkillsState> }
   | { type: 'SET_PROFICIENCIES'; payload: Record<string, unknown> }
   | { type: 'SET_SPELLCASTING'; payload: Record<string, unknown> }
+  | { type: 'SET_EQUIPMENT'; payload: Record<string, unknown> }
+  | { type: 'SET_MANUAL_SCORES'; payload: boolean }
+  | { type: 'LEVEL_UP'; payload?: { hpChoice?: 'average' | 'roll'; rolledHp?: number; chosenAbilities?: { primaryAbility?: string; secondaryAbility?: string } } }
   | { type: 'SET_STATE'; payload: Record<string, unknown> }
   | { type: 'LOAD_STATE'; payload: CharacterState }
   | { type: 'RESET' };
@@ -135,6 +162,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           weaponProficiencies: p.weaponProficiencies ?? p.proficiencies?.weaponProficiencies ?? (state as any).proficiencies?.weaponProficiencies ?? [],
           manualProficiencies: p.manualProficiencies ?? p.proficiencies?.manualProficiencies ?? (state as any).proficiencies?.manualProficiencies ?? false,
           goldAmount: p.goldAmount ?? p.proficiencies?.goldAmount ?? (state as any).proficiencies?.goldAmount ?? 10,
+          silverAmount: p.silverAmount ?? p.proficiencies?.silverAmount ?? (state as any).proficiencies?.silverAmount ?? 0,
+          copperAmount: p.copperAmount ?? p.proficiencies?.copperAmount ?? (state as any).proficiencies?.copperAmount ?? 0,
         },
         spellcasting: p.spellcasting ?? (state as any).spellcasting ?? { cantrips: [], spells: [], slots: {} },
         equipment: {
@@ -142,6 +171,20 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           equipmentList: p.equipmentList ?? p.equipment?.equipmentList ?? (state as any).equipment?.equipmentList ?? [],
           manualEquipment: p.manualEquipment ?? p.equipment?.manualEquipment ?? (state as any).equipment?.manualEquipment ?? false,
         },
+        goldAmount: p.goldAmount ?? p.proficiencies?.goldAmount ?? (state as any).proficiencies?.goldAmount ?? 10,
+        silverAmount: p.silverAmount ?? p.proficiencies?.silverAmount ?? (state as any).proficiencies?.silverAmount ?? 0,
+        copperAmount: p.copperAmount ?? p.proficiencies?.copperAmount ?? (state as any).proficiencies?.copperAmount ?? 0,
+        maxHP: p.maxHP ?? state.maxHP,
+        currentHP: p.currentHP ?? state.currentHP,
+        tempHP: p.tempHP ?? state.tempHP,
+        armorClass: p.armorClass ?? state.armorClass,
+        hpBonus: p.hpBonus ?? state.hpBonus,
+        manualSkills: p.manualSkills ?? p.skills?.manualSkills ?? state.manualSkills ?? false,
+        manualProficiencies: p.manualProficiencies ?? p.proficiencies?.manualProficiencies ?? state.manualProficiencies ?? false,
+        manualEquipment: p.manualEquipment ?? p.equipment?.manualEquipment ?? state.manualEquipment ?? false,
+        manualAbilityScores: p.manualAbilityScores ?? state.manualAbilityScores ?? false,
+        manualHP: p.manualHP ?? state.manualHP ?? false,
+        customFeatures: p.customFeatures ?? state.customFeatures ?? [],
       };
     }
     case 'SET_CAMPAIGN_POWER_LEVEL':
@@ -235,6 +278,19 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         },
         equipmentList: (action.payload as any).equipmentList ?? (state as any).equipmentList,
       } as any;
+    case 'SET_MANUAL_SCORES':
+      return {
+        ...state,
+        manualAbilityScores: action.payload,
+      };
+    case 'LEVEL_UP': {
+      const options = action.payload ?? { hpChoice: 'average' };
+      const nextState = levelUp(state, ORIGINS, { ...options, racesData: RACES });
+      return {
+        ...state,
+        ...nextState,
+      };
+    }
     case 'SET_STATE':
       return {
         ...state,

@@ -1,44 +1,186 @@
-import { getProficiencyBonus } from './state';
+import {
+  getProficiencyBonus,
+  hasDwarvenToughness,
+  getFinalCharacteristics,
+  calculateTotalHP,
+  getMaxSkillRank,
+} from './state';
 import { OriginData } from '../data/origins';
+import { CharacterState } from '../types/Character';
+
+const DEFAULT_STARTING_AP = 16;
 
 function profBonusIncreased(newLevel: number): boolean {
   return newLevel === 5 || newLevel === 9 || newLevel === 13 || newLevel === 17;
 }
 
-export function levelUp(state: any, originsData: OriginData[], hpChoice: 'average' | 'roll' = 'average') {
-  const newLevel = (state.level ?? 1) + 1;
-  const origin = state.levelSelections?.[newLevel]?.primaryAO
-    ? (originsData.find(o => o.name === state.levelSelections[newLevel].primaryAO) ??
-       state.customAOs?.find((o: any) => o.name === state.levelSelections[newLevel].primaryAO) ??
-       state.customPrimaryAO)
-    : (originsData.find(o => o.name === state.primaryAO) ?? state.customPrimaryAO);
-  
+function resolveHitDieAndModifiers(
+  state: CharacterState,
+  targetLevel: number,
+  originsData: OriginData[],
+  racesData: any[]
+) {
+  const currentPrimaryAO =
+    (state as any).levelSelections?.[1]?.primaryAO ?? (state as any).primaryAO ?? state.ao?.primaryAO ?? 'Devotion';
+
+  const origin = (state as any).levelSelections?.[targetLevel]?.primaryAO
+    ? (originsData.find(o => o.name === (state as any).levelSelections[targetLevel].primaryAO) ??
+       (state as any).customAOs?.find((o: any) => o.name === (state as any).levelSelections[targetLevel].primaryAO) ??
+       (state as any).customPrimaryAO)
+    : (originsData.find(o => o.name === currentPrimaryAO) ?? (state as any).customPrimaryAO);
+
   const hd = origin?.hd ?? 8;
-  const vitMod = Math.floor((computeFinalVit(state) - 10) / 2);
-  
-  const hpGain = hpChoice === 'average'
-    ? Math.ceil(hd / 2) + vitMod
-    : rollHitDie(hd) + vitMod;
+  const finalStats = getFinalCharacteristics(state, racesData);
+  const vit = finalStats?.Vitality ?? state.baseCharacteristics?.Vitality ?? 10;
+  const vitMod = Math.floor((vit - 10) / 2);
+
+  const toughnessBonus = hasDwarvenToughness(state, racesData) ? 1 : 0;
+  const averageHpGain = Math.max(1, Math.ceil(hd / 2) + vitMod) + toughnessBonus;
+
+  return {
+    origin,
+    hd,
+    finalStats,
+    vitMod,
+    toughnessBonus,
+    averageHpGain,
+  };
+}
+
+export interface LevelUpPreviewOptions {
+  racesData?: any[];
+}
+
+export function computeLevelUpPreview(
+  state: CharacterState,
+  originsData: OriginData[],
+  options: LevelUpPreviewOptions = {}
+) {
+  const currentLevel = state.identity?.level ?? state.level ?? 1;
+  const targetLevel = currentLevel + 1;
+  const racesData = options.racesData ?? [];
+
+  const { hd, finalStats, vitMod, toughnessBonus, averageHpGain } =
+    resolveHitDieAndModifiers(state, targetLevel, originsData, racesData);
+
+  const minRollGain = Math.max(1, 1 + vitMod) + toughnessBonus;
+  const maxRollGain = Math.max(1, hd + vitMod) + toughnessBonus;
+
+  const currentMaxHP = state.maxHP ?? calculateTotalHP(state, originsData, finalStats, racesData);
+  const nextMaxHP = currentMaxHP + averageHpGain;
+
+  const apGain = profBonusIncreased(targetLevel) ? 2 : 0;
+  const potentialGain = getPotentialGain(state, targetLevel, originsData);
+  const maxSkillRank = getMaxSkillRank(targetLevel);
+  const profBonus = getProficiencyBonus(targetLevel);
+
+  return {
+    currentLevel,
+    targetLevel,
+    nextLevel: targetLevel,
+    hd,
+    vitMod,
+    hpDelta: averageHpGain,
+    hpGain: averageHpGain,
+    averageHpGain,
+    minRollGain,
+    maxRollGain,
+    currentMaxHP,
+    previewMaxHP: nextMaxHP,
+    nextMaxHP,
+    apGain,
+    potentialGain,
+    maxSkillRank,
+    proficiencyBonus: profBonus,
+    toughnessBonus,
+  };
+}
+
+export interface LevelUpOptions {
+  hpChoice?: 'average' | 'roll';
+  rolledHp?: number;
+  chosenAbilities?: { primaryAbility?: string; secondaryAbility?: string };
+  racesData?: any[];
+}
+
+export function levelUp(
+  state: CharacterState,
+  originsData: OriginData[],
+  optionsOrChoice: LevelUpOptions | 'average' | 'roll' = 'average'
+) {
+  const options: LevelUpOptions =
+    typeof optionsOrChoice === 'string'
+      ? { hpChoice: optionsOrChoice }
+      : (optionsOrChoice ?? { hpChoice: 'average' });
+
+  const currentLevel = state.identity?.level ?? state.level ?? 1;
+  const newLevel = currentLevel + 1;
+  const racesData = options.racesData ?? [];
+
+  const currentPrimaryAO =
+    (state as any).levelSelections?.[1]?.primaryAO ?? (state as any).primaryAO ?? state.ao?.primaryAO ?? 'Devotion';
+  const currentSecondaryAO =
+    (state as any).levelSelections?.[1]?.secondaryAO ?? (state as any).secondaryAO ?? state.ao?.secondaryAO ?? '';
+
+  const { hd, finalStats, vitMod, toughnessBonus } =
+    resolveHitDieAndModifiers(state, newLevel, originsData, racesData);
+
+  const rawHpGain =
+    options.hpChoice === 'roll'
+      ? (options.rolledHp != null ? options.rolledHp : rollHitDie(hd)) + vitMod
+      : Math.ceil(hd / 2) + vitMod;
+
+  const deltaHP = Math.max(1, rawHpGain) + toughnessBonus;
+
+  const currentMaxHP = state.maxHP ?? calculateTotalHP(state, originsData, finalStats, racesData);
+  const currentHP = state.currentHP ?? currentMaxHP;
+
+  const newMaxHP = currentMaxHP + deltaHP;
+  const newCurrentHP = currentHP + deltaHP;
 
   const potentialGain = getPotentialGain(state, newLevel, originsData);
-
   const apGain = profBonusIncreased(newLevel) ? 2 : 0;
+
+  const prevLevelSelections = (state as any).levelSelections ?? state.ao?.levelSelections ?? {};
+  const existingLevelSel = prevLevelSelections[newLevel] ?? {
+    primaryAO: currentPrimaryAO,
+    secondaryAO: currentSecondaryAO,
+    primaryAbility: '',
+    secondaryAbility: '',
+  };
+
+  const updatedLevelSel = {
+    ...existingLevelSel,
+    ...(options.chosenAbilities ?? {}),
+  };
+
+  const nextLevelSelections = {
+    ...prevLevelSelections,
+    [newLevel]: updatedLevelSel,
+  };
 
   return {
     ...state,
     level: newLevel,
-    hpBonus: (state.hpBonus ?? 0) + Math.max(1, hpGain),
+    maxHP: newMaxHP,
+    currentHP: newCurrentHP,
+    hpBonus: (state.hpBonus ?? 0) + deltaHP,
     potentialGained: (state.potentialGained ?? 0) + potentialGain,
-    accomplishmentPointsTotal: (state.accomplishmentPointsTotal ?? 0) + apGain
+    accomplishmentPointsTotal: (state.accomplishmentPointsTotal ?? DEFAULT_STARTING_AP) + apGain,
+    levelSelections: nextLevelSelections,
+    ao: {
+      ...(state.ao ?? {}),
+      levelSelections: nextLevelSelections,
+    },
+    identity: {
+      ...(state.identity ?? {}),
+      level: newLevel,
+    },
   };
 }
 
 function rollHitDie(hd: number): number {
   return Math.floor(Math.random() * hd) + 1;
-}
-
-function computeFinalVit(state: any): number {
-  return (state.baseCharacteristics?.Vitality ?? 10) + (state.racialBonusVitality ?? 0);
 }
 
 function getPotentialGain(state: any, level: number, originsData: OriginData[]): number {

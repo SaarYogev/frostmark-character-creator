@@ -466,6 +466,10 @@ export function exportCharacterJSON(state: any, raceData?: any[]): string {
 }
 
 export function calculatePotentialGained(state: any, originsData: OriginData[]): number {
+  if (typeof state.potentialGained === 'number' && state.potentialGained > 0) {
+    return state.potentialGained;
+  }
+
   const table: Record<'Minor' | 'Moderate' | 'Major', number[]> = {
     Minor:    [20, 20, 20, 20, 20, 30, 30, 30, 30, 30, 40, 40, 40, 40, 40, 50, 50, 50, 50, 50],
     Moderate: [40, 40, 40, 40, 40, 50, 50, 50, 50, 50, 60, 60, 60, 60, 60, 70, 70, 70, 70, 70],
@@ -594,6 +598,10 @@ export function calculateTotalHP(
   const vit = finalStats?.Vitality ?? 10;
   const vitMod = Math.floor((vit - 10) / 2);
   const toughnessBonus = hasDwarvenToughness(state, raceData) ? level : 0;
+
+  if (state?.maxHP != null && typeof state.maxHP === 'number') {
+    return Math.max(1, state.maxHP);
+  }
 
   /*
    * Custom hpBonus override: if explicitly set in state, respect it as the

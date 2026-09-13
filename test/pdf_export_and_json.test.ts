@@ -97,8 +97,8 @@ describe('PDF Export and JSON Synchronization', () => {
           Intelligence: 8, // final 8 (-1)
           Cunning: 10, // final 10 (+0)
           Resolve: 10, // final 10 (+0)
-          Presence: 10, // final 10 (+0)
-          Manipulation: 10, // final 10 (+0)
+          Presence: 14, // final 14 (+2)
+          Manipulation: 12, // final 12 (+1)
           Composure: 10, // final 10 (+0)
         };
 
@@ -174,6 +174,10 @@ describe('PDF Export and JSON Synchronization', () => {
         expect(form.getCheckBox('Perc 3').isChecked()).toBe(false);
         expect(form.getTextField('Perc Int').getText()).toBeDefined();
         expect(form.getTextField('Perc Com').getText()).toBeDefined();
+
+        // Persuasion stat modifiers populated with Presence (+2) and Manipulation (+1)
+        expect(form.getTextField('Persu Int').getText()).toBe('+2');
+        expect(form.getTextField('Persu Com').getText()).toBe('+1');
 
         // Proficiencies column
         expect(form.getTextField('Lang/profs column').getText()).toContain('Common');

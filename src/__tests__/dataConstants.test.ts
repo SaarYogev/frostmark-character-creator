@@ -31,4 +31,7 @@ test('SKILL_RANK_BONUSES computes proficiency fractions', () => {
 test('SKILLS array contains standard skills', () => {
   expect(SKILLS.find(s => s.name === 'Athletics')).toBeDefined();
   expect(SKILLS.find(s => s.name === 'Occult')).toBeDefined();
+  const persuasion = SKILLS.find(s => s.name === 'Persuasion');
+  expect(persuasion).toBeDefined();
+  expect(persuasion?.stats).toEqual(['Presence', 'Manipulation']);
 });
