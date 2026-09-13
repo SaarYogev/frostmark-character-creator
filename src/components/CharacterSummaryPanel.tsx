@@ -37,7 +37,14 @@ export const CharacterSummaryPanel: React.FC<{
 
     if (file.name.toLowerCase().endsWith('.pdf')) {
       try {
-        const arrayBuffer = await file.arrayBuffer();
+        const arrayBuffer = await (typeof file.arrayBuffer === 'function'
+          ? file.arrayBuffer()
+          : new Promise<ArrayBuffer>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as ArrayBuffer);
+              reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+              reader.readAsArrayBuffer(file);
+            }));
         const loadedState = await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
         dispatch({ type: 'LOAD_STATE', payload: loadedState });
         alert('Character sheet imported successfully from PDF!');

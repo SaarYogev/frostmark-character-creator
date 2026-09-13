@@ -38,6 +38,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
   const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
   const [localChars, setLocalChars] = useState<SavedCharacterMeta[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const targetFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetCharacterMeta, setTargetCharacterMeta] = useState<SavedCharacterMeta | null>(null);
   const [cloudChars, setCloudChars] = useState<SavedCharacterMeta[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -145,40 +147,123 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
     }
   };
 
+  const readFileAsText = (file: File): Promise<string> => {
+    if (typeof file.text === 'function') {
+      return file.text();
+    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file as text'));
+      reader.readAsText(file);
+    });
+  };
+
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+    if (typeof file.arrayBuffer === 'function') {
+      return file.arrayBuffer();
+    }
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file as arrayBuffer'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const parseImportFile = async (file: File): Promise<CharacterState> => {
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      const arrayBuffer = await readFileAsArrayBuffer(file);
+      return await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
+    }
+    const text = await readFileAsText(file);
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid character data structure.');
+    }
+    return parsed;
+  };
+
+  const saveImportedCharacter = async (
+    importedState: CharacterState,
+    targetMeta?: SavedCharacterMeta
+  ): Promise<SavedCharacterMeta> => {
+    if (targetMeta) {
+      if (targetMeta.storageType === 'cloud' && targetMeta.driveFileId && isGoogleSignedIn()) {
+        try {
+          return await saveToDriveAppData(importedState, targetMeta.driveFileId);
+        } catch {
+          return saveCharacterLocally(importedState, targetMeta.id);
+        }
+      }
+      return saveCharacterLocally(importedState, targetMeta.id);
+    }
+
+    if (isGoogleSignedIn()) {
+      try {
+        return await saveToDriveAppData(importedState);
+      } catch {
+        return saveCharacterLocally(importedState);
+      }
+    }
+    return saveCharacterLocally(importedState);
+  };
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      let importedState: CharacterState;
-      if (file.name.toLowerCase().endsWith('.pdf')) {
-        const arrayBuffer = await file.arrayBuffer();
-        importedState = await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
-      } else {
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-        if (!parsed || typeof parsed !== 'object') {
-          throw new Error('Invalid character data structure.');
+      const importedState = await parseImportFile(file);
+      const importedName = (importedState.characterName || importedState.identity?.characterName || '').trim();
+
+      const existingMatch = importedName
+        ? allCharacters.find((c) => c.characterName.trim().toLowerCase() === importedName.toLowerCase())
+        : undefined;
+
+      let targetToOverwrite: SavedCharacterMeta | undefined;
+      if (existingMatch) {
+        const shouldOverwrite = window.confirm(
+          `A character named "${existingMatch.characterName}" (Level ${existingMatch.level}) is already saved.\n\n` +
+          `Do you want to update and overwrite "${existingMatch.characterName}" with this imported sheet?\n\n` +
+          `• Click OK to overwrite the existing character.\n` +
+          `• Click Cancel to save as a new separate character.`
+        );
+        if (shouldOverwrite) {
+          targetToOverwrite = existingMatch;
         }
-        importedState = parsed;
       }
 
-      let meta: SavedCharacterMeta;
-      if (isGoogleSignedIn()) {
-        try {
-          meta = await saveToDriveAppData(importedState);
-        } catch {
-          meta = saveCharacterLocally(importedState);
-        }
-      } else {
-        meta = saveCharacterLocally(importedState);
-      }
-
+      const meta = await saveImportedCharacter(importedState, targetToOverwrite);
       await loadCharacters();
-      onSelectCharacter(importedState, meta);
+      onSelectCharacter(importedState, meta, targetToOverwrite ? { initialStep: 4, openLevelUp: true } : undefined);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       alert('Failed to import character: ' + message);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleTriggerUpdateCharacter = (meta: SavedCharacterMeta) => {
+    setTargetCharacterMeta(meta);
+    targetFileInputRef.current?.click();
+  };
+
+  const handleTargetedImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const target = targetCharacterMeta;
+    if (!file || !target) return;
+
+    try {
+      const importedState = await parseImportFile(file);
+      const meta = await saveImportedCharacter(importedState, target);
+      await loadCharacters();
+      setTargetCharacterMeta(null);
+      onSelectCharacter(importedState, meta, { initialStep: 4, openLevelUp: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`Failed to update ${target.characterName}: ` + message);
     } finally {
       e.target.value = '';
     }
@@ -355,6 +440,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
             style={{ display: 'none' }}
             id="homepage-file-input"
           />
+          <input
+            type="file"
+            ref={targetFileInputRef}
+            onChange={handleTargetedImportFile}
+            accept=".pdf,.json"
+            style={{ display: 'none' }}
+            id="homepage-targeted-file-input"
+          />
           <button
             className="btn btn-secondary"
             id="btn-import-character"
@@ -459,6 +552,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
                   title="Level Up Character"
                 >
                   🆙 Level Up
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleTriggerUpdateCharacter(meta)}
+                  style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                  title={`Import updated sheet to overwrite ${meta.characterName}`}
+                >
+                  📥 Update
                 </button>
                 <button
                   className="btn btn-secondary"
