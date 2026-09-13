@@ -175,7 +175,7 @@ describe('PDF Export and JSON Synchronization', () => {
         expect(form.getTextField('Perc Int').getText()).toBeDefined();
         expect(form.getTextField('Perc Com').getText()).toBeDefined();
 
-        // Persuasion stat modifiers populated with Presence (+2) and Manipulation (+1)
+        /* Frostmark Persuasion skill fields map to Presence (Persu Int) and Manipulation (Persu Com) modifiers */
         expect(form.getTextField('Persu Int').getText()).toBe('+2');
         expect(form.getTextField('Persu Com').getText()).toBe('+1');
 
@@ -250,4 +250,157 @@ describe('PDF Export and JSON Synchronization', () => {
       }
     });
   });
+
+  describe('4. Character name and player name synchronization and PDF export', () => {
+    describe('exportToPDF name resolution', () => {
+      it('exports updated identity.characterName and identity.playerName when stale root values exist', async () => {
+        const teardown = setupFetchMock();
+        try {
+          const state = getInitialState();
+          state.characterName = 'Stale Root Character';
+          state.playerName = 'Stale Root Player';
+          state.identity = {
+            ...state.identity,
+            characterName: 'Updated Identity Character',
+            playerName: 'Updated Identity Player',
+          };
+
+          const pdfBytes = await exportToPDF(state, RACES, BACKGROUNDS);
+          const pdfDoc = await PDFDocument.load(pdfBytes);
+          const form = pdfDoc.getForm();
+
+          expect(form.getTextField('CHARACTER NAME').getText()).toBe('Updated Identity Character');
+          expect(form.getTextField('PLAYER NAME').getText()).toBe('Updated Identity Player');
+        } finally {
+          teardown();
+        }
+      });
+
+      it('exports characterName and playerName when starting from scratch without root properties', async () => {
+        const teardown = setupFetchMock();
+        try {
+          const state = {
+            ...DEFAULT_CHARACTER,
+            identity: {
+              ...DEFAULT_CHARACTER.identity,
+              characterName: 'Fresh Character',
+              playerName: 'Fresh Player',
+            },
+          };
+
+          const pdfBytes = await exportToPDF(state, RACES, BACKGROUNDS);
+          const pdfDoc = await PDFDocument.load(pdfBytes);
+          const form = pdfDoc.getForm();
+
+          expect(form.getTextField('CHARACTER NAME').getText()).toBe('Fresh Character');
+          expect(form.getTextField('PLAYER NAME').getText()).toBe('Fresh Player');
+        } finally {
+          teardown();
+        }
+      });
+    });
+
+    describe('characterReducer SET_IDENTITY synchronization', () => {
+      it('synchronizes characterName and playerName on both root and identity when SET_IDENTITY is dispatched', () => {
+        const initialState = {
+          ...DEFAULT_CHARACTER,
+          characterName: 'Original Character',
+          playerName: 'Original Player',
+          identity: {
+            ...DEFAULT_CHARACTER.identity,
+            characterName: 'Original Character',
+            playerName: 'Original Player',
+          },
+        };
+
+        const updatedState = characterReducer(initialState, {
+          type: 'SET_IDENTITY',
+          payload: {
+            characterName: 'Renamed Character',
+            playerName: 'Renamed Player',
+          },
+        });
+
+        expect(updatedState.identity.characterName).toBe('Renamed Character');
+        expect(updatedState.identity.playerName).toBe('Renamed Player');
+        expect(updatedState.characterName).toBe('Renamed Character');
+        expect(updatedState.playerName).toBe('Renamed Player');
+      });
+
+      it('synchronizes characterName and playerName on root when dispatched on state without root properties', () => {
+        const updatedState = characterReducer(DEFAULT_CHARACTER, {
+          type: 'SET_IDENTITY',
+          payload: {
+            characterName: 'New Hero',
+            playerName: 'New Adventurer',
+          },
+        });
+
+        expect(updatedState.identity.characterName).toBe('New Hero');
+        expect(updatedState.identity.playerName).toBe('New Adventurer');
+        expect(updatedState.characterName).toBe('New Hero');
+        expect(updatedState.playerName).toBe('New Adventurer');
+      });
+    });
+
+    describe('characterReducer LOAD_STATE name handling', () => {
+      it('respects identity names over stale root names when loading state', () => {
+        const loaded = characterReducer(DEFAULT_CHARACTER, {
+          type: 'LOAD_STATE',
+          payload: {
+            ...DEFAULT_CHARACTER,
+            characterName: 'Stale Root Name',
+            playerName: 'Stale Root Player',
+            identity: {
+              ...DEFAULT_CHARACTER.identity,
+              characterName: 'Loaded Identity Character',
+              playerName: 'Loaded Identity Player',
+            },
+          },
+        });
+
+        expect(loaded.identity.characterName).toBe('Loaded Identity Character');
+        expect(loaded.identity.playerName).toBe('Loaded Identity Player');
+        expect(loaded.characterName).toBe('Loaded Identity Character');
+        expect(loaded.playerName).toBe('Loaded Identity Player');
+      });
+
+      it('synchronizes root names when payload only supplies identity names', () => {
+        const loaded = characterReducer(DEFAULT_CHARACTER, {
+          type: 'LOAD_STATE',
+          payload: {
+            ...DEFAULT_CHARACTER,
+            characterName: undefined,
+            playerName: undefined,
+            identity: {
+              ...DEFAULT_CHARACTER.identity,
+              characterName: 'Identity Only Character',
+              playerName: 'Identity Only Player',
+            },
+          } as any,
+        });
+
+        expect(loaded.identity.characterName).toBe('Identity Only Character');
+        expect(loaded.identity.playerName).toBe('Identity Only Player');
+        expect(loaded.characterName).toBe('Identity Only Character');
+        expect(loaded.playerName).toBe('Identity Only Player');
+      });
+
+      it('populates identity names for backward compatibility when payload only has root names', () => {
+        const loaded = characterReducer(DEFAULT_CHARACTER, {
+          type: 'LOAD_STATE',
+          payload: {
+            characterName: 'Legacy Root Character',
+            playerName: 'Legacy Root Player',
+          } as any,
+        });
+
+        expect(loaded.characterName).toBe('Legacy Root Character');
+        expect(loaded.playerName).toBe('Legacy Root Player');
+        expect(loaded.identity.characterName).toBe('Legacy Root Character');
+        expect(loaded.identity.playerName).toBe('Legacy Root Player');
+      });
+    });
+  });
 });
+

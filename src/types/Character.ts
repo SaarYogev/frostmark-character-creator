@@ -71,6 +71,16 @@ export type CharacterAction =
   | { type: 'LOAD_STATE'; payload: CharacterState }
   | { type: 'RESET' };
 
+export function resolveIdentityField(identityVal?: string, rootVal?: string): string {
+  if (identityVal !== undefined && identityVal.trim() !== '') {
+    return identityVal;
+  }
+  if (rootVal !== undefined && rootVal.trim() !== '') {
+    return rootVal;
+  }
+  return identityVal ?? rootVal ?? '';
+}
+
 export function characterReducer(state: CharacterState, action: CharacterAction): CharacterState {
   switch (action.type) {
     case 'LOAD_STATE': {
@@ -85,15 +95,30 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       const selectedAOs = p.selectedAOs ?? p.ao?.selectedAOs ?? state.ao?.selectedAOs ?? (primaryAO ? [primaryAO] : []);
       const levelSelections = p.levelSelections ?? p.ao?.levelSelections ?? state.ao?.levelSelections ?? {};
 
+      /*
+       * Synchronize character and player names across both root-level convenience fields
+       * and structured identity state, favoring identity updates while retaining backwards compatibility.
+       */
+      const resolvedCharName = resolveIdentityField(
+        p.identity?.characterName,
+        p.characterName ?? state.identity?.characterName ?? state.characterName
+      );
+      const resolvedPlayerName = resolveIdentityField(
+        p.identity?.playerName,
+        p.playerName ?? state.identity?.playerName ?? state.playerName
+      );
+
       return {
         ...state,
         ...p,
+        characterName: resolvedCharName,
+        playerName: resolvedPlayerName,
         campaignPowerLevel: p.campaignPowerLevel ?? p.identity?.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
         identity: {
           ...state.identity,
-          characterName: p.characterName ?? p.identity?.characterName ?? state.identity?.characterName ?? '',
-          playerName: p.playerName ?? p.identity?.playerName ?? state.identity?.playerName ?? '',
-          campaignPowerLevel: p.campaignPowerLevel ?? p.identity?.campaignPowerLevel ?? state.identity?.campaignPowerLevel ?? 'Heroic',
+          characterName: resolvedCharName,
+          playerName: resolvedPlayerName,
+          campaignPowerLevel: p.campaignPowerLevel ?? p.identity?.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
           level: p.level ?? p.identity?.level ?? state.identity?.level ?? 1,
           personalityBackstory: p.personalityBackstory ?? p.identity?.personalityBackstory ?? state.identity?.personalityBackstory ?? '',
           appearance: p.appearance ?? p.identity?.appearance ?? state.identity?.appearance ?? { age: '', height: '', weight: '' },
@@ -192,14 +217,18 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...state,
         campaignPowerLevel: action.payload,
       };
-    case 'SET_IDENTITY':
+    case 'SET_IDENTITY': {
+      const nextIdentity = {
+        ...state.identity,
+        ...action.payload,
+      };
       return {
         ...state,
-        identity: {
-          ...state.identity,
-          ...action.payload,
-        },
+        characterName: nextIdentity.characterName ?? '',
+        playerName: nextIdentity.playerName ?? '',
+        identity: nextIdentity,
       };
+    }
     case 'SET_RACE':
       return {
         ...state,
