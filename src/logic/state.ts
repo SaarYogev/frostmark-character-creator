@@ -134,66 +134,55 @@ export function getProficiencyBonus(level: number): number {
   return 2 + Math.floor(((level ?? 1) - 1) / 4);
 }
 
-export function getFinalCharacteristics(state: any, raceData: any[]): Record<string, number> {
-  const baseChars = state.baseCharacteristics ?? {
-    Brawn: 10, Dexterity: 10, Vitality: 10, Intelligence: 10,
-    Cunning: 10, Resolve: 10, Presence: 10, Manipulation: 10, Composure: 10
-  };
-  const final: Record<string, number> = { ...baseChars };
+export function getRacialStatBonuses(state: any, raceData: any[]): Record<string, number> {
+  const bonuses: Record<string, number> = {};
+  const raceState = state?.race ?? {};
+  const raceName = typeof state?.race === 'string' ? state.race : raceState.race;
+  const subraceName = typeof state?.subrace === 'string' ? state.subrace : raceState.subrace;
 
-  const raceState = state.race ?? {};
-  const raceName = typeof state.race === 'string' ? state.race : raceState.race;
-  const subraceName = typeof state.subrace === 'string' ? state.subrace : raceState.subrace;
+  if (!raceName) return bonuses;
 
-  if (!raceName) return final;
-
-  const manualRaces = raceState.manualRaces ?? state.manualRaces;
+  const manualRaces = raceState.manualRaces ?? state?.manualRaces;
   if (manualRaces) {
-    const overrides = raceState.racialStatOverrides ?? state.racialStatOverrides ?? {};
+    const overrides = raceState.racialStatOverrides ?? state?.racialStatOverrides ?? {};
     for (const stat in overrides) {
-      if (final[stat] !== undefined) {
-        final[stat] += (overrides[stat] ?? 0);
-      }
+      bonuses[stat] = (bonuses[stat] ?? 0) + (overrides[stat] ?? 0);
     }
-    return final;
+    return bonuses;
   }
 
   if (raceName === 'Custom') {
-    const customStats = raceState.customRace?.stats ?? state.customRace?.stats ?? {};
+    const customStats = raceState.customRace?.stats ?? state?.customRace?.stats ?? {};
     for (const stat in customStats) {
-      if (final[stat] !== undefined) {
-        final[stat] += customStats[stat];
-      }
+      bonuses[stat] = (bonuses[stat] ?? 0) + (customStats[stat] ?? 0);
     }
-    return final;
+    return bonuses;
   }
 
-  const race = raceData.find(r => r.name === raceName);
-  if (!race) return final;
+  const race = raceData?.find((r: any) => r.name === raceName);
+  if (!race) return bonuses;
 
   if (race.stats) {
     for (const stat in race.stats) {
       if (stat !== 'choice' && stat !== 'flexiblePoints') {
-        final[stat] += race.stats[stat];
+        bonuses[stat] = (bonuses[stat] ?? 0) + (race.stats[stat] ?? 0);
       }
     }
   }
 
-  const woodElfChoice = raceState.woodElfChoice ?? state.woodElfChoice;
+  const woodElfChoice = raceState.woodElfChoice ?? state?.woodElfChoice;
   if (raceName === 'Elf' && subraceName === 'Wood' && woodElfChoice) {
-    if (final[woodElfChoice] !== undefined) {
-      final[woodElfChoice] += 1;
-    }
+    bonuses[woodElfChoice] = (bonuses[woodElfChoice] ?? 0) + 1;
   }
 
   if (raceName === 'Half-elf') {
-    const choice1 = raceState.halfElfChoice1 ?? state.halfElfChoice1;
-    const choice2 = raceState.halfElfChoice2 ?? state.halfElfChoice2;
-    if (choice1 && final[choice1] !== undefined) {
-      final[choice1] += 1;
+    const choice1 = raceState.halfElfChoice1 ?? state?.halfElfChoice1;
+    const choice2 = raceState.halfElfChoice2 ?? state?.halfElfChoice2;
+    if (choice1) {
+      bonuses[choice1] = (bonuses[choice1] ?? 0) + 1;
     }
-    if (choice2 && final[choice2] !== undefined) {
-      final[choice2] += 1;
+    if (choice2) {
+      bonuses[choice2] = (bonuses[choice2] ?? 0) + 1;
     }
   }
 
@@ -202,12 +191,27 @@ export function getFinalCharacteristics(state: any, raceData: any[]): Record<str
     if (sub && sub.stats) {
       for (const stat in sub.stats) {
         if (stat !== 'choice') {
-          final[stat] += sub.stats[stat];
+          bonuses[stat] = (bonuses[stat] ?? 0) + (sub.stats[stat] ?? 0);
         }
       }
     }
   }
 
+  return bonuses;
+}
+
+export function getFinalCharacteristics(state: any, raceData: any[]): Record<string, number> {
+  const baseChars = state?.baseCharacteristics ?? {
+    Brawn: 10, Dexterity: 10, Vitality: 10, Intelligence: 10,
+    Cunning: 10, Resolve: 10, Presence: 10, Manipulation: 10, Composure: 10
+  };
+  const bonuses = getRacialStatBonuses(state, raceData);
+  const final: Record<string, number> = { ...baseChars };
+  for (const stat in bonuses) {
+    if (final[stat] !== undefined) {
+      final[stat] += bonuses[stat];
+    }
+  }
   return final;
 }
 
@@ -410,7 +414,7 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
 export function importCharacterJSON(jsonString: string) {
   try {
     const parsed = JSON.parse(jsonString);
-    if (!parsed.level && !parsed.identity?.level && !parsed.baseCharacteristics) {
+    if (!parsed.level && !parsed.identity?.level && !parsed.baseCharacteristics && !parsed.characteristics && !parsed.finalCharacteristics) {
       throw new Error('Missing core character stats');
     }
 
@@ -449,8 +453,16 @@ function importSkillArtsCraftRank(parsed: any): number {
   return parsed.skillRanks?.['Arts & Craft'] ?? parsed.skillRanks?.['Arts'] ?? 0;
 }
 
-export function exportCharacterJSON(state: any): string {
-  return JSON.stringify(state, null, 2);
+export function exportCharacterJSON(state: any, raceData?: any[]): string {
+  const races = raceData ?? [];
+  const finalStats = getFinalCharacteristics(state, races);
+  const exported = {
+    ...state,
+    characteristics: finalStats,
+    finalCharacteristics: finalStats,
+    baseCharacteristics: finalStats,
+  };
+  return JSON.stringify(exported, null, 2);
 }
 
 export function calculatePotentialGained(state: any, originsData: OriginData[]): number {

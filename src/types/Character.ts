@@ -2,6 +2,8 @@ import { IdentityState, DEFAULT_IDENTITY } from './Identity';
 import { RaceState, DEFAULT_RACE_STATE } from './Race';
 import { Background, DEFAULT_BACKGROUND } from './Background';
 import { BACKGROUNDS } from '../data/backgrounds';
+import { RACES } from '../data/races';
+import { getRacialStatBonuses } from '../logic/state';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
 import { AOState, DEFAULT_AO_STATE } from './AO';
 import { SkillsState, DEFAULT_SKILLS_STATE } from './Skills';
@@ -87,7 +89,20 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
               name: bgName,
             },
         customBackground: p.customBackground ?? p.background?.customBackground ?? state.customBackground,
-        baseCharacteristics: p.baseCharacteristics ?? state.baseCharacteristics ?? DEFAULT_BASE_CHARACTERISTICS,
+        baseCharacteristics: (() => {
+          const finalStatsProvided = p.finalCharacteristics ?? p.characteristics;
+          let loadedBase = p.baseCharacteristics ?? state.baseCharacteristics ?? DEFAULT_BASE_CHARACTERISTICS;
+          if (finalStatsProvided) {
+            const bonuses = getRacialStatBonuses(p, RACES);
+            loadedBase = { ...finalStatsProvided };
+            for (const stat in bonuses) {
+              if (loadedBase[stat] !== undefined) {
+                loadedBase[stat] -= bonuses[stat];
+              }
+            }
+          }
+          return loadedBase;
+        })(),
         ao: {
           ...state.ao,
           primaryAO,
