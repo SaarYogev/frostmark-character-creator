@@ -15,6 +15,7 @@ interface LayoutProps {
   saveStatus?: StorageStatus;
   isCloud?: boolean;
   onRetrySave?: () => void;
+  autoOpenLevelUp?: boolean;
 }
 
 const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
@@ -169,6 +170,7 @@ export const Layout: React.FC<LayoutProps> = ({
   saveStatus = 'idle',
   isCloud = false,
   onRetrySave,
+  autoOpenLevelUp,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [isAboutOpen, setIsAboutOpen] = React.useState(false);
@@ -271,7 +273,11 @@ export const Layout: React.FC<LayoutProps> = ({
           <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
         </main>
 
-        <CharacterSummaryPanel onNavigateHome={onNavigateHome} />
+        <CharacterSummaryPanel
+          onNavigateHome={onNavigateHome}
+          onNavigateToStep={onNavigate}
+          defaultLevelUpOpen={autoOpenLevelUp}
+        />
       </div>
 
       {/* Collapsible Mobile/Tablet Summary Drawer */}
@@ -288,7 +294,7 @@ export const Layout: React.FC<LayoutProps> = ({
             ✕
           </button>
         </div>
-        <CharacterSummaryPanel isDrawer onNavigateHome={onNavigateHome} />
+        <CharacterSummaryPanel isDrawer onNavigateHome={onNavigateHome} onNavigateToStep={onNavigate} />
       </div>
       {/* Tooltip for locked steps */}
       <div id="nav-lock-tip" className="nav-lock-tip" />

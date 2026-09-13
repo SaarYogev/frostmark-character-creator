@@ -13,22 +13,56 @@ import {
 } from '../logic/state';
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
+import { importFromPDF } from '../logic/pdfImport';
+import { LevelUpModal } from './LevelUpModal';
 
-export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHome?: () => void }> = ({ isDrawer, onNavigateHome }) => {
+export const CharacterSummaryPanel: React.FC<{
+  isDrawer?: boolean;
+  onNavigateHome?: () => void;
+  onNavigateToStep?: (step: number) => void;
+  defaultLevelUpOpen?: boolean;
+}> = ({ isDrawer, onNavigateHome, onNavigateToStep, defaultLevelUpOpen = false }) => {
   const { state, dispatch } = useCharacter();
+  const [isLevelUpOpen, setIsLevelUpOpen] = React.useState(defaultLevelUpOpen);
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  React.useEffect(() => {
+    if (defaultLevelUpOpen) {
+      setIsLevelUpOpen(true);
+    }
+  }, [defaultLevelUpOpen]);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadedState = await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
+        dispatch({ type: 'LOAD_STATE', payload: loadedState });
+        alert('Character sheet imported successfully from PDF!');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert('Failed to parse PDF character sheet: ' + message);
+      }
+      e.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const loadedState = JSON.parse(ev.target?.result as string);
-        dispatch({ type: 'LOAD_STATE', payload: loadedState });
+        const parsed = JSON.parse(ev.target?.result as string);
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Invalid JSON character data structure.');
+        }
+        dispatch({ type: 'LOAD_STATE', payload: parsed });
         alert('Character data loaded successfully!');
-      } catch (err: any) {
-        alert('Failed to parse JSON file: ' + err.message);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert('Failed to parse JSON file: ' + message);
       }
+      e.target.value = '';
     };
     reader.readAsText(file);
   };
@@ -172,8 +206,16 @@ export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHom
       </div>
 
       <div className="summary-actions" style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <button
+          className="btn btn-primary"
+          id="btn-summary-level-up"
+          onClick={() => setIsLevelUpOpen(true)}
+          style={{ background: '#2563eb', color: '#ffffff', fontWeight: 600 }}
+        >
+          🆙 Level Up Character
+        </button>
         <button className="btn btn-secondary" id="btn-import" onClick={() => document.getElementById(isDrawer ? 'drawer-import-file' : 'right-import-file')?.click()}>
-          📂 Load Data File
+          📂 Load Data / PDF Sheet
         </button>
         <button className="btn btn-accent" id="btn-export-json" onClick={() => handleExportJSON(state)}>
           💾 Save Data File
@@ -181,8 +223,14 @@ export const CharacterSummaryPanel: React.FC<{ isDrawer?: boolean; onNavigateHom
         <button className="btn btn-primary" id="btn-export-pdf" onClick={() => handleExportPDF(state)}>
           📄 Download Character Sheet
         </button>
-        <input type="file" id={isDrawer ? 'drawer-import-file' : 'right-import-file'} accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+        <input type="file" id={isDrawer ? 'drawer-import-file' : 'right-import-file'} accept=".json,.pdf" style={{ display: 'none' }} onChange={handleImport} />
       </div>
+
+      <LevelUpModal
+        isOpen={isLevelUpOpen}
+        onClose={() => setIsLevelUpOpen(false)}
+        onLevelUpConfirmed={() => onNavigateToStep?.(4)}
+      />
     </>
   );
 

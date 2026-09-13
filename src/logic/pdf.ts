@@ -11,6 +11,7 @@ import {
   getHitDiceBreakdown,
   calculatePotentialGained,
 } from './state';
+export { importFromPDF } from './pdfImport';
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
@@ -67,6 +68,7 @@ const SKILL_STAT_FIELD_MAP: Record<string, string[]> = {
   AH: ['AH Cun', 'AH Pre'],
   Perc: ['Perc Int', 'Perc Com'],
   Ath: ['Ath Br', 'Ath Dex'],
+  // The original fillable form field IDs in the sheet are 'Persu Int' and 'Persu Com'
   Persu: ['Persu Int', 'Persu Com'],
   Decep: ['Decep Pre', 'Decep Man'],
   Sub: ['Sub Dex', 'Sub Cun'],
@@ -217,6 +219,11 @@ function fillSkills(form: any, finalStats: Record<string, number>, profBonus: nu
     const statFields = SKILL_STAT_FIELD_MAP[sk.key] ?? [];
     if (statFields[0]) safeSetText(form, statFields[0], formatModifier(mod1));
     if (statFields[1]) safeSetText(form, statFields[1], formatModifier(mod2));
+    if (sk.key === 'Persu') {
+      // Also support templates where fields might be named 'Persu Pre' and 'Persu Man'
+      safeSetText(form, 'Persu Pre', formatModifier(mod1));
+      safeSetText(form, 'Persu Man', formatModifier(mod2));
+    }
 
     const baseBonus = mod1 + mod2;
     safeSetText(form, `${sk.name} Base Mod`, formatModifier(baseBonus));
@@ -270,11 +277,15 @@ function fillCombat(form: any, state: any, finalStats: Record<string, number>, r
   const origin = primaryAO === 'Custom' ? customPrimaryAO : ORIGINS.find(o => o.name === primaryAO);
   const primaryHD = origin?.hd ?? 8;
 
-  const totalHP = calculateTotalHP(state, ORIGINS, finalStats, racesData);
+  const totalHP = state.maxHP ?? calculateTotalHP(state, ORIGINS, finalStats, racesData);
+  const currentHP = state.currentHP ?? totalHP;
   const finalHPVal = String(totalHP);
   safeSetText(form, 'Max HP', finalHPVal);
   safeSetText(form, 'HP Max', finalHPVal);
-  safeSetText(form, 'Current HP', finalHPVal);
+  safeSetText(form, 'Current HP', String(currentHP));
+  if (state.tempHP != null) {
+    safeSetText(form, 'Temp HP', String(state.tempHP));
+  }
 
   const totalHDStr = getHitDiceBreakdown(state, ORIGINS);
   safeSetText(form, 'Total HD', totalHDStr);
@@ -322,7 +333,7 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
     }
   });
 
-  safeSetText(form, 'Armor Class', String(calculatedAC + shieldBonus));
+  safeSetText(form, 'Armor Class', String(state.armorClass ?? (calculatedAC + shieldBonus)));
 }
 
 function fillSpellcasting(form: any, state: any, finalStats: Record<string, number>, profBonus: number) {
@@ -349,11 +360,16 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
 
   const spells = spellcastingState.spells ?? [];
   const slots = spellcastingState.slots ?? {};
+  const souls = spellcastingState.souls ?? {};
 
   for (let lvl = 1; lvl <= 9; lvl++) {
     const maxSlots = slots[lvl] ?? getSpellSlotsForLevel(lvl);
     safeSetText(form, `Level ${lvl} slot total`, String(maxSlots));
     safeSetText(form, `Level ${lvl} Slots Total`, String(maxSlots));
+
+    if (souls[lvl] !== undefined) {
+      safeSetText(form, `Level ${lvl} slot souls`, String(souls[lvl]));
+    }
 
     const spellsOfLvl = spells.filter((s: any) => s.level === lvl);
     spellsOfLvl.forEach((s: any, i: number) => {
@@ -390,9 +406,11 @@ function fillEquipment(form: any, state: any, backgroundsData: any[]) {
   });
 
   const goldAmount = state.proficiencies?.goldAmount ?? state.goldAmount ?? 0;
+  const silverAmount = state.proficiencies?.silverAmount ?? state.silverAmount ?? 0;
+  const copperAmount = state.proficiencies?.copperAmount ?? state.copperAmount ?? 0;
   safeSetText(form, 'Gold Pieces', String(goldAmount));
-  safeSetText(form, 'Silver Pieces', '0');
-  safeSetText(form, 'Copper Pieces', '0');
+  safeSetText(form, 'Silver Pieces', String(silverAmount));
+  safeSetText(form, 'Copper Pieces', String(copperAmount));
 }
 
 function fillMisc(form: any, state: any) {

@@ -19,14 +19,15 @@ const AbilityScoreSelector: React.FC = () => {
   const spent = calculateSpentAbilityPoints(state);
   const remaining = limit - spent;
   const finalStats = getFinalCharacteristics(state, RACES);
+  const manualAbilityScores = state.manualAbilityScores ?? false;
 
   const handleAdjustAbility = (key: CharacteristicName, delta: number) => {
     const current = state.baseCharacteristics[key] ?? 10;
     const next = current + delta;
-    if (next < 6 || next > 17) return;
+    if (next < 1 || (!manualAbilityScores && (next < 6 || next > 17))) return;
 
     const costDelta = getAttributePointCost(next) - getAttributePointCost(current);
-    if (spent + costDelta > limit) {
+    if (!manualAbilityScores && spent + costDelta > limit) {
       return;
     }
 
@@ -48,7 +49,19 @@ const AbilityScoreSelector: React.FC = () => {
           </p>
         </div>
 
-        <div className={`point-buy-tracker ${remaining < 0 ? 'over-budget' : ''}`}>
+        <div className="manual-override-control" style={{ marginBottom: '1.5rem' }}>
+          <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              id="toggle-manual-scores"
+              checked={manualAbilityScores}
+              onChange={(e) => dispatch({ type: 'SET_MANUAL_SCORES', payload: e.target.checked })}
+            />
+            <strong>Manual Ability Score Override (Ignore point-buy limits / custom scores)</strong>
+          </label>
+        </div>
+
+        <div className={`point-buy-tracker ${remaining < 0 && !manualAbilityScores ? 'over-budget' : ''}`}>
           <span>Points Remaining:</span>
           <strong id="points-remaining">{remaining}</strong>
           <span>/ {limit}</span>
@@ -64,9 +77,11 @@ const AbilityScoreSelector: React.FC = () => {
             const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
             const cost = getAttributePointCost(baseScore);
 
-            const canDecrease = baseScore > 6;
+            const canDecrease = manualAbilityScores ? baseScore > 1 : baseScore > 6;
             const costOfNextIncrease = getAttributePointCost(baseScore + 1) - cost;
-            const canIncrease = baseScore < 17 && remaining >= costOfNextIncrease;
+            const canIncrease = manualAbilityScores
+              ? baseScore < 30
+              : baseScore < 17 && remaining >= costOfNextIncrease;
 
             return (
               <div className="ability-row" key={key} id={`ability-row-${key}`}>

@@ -1,6 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { SavedCharacterMeta } from '../services/storage/types';
-import { listLocalCharacters, deleteLocalCharacter, loadCharacterLocally } from '../services/storage/localStorageService';
+import {
+  listLocalCharacters,
+  deleteLocalCharacter,
+  loadCharacterLocally,
+  saveCharacterLocally,
+} from '../services/storage/localStorageService';
 import {
   isGoogleSignedIn,
   requestGoogleSignIn,
@@ -8,21 +13,31 @@ import {
   listDriveCharacters,
   loadFromDriveAppData,
   deleteFromDriveAppData,
+  saveToDriveAppData,
   initGoogleAuth,
 } from '../services/storage/googleDriveService';
 import { handleExportPDF } from '../utils/exportHelpers';
 import { CharacterState, DEFAULT_CHARACTER } from '../types/Character';
+import { importFromPDF } from '../logic/pdfImport';
+import { RACES } from '../data/races';
+import { BACKGROUNDS } from '../data/backgrounds';
+import { ORIGINS } from '../data/origins';
 import { AboutModal } from './AboutModal';
 import { InfoIcon, GitHubIcon } from './Icons';
 
 interface HomePageProps {
-  onSelectCharacter: (state: CharacterState, meta?: SavedCharacterMeta) => void;
+  onSelectCharacter: (
+    state: CharacterState,
+    meta?: SavedCharacterMeta,
+    options?: { initialStep?: number; openLevelUp?: boolean }
+  ) => void;
   onCreateNew: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateNew }) => {
   const [isSignedIn, setIsSignedIn] = useState<boolean>(false);
   const [localChars, setLocalChars] = useState<SavedCharacterMeta[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [cloudChars, setCloudChars] = useState<SavedCharacterMeta[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -127,6 +142,65 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       }
     } catch (err: any) {
       alert('Error generating printable character sheet: ' + err.message);
+    }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      let importedState: CharacterState;
+      if (file.name.toLowerCase().endsWith('.pdf')) {
+        const arrayBuffer = await file.arrayBuffer();
+        importedState = await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
+      } else {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== 'object') {
+          throw new Error('Invalid character data structure.');
+        }
+        importedState = parsed;
+      }
+
+      let meta: SavedCharacterMeta;
+      if (isGoogleSignedIn()) {
+        try {
+          meta = await saveToDriveAppData(importedState);
+        } catch {
+          meta = saveCharacterLocally(importedState);
+        }
+      } else {
+        meta = saveCharacterLocally(importedState);
+      }
+
+      await loadCharacters();
+      onSelectCharacter(importedState, meta);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Failed to import character: ' + message);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleLevelUpCharacter = async (meta: SavedCharacterMeta) => {
+    try {
+      let state: CharacterState | null = null;
+      if (meta.storageType === 'cloud' && meta.driveFileId) {
+        state = await loadFromDriveAppData(meta.driveFileId);
+      } else {
+        state = loadCharacterLocally(meta.id);
+      }
+
+      if (state) {
+        onSelectCharacter(state, meta, { initialStep: 4, openLevelUp: true });
+      } else {
+        alert('Could not find character data.');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert('Error loading character for level up: ' + message);
     }
   };
 
@@ -264,22 +338,40 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       <div
         style={{
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '2rem',
+          gap: '1rem',
           flexWrap: 'wrap',
           marginBottom: '1.75rem',
         }}
       >
         <h2 style={{ margin: 0, fontSize: '1.35rem' }}>Your Characters ({allCharacters.length})</h2>
-        <button
-          className="btn btn-primary"
-          id="btn-create-new-character"
-          onClick={onCreateNew}
-          style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem', fontWeight: 600, marginLeft: 'auto' }}
-        >
-          ➕ Create New Character
-        </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImportFile}
+            accept=".pdf,.json"
+            style={{ display: 'none' }}
+            id="homepage-file-input"
+          />
+          <button
+            className="btn btn-secondary"
+            id="btn-import-character"
+            onClick={() => fileInputRef.current?.click()}
+            style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem', fontWeight: 600 }}
+          >
+            📥 Import Sheet (PDF / JSON)
+          </button>
+          <button
+            className="btn btn-primary"
+            id="btn-create-new-character"
+            onClick={onCreateNew}
+            style={{ padding: '0.6rem 1.25rem', fontSize: '0.95rem', fontWeight: 600 }}
+          >
+            ➕ Create New Character
+          </button>
+        </div>
       </div>
 
       {/* Characters List / Grid */}
@@ -362,11 +454,19 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
                 </button>
                 <button
                   className="btn btn-secondary"
+                  onClick={() => handleLevelUpCharacter(meta)}
+                  style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+                  title="Level Up Character"
+                >
+                  🆙 Level Up
+                </button>
+                <button
+                  className="btn btn-secondary"
                   onClick={() => handleExportSheet(meta)}
                   style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
                   title="Download Printable Character Sheet"
                 >
-                  📄 Download Character Sheet
+                  📄 Sheet
                 </button>
                 <button
                   className="btn btn-secondary"
