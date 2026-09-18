@@ -51,6 +51,7 @@ export interface AOState {
   customAOs: CustomOrigin[];
   customPrimaryAO: CustomOrigin;
   customSecondaryAO: CustomOrigin;
+  customAbilities?: AbilityItem[];
   levelSelections: Record<number, LevelSelection>;
 }
 

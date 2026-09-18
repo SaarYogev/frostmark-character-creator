@@ -258,12 +258,17 @@ const EquipmentSelector: React.FC = () => {
             <input
               type="checkbox"
               checked={manualEquipment}
-              onChange={(e) =>
+              onChange={(e) => {
+                const checked = e.target.checked;
+                dispatch({
+                  type: 'SET_EQUIPMENT',
+                  payload: { manualEquipment: checked },
+                } as any);
                 dispatch({
                   type: 'SET_STATE',
-                  payload: { manualEquipment: e.target.checked },
-                } as any)
-              }
+                  payload: { manualEquipment: checked },
+                } as any);
+              }}
             />
             <strong>Manual Equipment Override (Ignore starting gold cost limits)</strong>
           </label>

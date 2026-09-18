@@ -125,12 +125,17 @@ const ProficienciesSelector: React.FC = () => {
             <input
               type="checkbox"
               checked={manualProficiencies}
-              onChange={(e) =>
+              onChange={(e) => {
+                const checked = e.target.checked;
                 dispatch({
                   type: 'SET_PROFICIENCIES',
-                  payload: { manualProficiencies: e.target.checked },
-                })
-              }
+                  payload: { manualProficiencies: checked },
+                });
+                dispatch({
+                  type: 'SET_STATE',
+                  payload: { manualProficiencies: checked },
+                } as any);
+              }}
             />
             <strong>Manual Proficiencies Override (Ignore AP limits/allow custom distribution)</strong>
           </label>

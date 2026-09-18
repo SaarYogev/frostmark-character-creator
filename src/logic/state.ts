@@ -1,5 +1,6 @@
 import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants';
 import { ORIGINS, OriginData } from '../data/origins';
+import { deduplicateEquipmentList } from './equipmentUtils';
 
 export function getInitialState() {
   return {
@@ -456,11 +457,61 @@ function importSkillArtsCraftRank(parsed: any): number {
 export function exportCharacterJSON(state: any, raceData?: any[]): string {
   const races = raceData ?? [];
   const finalStats = getFinalCharacteristics(state, races);
+
+  // Strip redundant flat legacy fields so the exported JSON has a clean, single canonical nested format
+  const {
+    characteristics,
+    finalCharacteristics,
+    characterName,
+    playerName,
+    subrace,
+    level,
+    maxHP,
+    currentHP,
+    tempHP,
+    speed,
+    goldAmount,
+    silverAmount,
+    copperAmount,
+    skillRanks,
+    savingThrowsProficient,
+    armorProficiencies,
+    weaponProficiencies,
+    languages,
+    equipmentList,
+    primaryAO,
+    secondaryAO,
+    selectedAOs,
+    levelSelections,
+    personalityBackstory,
+    appearance,
+    manualSkills,
+    manualProficiencies,
+    manualEquipment,
+    manualRaces,
+    manualHP,
+    manualSpells,
+    raceState,
+    ...cleanState
+  } = state;
+
+  const calculatedMaxHP = calculateTotalHP(state, ORIGINS, finalStats, races);
   const exported = {
-    ...state,
-    characteristics: finalStats,
-    finalCharacteristics: finalStats,
+    ...cleanState,
+    manualHP: false,
+    combat: {
+      ...(cleanState.combat ?? {}),
+      maxHP: calculatedMaxHP,
+      currentHP: state.combat?.currentHP ?? state.currentHP ?? calculatedMaxHP,
+    },
+    equipment: {
+      ...(cleanState.equipment ?? {}),
+      equipmentList: deduplicateEquipmentList(
+        cleanState.equipment?.equipmentList ?? state.equipmentList ?? []
+      ),
+    },
     baseCharacteristics: finalStats,
+    finalCharacteristics: finalStats,
   };
   return JSON.stringify(exported, null, 2);
 }
@@ -517,6 +568,26 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
   return total;
 }
 
+export function calculatePotentialSpent(state: any): number {
+  const spellcasting = state.spellcasting ?? {};
+  const cantrips: string[] = spellcasting.cantrips ?? [];
+  const spells: { name: string; level: number }[] = spellcasting.spells ?? [];
+  const slots: Record<number, number> = spellcasting.slots ?? {};
+
+  let spent = cantrips.length * 10;
+  spells.forEach((s) => { spent += 10 * (s.level ?? 1); });
+  for (let lvl = 1; lvl <= 9; lvl++) {
+    spent += (slots[lvl] ?? 0) * 10 * lvl;
+  }
+  return spent;
+}
+
+export function calculatePotentialRemaining(state: any, originsData: OriginData[]): number {
+  const total = calculatePotentialGained(state, originsData);
+  const spent = calculatePotentialSpent(state);
+  return total - spent;
+}
+
 export function getPrimaryHDForLevel(
   level: number,
   state: any,
@@ -548,7 +619,14 @@ export function getPrimaryHDForLevel(
 export function hasDwarvenToughness(state: any, raceData?: any[]): boolean {
   const raceState = state?.race ?? {};
   const raceName = typeof state?.race === 'string' ? state.race : raceState.race;
-  const subraceName = typeof state?.subrace === 'string' ? state.subrace : raceState.subrace;
+  let subraceName = typeof raceState?.subrace === 'string' ? raceState.subrace : state?.subrace;
+
+  if (raceData && raceName && subraceName) {
+    const raceObj = raceData.find((r: any) => r.name === raceName);
+    if (raceObj?.subraces && !raceObj.subraces.some((s: any) => s.name === subraceName)) {
+      subraceName = '';
+    }
+  }
 
   if (raceName === 'Custom') {
     const customTraits = raceState.customRace?.traits ?? state?.customRace?.traits ?? [];
@@ -599,7 +677,7 @@ export function calculateTotalHP(
   const vitMod = Math.floor((vit - 10) / 2);
   const toughnessBonus = hasDwarvenToughness(state, raceData) ? level : 0;
 
-  if (state?.maxHP != null && typeof state.maxHP === 'number') {
+  if (state?.manualHP === true && state?.maxHP != null && typeof state.maxHP === 'number') {
     return Math.max(1, state.maxHP);
   }
 

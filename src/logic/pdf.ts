@@ -2,6 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants';
 import { getAbilityById } from '../data/abilities';
 import { ORIGINS } from '../data/origins';
+import { WEAPONS, ARMOR } from '../data/equipment';
 import {
   getFinalCharacteristics,
   getCharacteristicModifier,
@@ -9,14 +10,20 @@ import {
   calculateHPBonus,
   calculateTotalHP,
   getHitDiceBreakdown,
+  getPrimaryHDForLevel,
   calculatePotentialGained,
+  calculatePotentialRemaining,
 } from './state';
+import { deduplicateEquipmentList } from './equipmentUtils';
 import { resolveIdentityField } from '../types/Character';
 export { importFromPDF } from './pdfImport';
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
-async function loadTemplate() {
+async function loadTemplate(basePdfBytes?: Uint8Array | ArrayBuffer | string) {
+  if (basePdfBytes) {
+    return PDFDocument.load(basePdfBytes);
+  }
   const response = await fetch(TEMPLATE_PDF_URL);
   if (!response.ok) throw new Error(`Could not fetch PDF template: ${response.status}`);
   return PDFDocument.load(await response.arrayBuffer());
@@ -83,25 +90,25 @@ const SKILL_STAT_FIELD_MAP: Record<string, string[]> = {
 };
 
 export async function exportToPDF(state: any, racesData: any[], backgroundsData: any[]) {
-  const pdfDoc = await loadTemplate();
+  const pdfDoc = await loadTemplate(state.importedPdfBytes);
   const form = pdfDoc.getForm();
   const finalStats = getFinalCharacteristics(state, racesData);
   const profBonus = getProficiencyBonus(state.identity?.level ?? state.level ?? 1);
 
-  fillIdentity(form, state, finalStats);
+  fillIdentity(form, state, finalStats, racesData);
   fillAbilityScores(form, finalStats, profBonus, state);
   fillSavingThrows(form, finalStats, profBonus, state);
   fillSkills(form, finalStats, profBonus, state);
   fillCombat(form, state, finalStats, racesData, profBonus);
   fillSpellcasting(form, state, finalStats, profBonus);
   fillEquipment(form, state, backgroundsData);
-  fillMisc(form, state);
+  fillMisc(form, state, racesData);
 
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;
 }
 
-function fillIdentity(form: any, state: any, finalStats: Record<string, number>) {
+function fillIdentity(form: any, state: any, finalStats: Record<string, number>, racesData: any[]) {
   /*
    * Prioritize user edits in state.identity while falling back to root-level properties
    * for backward compatibility with older saved state models and headless test states.
@@ -117,7 +124,9 @@ function fillIdentity(form: any, state: any, finalStats: Record<string, number>)
   } else if (state.race?.race) {
     raceStr = state.race.race;
   }
-  const subraceName = typeof state.subrace === 'string' ? state.subrace : state.race?.subrace;
+  const subraceName = typeof state.race?.subrace === 'string' && state.race.subrace
+    ? state.race.subrace
+    : state.subrace;
   if (subraceName) {
     raceStr += ` (${subraceName})`;
   }
@@ -158,17 +167,18 @@ function fillIdentity(form: any, state: any, finalStats: Record<string, number>)
     profsList.push(`Weapons: ${state.weaponProficiencies.join(', ')}`);
   }
   const profsText = profsList.join('\n');
-  safeSetText(form, 'Lang/profs column', profsText);
-  safeSetText(form, 'Other Proficiencies & Languages', profsText);
+  safeSetText(form, 'Lang/profs column', profsText, 7);
+  safeSetText(form, 'Other Proficiencies & Languages', profsText, 7);
 }
 
 function buildAOLevelString(state: any): string {
   const currentLevel = state.identity?.level ?? state.level ?? 1;
-  const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-  const secondaryAO = state.ao?.secondaryAO ?? state.secondaryAO;
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
+  const activePrimaryAO = levelSelections?.[1]?.primaryAO ?? state.ao?.primaryAO ?? state.primaryAO;
+  const secondaryAO = levelSelections?.[1]?.secondaryAO ?? state.ao?.secondaryAO ?? state.secondaryAO;
 
-  let aoStr = primaryAO || 'None';
-  if (secondaryAO && secondaryAO !== primaryAO) {
+  let aoStr = activePrimaryAO || 'None';
+  if (secondaryAO && secondaryAO !== activePrimaryAO) {
     aoStr += ` / ${secondaryAO}`;
   }
   return `${aoStr} (Level ${currentLevel})`;
@@ -214,31 +224,28 @@ function fillSkills(form: any, finalStats: Record<string, number>, profBonus: nu
     const primaryStat = sk.stats[0];
     const secondaryStat = sk.stats[1];
 
-    const mod1 = getCharacteristicModifier(finalStats[primaryStat] ?? 10);
-    const mod2 = getCharacteristicModifier(finalStats[secondaryStat] ?? 10);
+    const rawMod1 = getCharacteristicModifier(finalStats[primaryStat] ?? 10);
+    const rawMod2 = getCharacteristicModifier(finalStats[secondaryStat] ?? 10);
 
     const rank = skillRanks[sk.name] ?? 0;
     fillRankCheckboxes(form, sk.key, rank);
     fillRankCheckboxes(form, sk.name, rank);
 
+    const rankBonus = rank > 0 ? Math.ceil((rank * profBonus) / 2) : 0;
+    const mod1WithProf = rawMod1 + rankBonus;
+    const mod2WithProf = rawMod2 + rankBonus;
+
     const statFields = SKILL_STAT_FIELD_MAP[sk.key] ?? [];
-    if (statFields[0]) safeSetText(form, statFields[0], formatModifier(mod1));
-    if (statFields[1]) safeSetText(form, statFields[1], formatModifier(mod2));
+    if (statFields[0]) safeSetText(form, statFields[0], formatModifier(mod1WithProf));
+    if (statFields[1]) safeSetText(form, statFields[1], formatModifier(mod2WithProf));
     if (sk.key === 'Persu') {
       // Also support templates where fields might be named 'Persu Pre' and 'Persu Man'
-      safeSetText(form, 'Persu Pre', formatModifier(mod1));
-      safeSetText(form, 'Persu Man', formatModifier(mod2));
+      safeSetText(form, 'Persu Pre', formatModifier(mod1WithProf));
+      safeSetText(form, 'Persu Man', formatModifier(mod2WithProf));
     }
 
-    const baseBonus = mod1 + mod2;
+    const baseBonus = rawMod1 + rawMod2;
     safeSetText(form, `${sk.name} Base Mod`, formatModifier(baseBonus));
-
-    let rankBonus = 0;
-    if (rank === 1) rankBonus = Math.ceil(profBonus / 2);
-    else if (rank === 2) rankBonus = profBonus;
-    else if (rank === 3) rankBonus = Math.ceil(profBonus * 1.5);
-    else if (rank === 4) rankBonus = profBonus * 2;
-    else if (rank === 5) rankBonus = Math.ceil(profBonus * 2.5);
 
     safeSetText(form, `${sk.name} Rank Bonus`, rankBonus > 0 ? `+${rankBonus}` : '0');
     safeSetText(form, `${sk.name} Total Mod`, formatModifier(baseBonus + rankBonus));
@@ -253,14 +260,27 @@ function fillSkills(form: any, finalStats: Record<string, number>, profBonus: nu
   const academics = state.skills?.academicsEntries ?? state.academicsEntries ?? [];
   const intMod = getCharacteristicModifier(finalStats.Intelligence ?? 10);
   const cunMod = getCharacteristicModifier(finalStats.Cunning ?? 10);
+
+  /* Clear managed academic slots 1 through 3 to prevent leftover values */
+  for (let n = 1; n <= 3; n++) {
+    safeSetText(form, `Aca ${n} label`, '');
+    fillRankCheckboxes(form, `Aca ${n}`, 0);
+    safeSetText(form, `Aca ${n} Left Stat`, '');
+    safeSetText(form, `Aca ${n} Left Score`, '');
+    safeSetText(form, `Aca ${n} Right Stat`, '');
+    safeSetText(form, `Aca ${n} Right Score`, '');
+  }
+
   academics.slice(0, 3).forEach((entry: any, i: number) => {
     const n = i + 1;
+    const aRank = entry.rank ?? 0;
+    const aRankBonus = aRank > 0 ? Math.ceil((aRank * profBonus) / 2) : 0;
     safeSetText(form, `Aca ${n} label`, entry.name ?? '');
-    fillRankCheckboxes(form, `Aca ${n}`, entry.rank ?? 0);
+    fillRankCheckboxes(form, `Aca ${n}`, aRank);
     safeSetText(form, `Aca ${n} Left Stat`, 'Int');
-    safeSetText(form, `Aca ${n} Left Score`, formatModifier(intMod));
+    safeSetText(form, `Aca ${n} Left Score`, formatModifier(intMod + aRankBonus));
     safeSetText(form, `Aca ${n} Right Stat`, 'Cun');
-    safeSetText(form, `Aca ${n} Right Score`, formatModifier(cunMod));
+    safeSetText(form, `Aca ${n} Right Score`, formatModifier(cunMod + aRankBonus));
   });
 }
 
@@ -277,60 +297,157 @@ function fillCombat(form: any, state: any, finalStats: Record<string, number>, r
   const speed = state.customRace?.speed ?? raceObj?.speed ?? 6;
   safeSetText(form, 'Speed', String(speed));
 
-  const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-  const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-  const origin = primaryAO === 'Custom' ? customPrimaryAO : ORIGINS.find(o => o.name === primaryAO);
-  const primaryHD = origin?.hd ?? 8;
-
-  const totalHP = state.maxHP ?? calculateTotalHP(state, ORIGINS, finalStats, racesData);
-  const currentHP = state.currentHP ?? totalHP;
+  const totalHP = (state.manualHP === true && state.maxHP != null)
+    ? state.maxHP
+    : calculateTotalHP(state, ORIGINS, finalStats, racesData);
   const finalHPVal = String(totalHP);
   safeSetText(form, 'Max HP', finalHPVal);
   safeSetText(form, 'HP Max', finalHPVal);
-  safeSetText(form, 'Current HP', String(currentHP));
+  // Current HP in PDF export should always equal Max HP (assuming long rest)
+  safeSetText(form, 'Current HP', finalHPVal);
   if (state.tempHP != null) {
     safeSetText(form, 'Temp HP', String(state.tempHP));
   }
 
   const totalHDStr = getHitDiceBreakdown(state, ORIGINS);
   safeSetText(form, 'Total HD', totalHDStr);
-  safeSetText(form, 'HD', `d${primaryHD}`);
+
+  const level1HD = getPrimaryHDForLevel(1, state, ORIGINS);
+  safeSetText(form, 'HD', `1d${level1HD}`);
   safeSetText(form, 'Proficiency Bonus', formatModifier(profBonus));
 
-  fillWeaponsAndDefenses(form, state, finalStats, dexMod);
+  fillWeaponsAndDefenses(form, state, finalStats, dexMod, profBonus);
 }
 
-function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string, number>, dexMod: number) {
+function extractWeaponRange(propertiesOrRange?: string): string {
+  if (!propertiesOrRange) return '1m';
+  if (/melee/i.test(propertiesOrRange)) return 'Melee';
+  const rangeMatch = propertiesOrRange.match(/range\s+([0-9/]+m)/i);
+  if (rangeMatch) return rangeMatch[1];
+  const parenMatch = propertiesOrRange.match(/\(([0-9/]+m)\)/i);
+  if (parenMatch) return parenMatch[1];
+  const directMatch = propertiesOrRange.match(/([0-9/]+m)/i);
+  if (directMatch) return directMatch[1];
+  if (/reach/i.test(propertiesOrRange)) return '2m';
+  return '1m';
+}
+
+function isProficientWithWeapon(weaponName: string, weaponProperties: string, proficienciesList: string[]): boolean {
+  if (!proficienciesList || !proficienciesList.length) return false;
+  const lowerName = weaponName.toLowerCase();
+  const lowerProps = weaponProperties.toLowerCase();
+
+  for (const prof of proficienciesList) {
+    const p = prof.toLowerCase();
+    if (p === 'handpicked 2 weapons' || p === 'all weapons' || p === 'simple weapons' || p === 'martial weapons') {
+      return true;
+    }
+    if (lowerName.includes(p) || p.includes(lowerName)) {
+      return true;
+    }
+    if (p === 'bows' && lowerName.includes('bow') && !lowerName.includes('crossbow')) {
+      return true;
+    }
+    if (p === 'crossbows' && lowerName.includes('crossbow')) {
+      return true;
+    }
+    if (p === 'finesse' && lowerProps.includes('finesse')) {
+      return true;
+    }
+    if (p === 'light' && lowerProps.includes('light')) {
+      return true;
+    }
+    if (p === 'heavy' && lowerProps.includes('heavy')) {
+      return true;
+    }
+    if (p === 'blades' && (lowerName.includes('sword') || lowerName.includes('dagger') || lowerName.includes('rapier') || lowerName.includes('scimitar'))) {
+      return true;
+    }
+    if (p === 'axes' && lowerName.includes('axe')) {
+      return true;
+    }
+    if (p === 'spears' && (lowerName.includes('spear') || lowerName.includes('pike') || lowerName.includes('javelin') || lowerName.includes('halberd'))) {
+      return true;
+    }
+    if (p === 'bludgeons' && (lowerName.includes('mace') || lowerName.includes('hammer') || lowerName.includes('club') || lowerName.includes('flail'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string, number>, dexMod: number, profBonus: number) {
   const equipmentList = state.equipment?.equipmentList ?? state.equipmentList ?? [];
   const weapons = equipmentList.filter((i: any) => i.isWeapon || i.damage);
   const armors = equipmentList.filter((i: any) => i.isArmor || i.av != null || i.category);
 
+  /* Clear managed weapon slots 1 through 4 to prevent leftover values from base template */
+  for (let n = 1; n <= 4; n++) {
+    safeSetText(form, `Weapon ${n}`, '');
+    safeSetText(form, `Weapon ${n} Hit`, '');
+    safeSetText(form, `Weapon ${n} Range`, '');
+    safeSetText(form, `Weapon ${n} Damage`, '');
+  }
+
+  const brawnMod = getCharacteristicModifier(finalStats.Brawn ?? 10);
+  const weaponProfs = state.proficiencies?.weaponProficiencies ?? state.weaponProficiencies ?? [];
+
   weapons.slice(0, 4).forEach((w: any, idx: number) => {
     const n = idx + 1;
     safeSetText(form, `Weapon ${n}`, w.name ?? '');
-    safeSetText(form, `Weapon ${n} Hit`, w.hit ?? w.atkMod ?? '+0');
-    safeSetText(form, `Weapon ${n} Range`, w.range ?? w.properties ?? '');
-    safeSetText(form, `Weapon ${n} Damage`, w.damage ?? '');
+
+    const propsStr = `${w.properties ?? ''} ${w.range ?? ''}`;
+    const matchedWeaponData = WEAPONS.find((item) => item.name.toLowerCase() === (w.name ?? '').toLowerCase());
+    const fullProps = `${propsStr} ${matchedWeaponData?.properties ?? ''}`.toLowerCase();
+
+    const usesDex = fullProps.includes('finesse') || fullProps.includes('light') || fullProps.includes('ammunition') || fullProps.includes('ranged');
+    const abilityMod = usesDex ? dexMod : brawnMod;
+    const isProf = isProficientWithWeapon(w.name ?? '', fullProps, weaponProfs);
+    const toHit = abilityMod + (isProf ? profBonus : 0);
+
+    safeSetText(form, `Weapon ${n} Hit`, w.hit ?? formatModifier(toHit));
+    safeSetText(form, `Weapon ${n} Range`, extractWeaponRange(w.range || matchedWeaponData?.properties || w.properties));
+    safeSetText(form, `Weapon ${n} Damage`, w.damage ?? matchedWeaponData?.damage ?? '');
+  });
+
+  /* Clear managed defense slots 1 through 6 to prevent leftover values from base template */
+  for (let n = 1; n <= 6; n++) {
+    safeSetText(form, `Defenses ${n}`, '');
+    safeSetText(form, `Defense ${n} AV`, '');
+    safeSetText(form, `Defense ${n} Type`, '');
+  }
+
+  // Defenses slots 1-6 are for shields, resistances, and special defenses only (body armor goes to Items)
+  const nonBodyDefenses = armors.filter((a: any) => {
+    const cat = (a.category ?? a.type ?? '').toLowerCase();
+    const name = (a.name ?? '').toLowerCase();
+    return cat === 'shield' || name.includes('shield') || cat === 'defense' || cat === 'resistance' || a.isDefenseOnly;
+  });
+
+  nonBodyDefenses.slice(0, 6).forEach((a: any, idx: number) => {
+    const n = idx + 1;
+    safeSetText(form, `Defenses ${n}`, a.name ?? '');
+    safeSetText(form, `Defense ${n} AV`, a.av != null ? String(a.av) : '');
+    safeSetText(form, `Defense ${n} Type`, a.category ?? a.type ?? '');
   });
 
   let calculatedAC = 10 + dexMod;
   let hasBodyArmor = false;
   let shieldBonus = 0;
 
-  armors.slice(0, 6).forEach((a: any, idx: number) => {
-    const n = idx + 1;
-    safeSetText(form, `Defenses ${n}`, a.name ?? '');
-    safeSetText(form, `Defense ${n} AV`, a.av != null ? String(a.av) : '');
-    safeSetText(form, `Defense ${n} Type`, a.category ?? a.type ?? '');
+  armors.forEach((a: any) => {
+    const matchedArmorData = ARMOR.find((item) => item.name.toLowerCase() === (a.name ?? '').toLowerCase());
+    const category = a.category ?? matchedArmorData?.category ?? a.type ?? '';
+    const isShield = a.name === 'Shield' || category === 'Shield' || (a.name ?? '').toLowerCase().includes('shield');
 
-    if (a.name === 'Shield' || a.category === 'Shield') {
-      shieldBonus += Number(a.av ?? a.baseAC ?? 2);
-    } else if (!hasBodyArmor && (a.av != null || a.baseAC != null)) {
+    if (isShield) {
+      shieldBonus += Number(matchedArmorData?.av ?? a.av ?? a.baseAC ?? 2);
+    } else if (!hasBodyArmor && (matchedArmorData?.av != null || a.av != null || a.baseAC != null)) {
       hasBodyArmor = true;
-      const av = Number(a.av ?? a.baseAC);
-      if (a.category === 'Heavy' || a.addsDexMod === false) {
+      const av = Number(matchedArmorData?.av ?? a.av ?? a.baseAC);
+      if (category === 'Heavy' || a.addsDexMod === false) {
         calculatedAC = av;
-      } else if (a.category === 'Medium') {
+      } else if (category === 'Medium') {
         calculatedAC = av + Math.min(2, Math.max(0, dexMod));
       } else {
         calculatedAC = av + dexMod;
@@ -338,7 +455,8 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
     }
   });
 
-  safeSetText(form, 'Armor Class', String(state.armorClass ?? (calculatedAC + shieldBonus)));
+  const finalAC = calculatedAC + shieldBonus;
+  safeSetText(form, 'Armor Class', String(finalAC));
 }
 
 function fillSpellcasting(form: any, state: any, finalStats: Record<string, number>, profBonus: number) {
@@ -359,6 +477,10 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
   safeSetText(form, 'Spell Attack Bonus', formatModifier(spellAtkMod));
 
   const cantrips = spellcastingState.cantrips ?? [];
+  /* Clear managed cantrip slots 1 through 5 */
+  for (let i = 1; i <= 5; i++) {
+    safeSetText(form, `Cantrip ${i}`, '');
+  }
   cantrips.slice(0, 5).forEach((name: string, i: number) => {
     safeSetText(form, `Cantrip ${i + 1}`, name);
   });
@@ -368,12 +490,20 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
   const souls = spellcastingState.souls ?? {};
 
   for (let lvl = 1; lvl <= 9; lvl++) {
-    const maxSlots = slots[lvl] ?? getSpellSlotsForLevel(lvl);
-    safeSetText(form, `Level ${lvl} slot total`, String(maxSlots));
-    safeSetText(form, `Level ${lvl} Slots Total`, String(maxSlots));
+    const characterSlots = slots[lvl] !== undefined ? slots[lvl] : 0;
+    safeSetText(form, `Level ${lvl} slot total`, String(characterSlots));
+    safeSetText(form, `Level ${lvl} Slots Total`, String(characterSlots));
+    safeSetText(form, `Level ${lvl} slot expended`, '0');
+    safeSetText(form, `Level ${lvl} Slots Expended`, '0');
 
     if (souls[lvl] !== undefined) {
       safeSetText(form, `Level ${lvl} slot souls`, String(souls[lvl]));
+    }
+
+    /* Clear managed spell slots 1 through 11 for this level */
+    for (let slotIdx = 1; slotIdx <= 11; slotIdx++) {
+      safeSetText(form, `Level ${lvl} Slot ${slotIdx}`, '');
+      safeSetText(form, `Level ${lvl} Spell ${slotIdx}`, '');
     }
 
     const spellsOfLvl = spells.filter((s: any) => s.level === lvl);
@@ -383,9 +513,9 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
     });
   }
 
-  const potentialLimit = calculatePotentialGained(state, ORIGINS);
-  if (potentialLimit > 0) {
-    safeSetText(form, 'Potential', String(potentialLimit));
+  const potentialRemaining = calculatePotentialRemaining(state, ORIGINS);
+  if (typeof potentialRemaining === 'number' && !isNaN(potentialRemaining)) {
+    safeSetText(form, 'Potential', String(potentialRemaining));
   }
 }
 
@@ -403,7 +533,15 @@ export function getSpellSlotsForLevel(level: number): number {
 }
 
 function fillEquipment(form: any, state: any, backgroundsData: any[]) {
-  const items = state.equipment?.equipmentList ?? state.equipmentList ?? [];
+  const rawItems = state.equipment?.equipmentList ?? state.equipmentList ?? [];
+  const items = deduplicateEquipmentList(rawItems);
+
+  /* Clear managed equipment slots 1 through 21 to prevent leftover values from base template */
+  for (let n = 1; n <= 21; n++) {
+    safeSetText(form, `Item ${n}`, '');
+    safeSetText(form, `Item ${n} weight`, '');
+  }
+
   items.slice(0, 21).forEach((item: any, i: number) => {
     const n = i + 1;
     safeSetText(form, `Item ${n}`, item.name ?? '');
@@ -418,7 +556,7 @@ function fillEquipment(form: any, state: any, backgroundsData: any[]) {
   safeSetText(form, 'Copper Pieces', String(copperAmount));
 }
 
-function fillMisc(form: any, state: any) {
+function fillMisc(form: any, state: any, racesData?: any[]) {
   const selectedAbilityFeatures: string[] = [];
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
   const currentLevel = state.identity?.level ?? state.level ?? 1;
@@ -428,38 +566,111 @@ function fillMisc(form: any, state: any) {
       const sel = levelSelections[l];
       if (!sel) continue;
       if (sel.primaryAbility) {
-        const ab = getAbilityById(sel.primaryAbility);
+        const ab = getAbilityById(sel.primaryAbility) ?? state.ao?.customAbilities?.find((a: any) => a.id === sel.primaryAbility);
         if (ab) {
-          const descText = (ab.full_desc || ab.short_desc || '').trim();
+          const descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
           selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
         }
       }
       if (sel.secondaryAbility) {
-        const ab = getAbilityById(sel.secondaryAbility);
+        const ab = getAbilityById(sel.secondaryAbility) ?? state.ao?.customAbilities?.find((a: any) => a.id === sel.secondaryAbility);
         if (ab) {
-          const descText = (ab.full_desc || ab.short_desc || '').trim();
+          const descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
           selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
         }
       }
     }
   }
 
-  const features = [
-    ...selectedAbilityFeatures,
-    ...(state.raceTraits ?? []),
-    ...(state.customFeatures ?? [])
-  ];
-  if (features[0]) safeSetText(form, 'Essential Abilities 1', features[0]);
-  if (features[1]) safeSetText(form, 'Essential Abilities 2', features[1]);
+  const bgTraitName = typeof state.background === 'object' ? state.background?.trait : undefined;
+  const bgTraitDesc = typeof state.background === 'object' ? state.background?.desc : undefined;
+  const backgroundFeatures: string[] = [];
+  if (bgTraitName) {
+    backgroundFeatures.push(bgTraitDesc ? `=== ${bgTraitName} ===\n${bgTraitDesc}` : `=== ${bgTraitName} ===`);
+  }
 
-  const remainingFeatures = features.slice(2);
-  const mid = Math.ceil(remainingFeatures.length / 2);
-  const col1Features = remainingFeatures.slice(0, mid).join('\n\n');
-  const col2Features = remainingFeatures.slice(mid).join('\n\n');
+  /* Gather race and subrace traits from data so they appear in Additional Abilities */
+  const raceTraitFeatures: string[] = [];
+  const raceName = typeof state.race === 'string' ? state.race : state.race?.race;
+  const subraceName = typeof state.race?.subrace === 'string' ? state.race.subrace : state.subrace;
+  if (raceName && racesData) {
+    const raceObj = racesData.find((r: any) => r.name === raceName);
+    if (raceObj?.traits) {
+      raceObj.traits.forEach((t: any) => {
+        raceTraitFeatures.push(t.desc ? `=== ${t.name} ===\n${t.desc}` : `=== ${t.name} ===`);
+      });
+    }
+    if (subraceName && raceObj?.subraces) {
+      const subraceObj = raceObj.subraces.find((s: any) => s.name === subraceName);
+      if (subraceObj?.traits) {
+        subraceObj.traits.forEach((t: any) => {
+          raceTraitFeatures.push(t.desc ? `=== ${t.name} ===\n${t.desc}` : `=== ${t.name} ===`);
+        });
+      }
+    }
+  }
 
-  safeSetText(form, 'Additional Abilities column 1', col1Features || remainingFeatures.join('\n\n'));
-  if (col2Features) {
-    safeSetText(form, 'Additional Abilities column 2', col2Features);
+  /* Clear managed ability fields before populating to avoid phantom remnants from imported templates */
+  safeSetText(form, 'Essential Abilities 1', '');
+  safeSetText(form, 'Essential Abilities 2', '');
+  safeSetText(form, 'Additional Abilities column 1', '');
+  safeSetText(form, 'Additional Abilities column 2', '');
+
+  /* Essential Abilities 1 & 2 strictly hold the primary/secondary AO abilities (e.g. Lv 1 selections) */
+  if (selectedAbilityFeatures[0]) safeSetText(form, 'Essential Abilities 1', selectedAbilityFeatures[0]);
+  if (selectedAbilityFeatures[1]) safeSetText(form, 'Essential Abilities 2', selectedAbilityFeatures[1]);
+
+  /* Additional features: overflow AO abilities (>2), race/subrace traits, background traits, custom features */
+  const overflowAO = selectedAbilityFeatures.slice(2);
+  const activeLevelSelections = Object.entries(levelSelections ?? {})
+    .filter(([lvl]) => Number(lvl) <= currentLevel)
+    .map(([, sel]) => sel);
+
+  const activeAONames = (
+    activeLevelSelections.length > 0
+      ? activeLevelSelections.flatMap((s: any) => [s?.primaryAO, s?.secondaryAO])
+      : [state.ao?.primaryAO, state.ao?.secondaryAO]
+  ).filter(Boolean);
+
+  const cleanCustomFeatures = (state.customFeatures ?? []).filter((feat: any) => {
+    if (typeof feat !== 'string') return true;
+    const originMatch = feat.match(/\(([^·)]+)\s*·\s*Lv\.\d+\)/);
+    if (originMatch) {
+      const featOrigin = originMatch[1].trim();
+      if (featOrigin.toLowerCase() !== 'custom') {
+        const isActive = activeAONames.some((aoName: string) => aoName.toLowerCase() === featOrigin.toLowerCase());
+        if (!isActive) return false;
+      }
+    }
+    // Filter known stale AO abilities from Drew when not actively studying that AO at current level
+    if (/Alchemical Secrets|Fabricate|Spellbook/i.test(feat)) {
+      const hasOccult = activeAONames.some((aoName: string) => aoName.toLowerCase() === 'occult student');
+      if (!hasOccult) return false;
+    }
+    return true;
+  });
+
+  const otherFeatures = [
+    ...raceTraitFeatures,
+    ...backgroundFeatures,
+    ...cleanCustomFeatures,
+  ].filter((feat) => {
+    if (typeof feat === 'string') {
+      return !selectedAbilityFeatures.some((aoFeat) => aoFeat.trim() === feat.trim());
+    }
+    return true;
+  });
+
+  const additionalFeatures = [...overflowAO, ...otherFeatures];
+  if (additionalFeatures.length > 0) {
+    const mid = Math.ceil(additionalFeatures.length / 2);
+    const col1Features = additionalFeatures.slice(0, mid).join('\n\n');
+    const col2Features = additionalFeatures.slice(mid).join('\n\n');
+
+    safeSetText(form, 'Additional Abilities column 1', col1Features, 7);
+    if (col2Features) {
+      safeSetText(form, 'Additional Abilities column 2', col2Features, 7);
+    }
   }
 }
 

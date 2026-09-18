@@ -293,7 +293,7 @@ const AOSelector: React.FC = () => {
         </div>
 
         <div className="ability-full-desc" style={{ fontSize: '0.88rem', lineHeight: '1.6', marginBottom: '1.25rem' }}>
-          {abilityTarget.desc.split('\n\n').map((block, idx) => {
+          {(abilityTarget.desc || abilityTarget.full_desc || abilityTarget.short_desc || '').split('\n\n').map((block: string, idx: number) => {
             const trimmedBlock = block.trim();
             if (!trimmedBlock) return null;
 

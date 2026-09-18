@@ -9,6 +9,7 @@ import { levelUp } from '../logic/levelUp';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
 import { AOState, DEFAULT_AO_STATE } from './AO';
 import { SkillsState, DEFAULT_SKILLS_STATE } from './Skills';
+import { deduplicateEquipmentList } from '../logic/equipmentUtils';
 
 export interface CharacterState {
   campaignPowerLevel: 'Mundane' | 'Heroic' | 'Champion';
@@ -40,6 +41,7 @@ export interface CharacterState {
   potentialGained?: number;
   combat?: Record<string, any>;
   customFeatures?: any[];
+  importedPdfBytes?: Uint8Array | ArrayBuffer | string;
   [key: string]: any;
 }
 
@@ -87,8 +89,37 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       const p = action.payload as any;
       if (!p) return state;
 
-      const raceName = typeof p.race === 'object' ? p.race?.race ?? state.race?.race : p.race ?? state.race?.race ?? 'Elf';
-      const subraceName = typeof p.subrace === 'string' ? p.subrace : p.race?.subrace ?? state.race?.subrace ?? '';
+      let raceName = 'Elf';
+      if (typeof p.race === 'string') {
+        raceName = p.race;
+      } else if (p.race && typeof p.race === 'object') {
+        raceName = p.race.race || p.race.name || state.race?.race || 'Elf';
+      } else if (p.raceState?.race) {
+        raceName = p.raceState.race;
+      } else if (state.race?.race) {
+        raceName = state.race.race;
+      }
+
+      let subraceName = '';
+      if (p.race && typeof p.race === 'object' && typeof p.race.subrace === 'string') {
+        subraceName = p.race.subrace;
+      } else if (typeof p.subrace === 'string') {
+        subraceName = p.subrace;
+      } else if (p.raceState?.subrace && typeof p.raceState.subrace === 'string') {
+        subraceName = p.raceState.subrace;
+      } else if (state.race?.subrace) {
+        subraceName = state.race.subrace;
+      }
+
+      /* Validate subrace against selected race so invalid subraces (e.g. Garden Dwarf) are cleaned up */
+      const raceDataObj = RACES.find((r) => r.name === raceName);
+      if (raceDataObj) {
+        const isValidSubrace = raceDataObj.subraces?.some((sub) => sub.name === subraceName);
+        if (!isValidSubrace) {
+          subraceName = '';
+        }
+      }
+
       const bgName = typeof p.background === 'object' ? p.background?.name ?? (state.background as any)?.name : p.background ?? (state.background as any)?.name ?? 'Scholar';
       const primaryAO = p.primaryAO ?? p.ao?.primaryAO ?? state.ao?.primaryAO ?? '';
       const secondaryAO = p.secondaryAO ?? p.ao?.secondaryAO ?? state.ao?.secondaryAO ?? '';
@@ -113,6 +144,7 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...p,
         characterName: resolvedCharName,
         playerName: resolvedPlayerName,
+        subrace: subraceName,
         campaignPowerLevel: p.campaignPowerLevel ?? p.identity?.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
         identity: {
           ...state.identity,
@@ -122,6 +154,10 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           level: p.level ?? p.identity?.level ?? state.identity?.level ?? 1,
           personalityBackstory: p.personalityBackstory ?? p.identity?.personalityBackstory ?? state.identity?.personalityBackstory ?? '',
           appearance: p.appearance ?? p.identity?.appearance ?? state.identity?.appearance ?? { age: '', height: '', weight: '' },
+        },
+        raceState: {
+          race: raceName,
+          subrace: subraceName,
         },
         race: {
           ...state.race,
@@ -163,6 +199,7 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           customPrimaryAO: p.customPrimaryAO ?? p.ao?.customPrimaryAO ?? state.ao?.customPrimaryAO,
           customSecondaryAO: p.customSecondaryAO ?? p.ao?.customSecondaryAO ?? state.ao?.customSecondaryAO,
           customAOs: p.customAOs ?? p.ao?.customAOs ?? state.ao?.customAOs ?? [],
+          customAbilities: p.customAbilities ?? p.ao?.customAbilities ?? (state.ao as any)?.customAbilities ?? [],
           levelSelections,
         },
         skills: {
@@ -193,9 +230,14 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         spellcasting: p.spellcasting ?? (state as any).spellcasting ?? { cantrips: [], spells: [], slots: {} },
         equipment: {
           ...((state as any).equipment ?? {}),
-          equipmentList: p.equipmentList ?? p.equipment?.equipmentList ?? (state as any).equipment?.equipmentList ?? [],
+          equipmentList: deduplicateEquipmentList(
+            p.equipmentList ?? p.equipment?.equipmentList ?? (state as any).equipment?.equipmentList ?? []
+          ),
           manualEquipment: p.manualEquipment ?? p.equipment?.manualEquipment ?? (state as any).equipment?.manualEquipment ?? false,
         },
+        equipmentList: deduplicateEquipmentList(
+          p.equipmentList ?? p.equipment?.equipmentList ?? (state as any).equipment?.equipmentList ?? []
+        ),
         goldAmount: p.goldAmount ?? p.proficiencies?.goldAmount ?? (state as any).proficiencies?.goldAmount ?? 10,
         silverAmount: p.silverAmount ?? p.proficiencies?.silverAmount ?? (state as any).proficiencies?.silverAmount ?? 0,
         copperAmount: p.copperAmount ?? p.proficiencies?.copperAmount ?? (state as any).proficiencies?.copperAmount ?? 0,
@@ -208,8 +250,9 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         manualProficiencies: p.manualProficiencies ?? p.proficiencies?.manualProficiencies ?? state.manualProficiencies ?? false,
         manualEquipment: p.manualEquipment ?? p.equipment?.manualEquipment ?? state.manualEquipment ?? false,
         manualAbilityScores: p.manualAbilityScores ?? state.manualAbilityScores ?? false,
-        manualHP: p.manualHP ?? state.manualHP ?? false,
+        manualHP: false,
         customFeatures: p.customFeatures ?? state.customFeatures ?? [],
+        importedPdfBytes: p.importedPdfBytes ?? state.importedPdfBytes,
       };
     }
     case 'SET_CAMPAIGN_POWER_LEVEL':
@@ -229,14 +272,32 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         identity: nextIdentity,
       };
     }
-    case 'SET_RACE':
+    case 'SET_RACE': {
+      const nextRace = {
+        ...state.race,
+        ...action.payload,
+      };
+      const raceName = nextRace.race;
+      let subraceName = nextRace.subrace;
+      const raceDataObj = RACES.find((r) => r.name === raceName);
+      if (raceDataObj) {
+        const isValidSubrace = raceDataObj.subraces?.some((sub) => sub.name === subraceName);
+        if (!isValidSubrace) {
+          subraceName = '';
+          nextRace.subrace = '';
+        }
+      }
       return {
         ...state,
-        race: {
-          ...state.race,
-          ...action.payload,
+        race: nextRace,
+        subrace: subraceName,
+        raceState: {
+          race: raceName,
+          subrace: subraceName,
         },
+        manualRaces: nextRace.manualRaces ?? state.manualRaces,
       };
+    }
     case 'SET_BACKGROUND':
       return {
         ...state,
@@ -279,17 +340,23 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...state,
         skills: updatedSkills,
         skillRanks: updatedSkills.skillRanks,
-        manualSkills: updatedSkills.manualSkills,
+        manualSkills: updatedSkills.manualSkills ?? state.manualSkills,
       };
     }
-    case 'SET_PROFICIENCIES':
+    case 'SET_PROFICIENCIES': {
+      const updatedProf = {
+        ...((state as any).proficiencies ?? {}),
+        ...action.payload,
+      };
       return {
         ...state,
-        proficiencies: {
-          ...((state as any).proficiencies ?? {}),
-          ...action.payload,
-        },
+        proficiencies: updatedProf,
+        manualProficiencies: updatedProf.manualProficiencies ?? state.manualProficiencies,
+        goldAmount: updatedProf.goldAmount ?? state.goldAmount,
+        silverAmount: updatedProf.silverAmount ?? state.silverAmount,
+        copperAmount: updatedProf.copperAmount ?? state.copperAmount,
       } as any;
+    }
     case 'SET_SPELLCASTING':
       return {
         ...state,
@@ -298,15 +365,23 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           ...action.payload,
         },
       } as any;
-    case 'SET_EQUIPMENT':
+    case 'SET_EQUIPMENT': {
+      const updatedEquip = {
+        ...((state as any).equipment ?? {}),
+        ...action.payload,
+      };
+      const rawList = (action.payload as any).equipmentList ?? updatedEquip.equipmentList ?? (state as any).equipmentList;
+      const cleanList = deduplicateEquipmentList(rawList);
       return {
         ...state,
         equipment: {
-          ...((state as any).equipment ?? {}),
-          ...action.payload,
+          ...updatedEquip,
+          equipmentList: cleanList,
         },
-        equipmentList: (action.payload as any).equipmentList ?? (state as any).equipmentList,
+        equipmentList: cleanList,
+        manualEquipment: updatedEquip.manualEquipment ?? state.manualEquipment,
       } as any;
+    }
     case 'SET_MANUAL_SCORES':
       return {
         ...state,
@@ -320,11 +395,31 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...nextState,
       };
     }
-    case 'SET_STATE':
-      return {
+    case 'SET_STATE': {
+      const next = {
         ...state,
         ...action.payload,
       };
+      if (action.payload.manualEquipment !== undefined) {
+        next.equipment = {
+          ...(next.equipment ?? {}),
+          manualEquipment: Boolean(action.payload.manualEquipment),
+        };
+      }
+      if (action.payload.manualProficiencies !== undefined) {
+        next.proficiencies = {
+          ...(next.proficiencies ?? {}),
+          manualProficiencies: Boolean(action.payload.manualProficiencies),
+        };
+      }
+      if (action.payload.manualSkills !== undefined) {
+        next.skills = {
+          ...(next.skills ?? {}),
+          manualSkills: Boolean(action.payload.manualSkills),
+        };
+      }
+      return next;
+    }
     case 'RESET':
       return DEFAULT_CHARACTER;
     default:

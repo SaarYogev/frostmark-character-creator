@@ -19,7 +19,7 @@ export interface ArmorData {
 }
 
 export const WEAPONS: WeaponData[] = [
-  { name: 'Dagger', cost: '2 gp', damage: '1d4 piercing', weight: '0.5 kg', properties: 'Finesse, light, thrown (range 6/18m)' },
+  { name: 'Dagger', cost: '2 gp', damage: '1d4 piercing', weight: '0.5 kg', properties: 'Finesse, light, thrown (range 4/12m)' },
   { name: 'Shortsword', cost: '10 gp', damage: '1d6 slashing', weight: '1 kg', properties: 'Finesse, light' },
   { name: 'Longsword', cost: '15 gp', damage: '1d8 slashing', weight: '1.5 kg', properties: 'Versatile (1d10)' },
   { name: 'Rapier', cost: '25 gp', damage: '1d8 piercing', weight: '1 kg', properties: 'Finesse' },
