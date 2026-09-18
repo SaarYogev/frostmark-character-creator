@@ -50,10 +50,16 @@ export function listLocalCharacters(): SavedCharacterMeta[] {
   }
 }
 
+export function sanitizeStateForLocalStorage(state: CharacterState): CharacterState {
+  if (!state || !state.importedPdfBytes) return state;
+  const { importedPdfBytes, ...rest } = state;
+  return rest as CharacterState;
+}
+
 export function saveCharacterLocally(state: CharacterState, existingId?: string): SavedCharacterMeta {
   const id = existingId || `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const meta = extractCharacterMeta(state, id, 'local');
-  const item: CharacterStorageItem = { meta, data: state };
+  const item: CharacterStorageItem = { meta, data: sanitizeStateForLocalStorage(state) };
 
   try {
     const storage = getStorage();
@@ -102,7 +108,7 @@ export function saveDraftLocally(state: CharacterState): void {
   try {
     const storage = getStorage();
     if (!storage) return;
-    storage.setItem(DRAFT_CHARACTER_KEY, JSON.stringify(state));
+    storage.setItem(DRAFT_CHARACTER_KEY, JSON.stringify(sanitizeStateForLocalStorage(state)));
   } catch (err) {
     console.error('Failed to save draft locally:', err);
   }

@@ -196,7 +196,8 @@ test('exportToPDF exports weapon and defense list entries properly', async () =>
     const state = getInitialState();
     state.equipmentList = [
       { name: 'Warhammer', isWeapon: true, hit: '+4', range: 'Melee', damage: '1d8+2', equipped: true },
-      { name: 'Plate Armor', isArmor: true, baseAC: 18, addsDexMod: false, equipped: true }
+      { name: 'Plate Armor', isArmor: true, baseAC: 18, addsDexMod: false, equipped: true },
+      { name: 'Shield', isArmor: true, category: 'Shield', av: 2, equipped: true }
     ];
 
     const pdfBytes = await exportToPDF(state, RACES, BACKGROUNDS);
@@ -207,7 +208,8 @@ test('exportToPDF exports weapon and defense list entries properly', async () =>
     expect(form.getTextField('Weapon 1 Hit').getText()).toBe('+4');
     expect(form.getTextField('Weapon 1 Range').getText()).toBe('Melee');
     expect(form.getTextField('Weapon 1 Damage').getText()).toBe('1d8+2');
-    expect(form.getTextField('Defenses 1').getText()).toBe('Plate Armor');
+    expect(form.getTextField('Defenses 1').getText()).toBe('Shield');
+    expect(form.getTextField('Item 2').getText()).toBe('Plate Armor');
   } finally {
     globalThis.fetch = originalFetch;
   }
