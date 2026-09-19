@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { RACES } from '../data/races';
+import { SKILLS } from '../data/constants';
+import { getRacialStartingSkillSlots } from '../logic/racialAbilities';
 import { RaceData, CustomRace, Characteristic, CHARACTERISTICS, StatBonuses, Trait, RaceState, DEFAULT_RACE_STATE } from '../types/Race';
 import { useCharacter } from '../contexts/CharacterContext';
 
@@ -208,9 +210,24 @@ const CustomRaceForm: React.FC<{
 const ManualRacesSection: React.FC<{
   manualRaces: boolean;
   racialStatOverrides: Record<string, number>;
+  racialSkillOverrides?: Record<string, string>;
+  selectedRace: string;
+  selectedSubrace: string;
   onManualRacesChange: (checked: boolean) => void;
   onOverrideChange: (overrides: Record<string, number>) => void;
-}> = ({ manualRaces, racialStatOverrides, onManualRacesChange, onOverrideChange }) => {
+  onSkillOverrideChange: (overrides: Record<string, string>) => void;
+}> = ({
+  manualRaces,
+  racialStatOverrides,
+  racialSkillOverrides = {},
+  selectedRace,
+  selectedSubrace,
+  onManualRacesChange,
+  onOverrideChange,
+  onSkillOverrideChange,
+}) => {
+  const startingSkillSlots = getRacialStartingSkillSlots(selectedRace, selectedSubrace);
+
   const handleOverrideChange = (p2: string, p1: string) => {
     if (p2 && p2 === p1) {
       alert('Cannot select the same attribute for both +2 and +1 bonuses.');
@@ -223,13 +240,20 @@ const ManualRacesSection: React.FC<{
     onOverrideChange(overrides);
   };
 
+  const handleSkillChange = (slotId: string, skillName: string) => {
+    onSkillOverrideChange({
+      ...racialSkillOverrides,
+      [slotId]: skillName,
+    });
+  };
+
   return (
     <div className="section-block manual-races-block" style={{
       marginTop: '2rem',
       borderTop: '1px solid var(--border-color)',
       paddingTop: '1.5rem'
     }}>
-      <h3 className="section-title">Manual Stat Allocation Override</h3>
+      <h3 className="section-title">Manual Racial Bonuses & Skills Override</h3>
       <label className="checkbox-label" style={{
         display: 'flex',
         alignItems: 'center',
@@ -242,48 +266,79 @@ const ManualRacesSection: React.FC<{
           onChange={(e) => onManualRacesChange(e.target.checked)}
           style={{ margin: 0 }}
         />
-        <strong>Customize stat bonuses manually (+2 to one stat, +1 to another)</strong>
+        <strong>Customize racial bonuses and starting skills manually</strong>
       </label>
       {manualRaces && (
-        <div style={{
-          display: 'flex',
-          gap: '1.5rem',
-          marginTop: '1rem'
-        }}>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem' }}>+2 Attribute</label>
-            <select
-              className="select"
-              style={{ width: '100%' }}
-               value={Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? ''}
-              onChange={(e) => {
-                const plus1 = Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? '';
-                handleOverrideChange(e.target.value, plus1);
-              }}
-            >
-              <option value="">-- Choose --</option>
-              {CHARACTERISTICS.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+        <div style={{ marginTop: '1rem' }}>
+          <div style={{
+            display: 'flex',
+            gap: '1.5rem',
+          }}>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem' }}>+2 Attribute</label>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? ''}
+                onChange={(e) => {
+                  const plus1 = Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? '';
+                  handleOverrideChange(e.target.value, plus1);
+                }}
+              >
+                <option value="">-- Choose --</option>
+                {CHARACTERISTICS.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label style={{ display: 'block', marginBottom: '0.25rem' }}>+1 Attribute</label>
+              <select
+                className="select"
+                style={{ width: '100%' }}
+                value={Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? ''}
+                onChange={(e) => {
+                  const plus2 = Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? '';
+                  handleOverrideChange(plus2, e.target.value);
+                }}
+              >
+                <option value="">-- Choose --</option>
+                {CHARACTERISTICS.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem' }}>+1 Attribute</label>
-            <select
-              className="select"
-              style={{ width: '100%' }}
-               value={Object.entries(racialStatOverrides).find(([k, v]) => v === 1)?.[0] ?? ''}
-              onChange={(e) => {
-                const plus2 = Object.entries(racialStatOverrides).find(([k, v]) => v === 2)?.[0] ?? '';
-                handleOverrideChange(plus2, e.target.value);
-              }}
-            >
-              <option value="">-- Choose --</option>
-              {CHARACTERISTICS.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
+
+          {startingSkillSlots.length > 0 && (
+            <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px dashed var(--border-color)' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
+                Customize Starting Racial Skill Ranks
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                {startingSkillSlots.map((slot) => {
+                  const currentSkill = racialSkillOverrides[slot.id] ?? slot.defaultSkill;
+                  return (
+                    <div key={slot.id} className="form-group">
+                      <label style={{ display: 'block', marginBottom: '0.25rem', fontSize: '0.85rem' }}>
+                        {slot.source} (+{slot.rank} {slot.rank === 1 ? 'rank' : 'ranks'})
+                      </label>
+                      <select
+                        className="select"
+                        style={{ width: '100%' }}
+                        value={currentSkill}
+                        onChange={(e) => handleSkillChange(slot.id, e.target.value)}
+                      >
+                        {SKILLS.map((sk) => (
+                          <option key={sk.name} value={sk.name}>{sk.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -339,6 +394,10 @@ export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
 
   const handleOverrideChange = (overrides: Record<string, number>) => {
     dispatch({ type: 'SET_RACE', payload: { racialStatOverrides: overrides } });
+  };
+
+  const handleSkillOverrideChange = (overrides: Record<string, string>) => {
+    dispatch({ type: 'SET_RACE', payload: { racialSkillOverrides: overrides } });
   };
 
   const handleWoodElfChoice = (value: string) => {
@@ -471,8 +530,12 @@ export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
       <ManualRacesSection
         manualRaces={state.manualRaces}
         racialStatOverrides={state.racialStatOverrides}
+        racialSkillOverrides={state.racialSkillOverrides}
+        selectedRace={state.race}
+        selectedSubrace={state.subrace}
         onManualRacesChange={handleManualRacesChange}
         onOverrideChange={handleOverrideChange}
+        onSkillOverrideChange={handleSkillOverrideChange}
       />
     </div>
   );

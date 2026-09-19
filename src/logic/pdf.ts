@@ -16,6 +16,7 @@ import {
   calculatePotentialRemaining,
   computeSkillPointsSummary,
 } from './state';
+import { getCharacterSpeed, getRacialSpells } from './racialAbilities';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 import { deduplicateEquipmentList } from './equipmentUtils';
 import { resolveIdentityField } from '../types/Character';
@@ -117,7 +118,7 @@ export async function exportToPDF(state: any, racesData: any[], backgroundsData:
   fillSavingThrows(form, finalStats, profBonus, state);
   fillSkills(form, finalStats, profBonus, state);
   fillCombat(form, state, finalStats, racesData, profBonus);
-  fillSpellcasting(form, state, finalStats, profBonus);
+  fillSpellcasting(form, state, finalStats, profBonus, racesData);
   fillEquipment(form, state, backgroundsData);
   fillMisc(form, state, racesData);
 
@@ -328,9 +329,7 @@ function fillCombat(form: any, state: any, finalStats: Record<string, number>, r
   safeSetText(form, 'Initiative', formatModifier(dexMod));
   safeSetText(form, 'Initiative Mod', formatModifier(dexMod));
 
-  const raceName = typeof state.race === 'string' ? state.race : state.race?.race;
-  const raceObj = racesData?.find((r: any) => r.name === raceName);
-  const speed = state.customRace?.speed ?? raceObj?.speed ?? 6;
+  const speed = getCharacterSpeed(state, racesData);
   safeSetText(form, 'Speed', String(speed));
 
   const totalHP = (state.manualHP === true && state.maxHP != null)
@@ -497,7 +496,7 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
   safeSetText(form, 'Armor Class', String(finalAC));
 }
 
-function fillSpellcasting(form: any, state: any, finalStats: Record<string, number>, profBonus: number) {
+function fillSpellcasting(form: any, state: any, finalStats: Record<string, number>, profBonus: number, racesData: any[] = []) {
   const spellcastingState = state.spellcasting ?? {};
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
   const primaryAO = levelSelections?.[1]?.primaryAO ?? state.ao?.primaryAO ?? state.primaryAO;
@@ -514,8 +513,12 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
   safeSetText(form, 'Spellcasting mod', formatModifier(spellAtkMod));
   safeSetText(form, 'Spell Attack Bonus', formatModifier(spellAtkMod));
 
-  const cantrips = spellcastingState.cantrips ?? [];
-  /* Clear managed cantrip slots 1 through 5 */
+  const racialSpells = getRacialSpells(state, racesData);
+  const innateCantrips = racialSpells.filter((s) => s.isCantrip && s.available).map((s) => s.name);
+  const innateSpells = racialSpells.filter((s) => !s.isCantrip && s.available);
+
+  const cantrips: string[] = Array.from(new Set([...(spellcastingState.cantrips ?? []), ...innateCantrips]));
+  /* Pre-wipe slot fields so re-exporting over an imported character template does not retain orphaned cantrips */
   for (let i = 1; i <= 5; i++) {
     safeSetText(form, `Cantrip ${i}`, '');
   }
@@ -523,7 +526,13 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
     safeSetText(form, `Cantrip ${i + 1}`, name);
   });
 
-  const spells = spellcastingState.spells ?? [];
+  const userSpells: { name: string; level: number }[] = spellcastingState.spells ?? [];
+  const spells = [...userSpells];
+  innateSpells.forEach((is) => {
+    if (!spells.some((s: any) => s.name === is.name)) {
+      spells.push({ name: is.name, level: is.level });
+    }
+  });
   const slots = spellcastingState.slots ?? {};
   const souls = spellcastingState.souls ?? {};
 
@@ -538,7 +547,7 @@ function fillSpellcasting(form: any, state: any, finalStats: Record<string, numb
       safeSetText(form, `Level ${lvl} slot souls`, String(souls[lvl]));
     }
 
-    /* Clear managed spell slots 1 through 11 for this level */
+    /* Pre-wipe leveled slots to prevent template artifact leakage across re-exports */
     for (let slotIdx = 1; slotIdx <= 11; slotIdx++) {
       safeSetText(form, `Level ${lvl} Slot ${slotIdx}`, '');
       safeSetText(form, `Level ${lvl} Spell ${slotIdx}`, '');

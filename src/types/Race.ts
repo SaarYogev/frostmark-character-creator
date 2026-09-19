@@ -55,6 +55,7 @@ export interface RaceState {
   customRace?: CustomRace;
   manualRaces: boolean;
   racialStatOverrides: Record<string, number>;
+  racialSkillOverrides?: Record<string, string>;
   woodElfChoice: string;
   halfElfChoice1: string;
   halfElfChoice2: string;
@@ -72,6 +73,7 @@ export const DEFAULT_RACE_STATE: RaceState = {
   },
   manualRaces: false,
   racialStatOverrides: {},
+  racialSkillOverrides: {},
   woodElfChoice: '',
   halfElfChoice1: '',
   halfElfChoice2: '',
