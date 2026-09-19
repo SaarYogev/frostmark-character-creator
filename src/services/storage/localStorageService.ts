@@ -1,5 +1,6 @@
 import { CharacterState } from '../../types/Character';
 import { SavedCharacterMeta, CharacterStorageItem } from './types';
+import { savePdfBytes, loadPdfBytes, deletePdfBytes } from './pdfStorageService';
 
 const LOCAL_CHARACTERS_KEY = 'frostmark_local_characters_v1';
 const DRAFT_CHARACTER_KEY = 'frostmark_draft_character_v1';
@@ -73,6 +74,15 @@ export function saveCharacterLocally(state: CharacterState, existingId?: string)
     console.error('Failed to save character locally:', err);
   }
 
+  if (state.importedPdfBytes) {
+    const pdfBytesArray = state.importedPdfBytes instanceof Uint8Array
+      ? state.importedPdfBytes
+      : new Uint8Array(state.importedPdfBytes as ArrayBuffer);
+    savePdfBytes(id, pdfBytesArray).catch((err) => {
+      console.warn('Failed to persist PDF bytes to IndexedDB:', err);
+    });
+  }
+
   return meta;
 }
 
@@ -90,7 +100,20 @@ export function loadCharacterLocally(id: string): CharacterState | null {
   }
 }
 
+export async function loadCharacterLocallyAsync(id: string): Promise<CharacterState | null> {
+  const state = loadCharacterLocally(id);
+  if (!state) return null;
+  if (!state.importedPdfBytes) {
+    const bytes = await loadPdfBytes(id);
+    if (bytes) {
+      state.importedPdfBytes = bytes;
+    }
+  }
+  return state;
+}
+
 export function deleteLocalCharacter(id: string): void {
+  deletePdfBytes(id);
   try {
     const storage = getStorage();
     if (!storage) return;
@@ -112,6 +135,14 @@ export function saveDraftLocally(state: CharacterState): void {
   } catch (err) {
     console.error('Failed to save draft locally:', err);
   }
+  if (state.importedPdfBytes) {
+    const pdfBytesArray = state.importedPdfBytes instanceof Uint8Array
+      ? state.importedPdfBytes
+      : new Uint8Array(state.importedPdfBytes as ArrayBuffer);
+    savePdfBytes('draft', pdfBytesArray).catch((err) => {
+      console.warn('Failed to persist draft PDF bytes to IndexedDB:', err);
+    });
+  }
 }
 
 export function loadDraftLocally(): CharacterState | null {
@@ -124,4 +155,16 @@ export function loadDraftLocally(): CharacterState | null {
     console.error('Failed to load draft locally:', err);
     return null;
   }
+}
+
+export async function loadDraftLocallyAsync(): Promise<CharacterState | null> {
+  const state = loadDraftLocally();
+  if (!state) return null;
+  if (!state.importedPdfBytes) {
+    const bytes = await loadPdfBytes('draft');
+    if (bytes) {
+      state.importedPdfBytes = bytes;
+    }
+  }
+  return state;
 }

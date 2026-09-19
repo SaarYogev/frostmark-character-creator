@@ -9,7 +9,10 @@ interface CharacterContextType {
 const CharacterContext = createContext<CharacterContextType | undefined>(undefined);
 
 export function CharacterProvider({ children, initialState }: { children: ReactNode; initialState?: Partial<CharacterState> }) {
-  const [state, dispatch] = useReducer(characterReducer, { ...DEFAULT_CHARACTER, ...initialState });
+  const resolvedInitialState = initialState
+    ? characterReducer(DEFAULT_CHARACTER, { type: 'LOAD_STATE', payload: initialState as CharacterState })
+    : DEFAULT_CHARACTER;
+  const [state, dispatch] = useReducer(characterReducer, resolvedInitialState);
 
   return (
     <CharacterContext.Provider value={{ state, dispatch }}>

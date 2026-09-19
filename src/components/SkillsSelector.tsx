@@ -10,6 +10,7 @@ import {
   getCharacteristicModifier,
   getMaxSkillRank,
   computeFreeSkillPools,
+  computeSkillPointsSummary,
 } from '../logic/state';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
@@ -35,78 +36,22 @@ const SkillsSelector: React.FC = () => {
   const artsCraftEntries = state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [];
   const manualSkills = state.skills?.manualSkills ?? state.manualSkills ?? false;
 
-  // Compute spent points split by Background & AO free pools
-  let restrictedSpent = 0;
-  let unrestrictedSpent = 0;
+  const summary = computeSkillPointsSummary(integratedState, BACKGROUNDS, ORIGINS);
+  let { bgSpent, aoSpent, bgFreeRemaining, aoFreeRemaining, freeSkillPointsRemaining: freeRemaining } = summary;
 
-  for (const sk in skillRanks) {
-    const rank = skillRanks[sk] ?? 0;
-    const builtIn = builtInRanks[sk] ?? 0;
-    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    if (restrictSkills && restrictSkills.includes(sk)) {
-      restrictedSpent += cost;
-    } else {
-      unrestrictedSpent += cost;
+  if (typeof state.importedMetadata?.freeSkillPointsRemaining === 'number') {
+    freeRemaining = state.importedMetadata.freeSkillPointsRemaining;
+    if (typeof state.importedMetadata.bgFreeRemaining === 'number') {
+      bgSpent = bgFree - state.importedMetadata.bgFreeRemaining;
+      bgFreeRemaining = state.importedMetadata.bgFreeRemaining;
     }
-  }
-
-  const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
-  if (academicsEntries.length > 0) {
-    for (const entry of academicsEntries) {
-      const rank = entry.rank ?? 1;
-      const builtIn = builtInAcademics[entry.name] ?? 0;
-      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
-        restrictedSpent += cost;
-      } else {
-        unrestrictedSpent += cost;
-      }
+    if (typeof state.importedMetadata.aoFreeRemaining === 'number') {
+      aoSpent = aoFree - state.importedMetadata.aoFreeRemaining;
+      aoFreeRemaining = state.importedMetadata.aoFreeRemaining;
     }
-  } else {
-    const academicsRanks = state.skills?.academicsRanks ?? state.academicsRanks ?? {};
-    for (const field in academicsRanks) {
-      const rank = academicsRanks[field] ?? 0;
-      const builtIn = builtInAcademics[field] ?? 0;
-      const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(field))) {
-        restrictedSpent += cost;
-      } else {
-        unrestrictedSpent += cost;
-      }
-    }
+  } else if (typeof state.freeSkillPointsRemaining === 'number') {
+    freeRemaining = state.freeSkillPointsRemaining;
   }
-
-  for (const entry of artsCraftEntries) {
-    const rank = entry.rank ?? 1;
-    const builtIn = builtInRanks['Arts & Craft'] ?? 0;
-    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    if (restrictSkills && restrictSkills.includes('Arts & Craft')) {
-      restrictedSpent += cost;
-    } else {
-      unrestrictedSpent += cost;
-    }
-  }
-
-  // Calculate points spent: first consume Background Free, then AO Free, then AP
-  let bgSpent = 0;
-  let aoSpent = 0;
-
-  if (restrictSkills) {
-    // Restricted background points can only cover restricted skills
-    bgSpent = Math.min(bgFree, restrictedSpent);
-    const excessRestricted = restrictedSpent - bgSpent;
-    const totalUnrestricted = excessRestricted + unrestrictedSpent;
-    aoSpent = Math.min(aoFree, totalUnrestricted);
-  } else {
-    // Unrestricted background points cover any skills first, then AO free points
-    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    bgSpent = Math.min(bgFree, totalSpentPoints);
-    aoSpent = Math.min(aoFree, Math.max(0, totalSpentPoints - bgSpent));
-  }
-
-  const totalFreeSpent = bgSpent + aoSpent;
-  const totalFreeAvailable = (integratedState.background ? bgFree : 0) + aoFree;
-  const freeRemaining = Math.max(0, totalFreeAvailable - totalFreeSpent);
 
   const calculateRankBonus = (rank: number) => {
     if (rank === 1) return Math.ceil(profBonus / 2);
@@ -316,8 +261,11 @@ const SkillsSelector: React.FC = () => {
               const nextCost = SKILL_RANK_CUMULATIVE_COSTS[nextRank] ?? 0;
               const incrementalCost = nextCost - currentCost;
 
-              const isRestrictedSkill = restrictSkills && restrictSkills.includes(skill.name);
-              const costsAP = (!isRestrictedSkill && restrictSkills !== null) || freeRemaining <= 0;
+              const isRestrictedSkill = restrictSkills ? restrictSkills.includes(skill.name) : true;
+              const canUseFreePoints = isRestrictedSkill
+                ? (bgFreeRemaining > 0 || aoFreeRemaining > 0)
+                : (aoFreeRemaining > 0);
+              const costsAP = !canUseFreePoints;
               const canAfford = !costsAP || apRemaining >= incrementalCost;
               const isLevelRestricted = rank >= maxSkillRank && !manualSkills;
               const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !manualSkills);

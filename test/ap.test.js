@@ -3,6 +3,7 @@ import {
   getInitialState,
   getTotalAccomplishmentPointsLimit,
   calculateSpentAccomplishmentPoints,
+  computeSkillPointsSummary,
   getFinalCharacteristics,
   getMaxSkillRank
 } from '../src/logic/state';
@@ -168,28 +169,42 @@ describe('Background Starting Skill Point Calculations', () => {
 
     state.skillRanks = {
       'Arts & Craft': 2,
-      'Empathy': 1,
-      'Persuasion': 1
+      'Perception': 1,
+      'Manipulation': 1
     };
     let result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
     expect(result.skillsSpent).toBe(1);
 
     state.skillRanks = {
       'Arts & Craft': 3,
-      'Empathy': 2,
-      'Persuasion': 1
+      'Perception': 2,
+      'Manipulation': 1
     };
     result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
     expect(result.skillsSpent).toBe(4);
 
     state.skillRanks = {
       'Arts & Craft': 3,
-      'Empathy': 2,
-      'Persuasion': 1,
+      'Perception': 2,
+      'Manipulation': 1,
       'Athletics': 1
     };
     result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
     expect(result.skillsSpent).toBe(5);
+  });
+
+  test('Background free skill points are not consumed by non-allowed skills', () => {
+    const state = getInitialState();
+    state.background = 'Cultist';
+
+    state.skillRanks = {
+      Athletics: 1
+    };
+
+    const summary = computeSkillPointsSummary(state, BACKGROUNDS);
+    expect(summary.bgSpent).toBe(0);
+    expect(summary.bgFreeRemaining).toBe(4);
+    expect(summary.skillsSpent).toBe(1);
   });
 
   test('Criminal background enforces restricted skill points allocation', () => {
@@ -393,7 +408,7 @@ describe('Skill Point Correction and Level-Based Limitations', () => {
 
   test('Custom academic fields consume skill points with free skill points prioritized', () => {
     const state = getInitialState();
-    state.background = 'Criminal'; // Criminal restricts 5 BG free skill points to ['Athletics', 'Deception', 'Perception', 'Subtlety', 'Stealth']
+    state.background = 'Criminal'; // Criminal restricts 5 BG free skill points to ['Athletics', 'Deception', 'Perception', 'Subterfuge', 'Stealth']
     state.academicsEntries = [{ name: 'Archaeology', rank: 2 }]; // Rank 2 costs 2 points
 
     let result = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);

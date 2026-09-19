@@ -14,16 +14,9 @@ const FinishingTouches: React.FC = () => {
   const { state, dispatch } = useCharacter();
 
   const { apRemaining, apLimit } = getGlobalAPSummary(state);
-  const customFeatures: string[] = (state as any).customFeatures ?? [];
-
   const finalStats = getFinalCharacteristics(state, RACES);
   const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
   const totalHD = getHitDiceBreakdown(state, ORIGINS);
-
-  const handleCustomFeaturesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const lines = e.target.value.split('\n');
-    dispatch({ type: 'SET_STATE', payload: { customFeatures: lines } } as any);
-  };
 
   const onSaveJSON = () => handleExportJSON(state);
   const onSavePDF = () => handleExportPDF(state);
@@ -34,32 +27,6 @@ const FinishingTouches: React.FC = () => {
         <div className="step-header">
           <h2 className="step-title">✅ Finishing Touches</h2>
           <p className="step-desc">Review your character details and export your character sheet.</p>
-        </div>
-
-        {/* Custom Features & Notes */}
-        <div className="form-group" style={{ marginBottom: '2rem' }}>
-          <label style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--accent-color, #4a90e2)', marginBottom: '0.5rem', display: 'block' }}>
-            Custom Features / Notes
-          </label>
-          <textarea
-            id="custom-features"
-            className="textarea"
-            rows={5}
-            placeholder="Any custom abilities, special rules, or DM notes..."
-            value={customFeatures.join('\n')}
-            onChange={handleCustomFeaturesChange}
-            style={{
-              width: '100%',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              padding: '0.75rem',
-              color: '#fff',
-              fontFamily: 'inherit',
-              fontSize: '0.9rem',
-              resize: 'vertical',
-            }}
-          />
         </div>
 
         {/* Summary AP Banner */}

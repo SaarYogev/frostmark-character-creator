@@ -4,7 +4,9 @@ import {
   listLocalCharacters,
   deleteLocalCharacter,
   loadCharacterLocally,
+  loadCharacterLocallyAsync,
   saveCharacterLocally,
+  extractCharacterMeta,
 } from '../services/storage/localStorageService';
 import {
   isGoogleSignedIn,
@@ -98,7 +100,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       if (meta.storageType === 'cloud' && meta.driveFileId) {
         state = await loadFromDriveAppData(meta.driveFileId);
       } else {
-        state = loadCharacterLocally(meta.id);
+        state = await loadCharacterLocallyAsync(meta.id);
       }
 
       if (state) {
@@ -132,7 +134,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       if (meta.storageType === 'cloud' && meta.driveFileId) {
         state = await loadFromDriveAppData(meta.driveFileId);
       } else {
-        state = loadCharacterLocally(meta.id);
+        state = await loadCharacterLocallyAsync(meta.id);
       }
 
       if (state) {
@@ -145,6 +147,28 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
     }
   };
 
+  const allCharacters = [...cloudChars, ...localChars];
+
+  const readFileAsText = (file: File): Promise<string> => {
+    if (typeof file.text === 'function') return file.text();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file as text'));
+      reader.readAsText(file);
+    });
+  };
+
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> => {
+    if (typeof file.arrayBuffer === 'function') return file.arrayBuffer();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error || new Error('Failed to read file as array buffer'));
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -152,10 +176,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
     try {
       let importedState: CharacterState;
       if (file.name.toLowerCase().endsWith('.pdf')) {
-        const arrayBuffer = await file.arrayBuffer();
+        const arrayBuffer = await readFileAsArrayBuffer(file);
         importedState = await importFromPDF(arrayBuffer, RACES, BACKGROUNDS, ORIGINS);
       } else {
-        const text = await file.text();
+        const text = await readFileAsText(file);
         const parsed = JSON.parse(text);
         if (!parsed || typeof parsed !== 'object') {
           throw new Error('Invalid character data structure.');
@@ -163,15 +187,46 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
         importedState = parsed;
       }
 
+      const importedMeta = extractCharacterMeta(importedState, 'temp');
+      const charName = (importedMeta.characterName || '').trim();
+      const level = importedMeta.level;
+      const race = (importedMeta.race || '').trim();
+
+      const existingMatch = allCharacters.find(
+        (c) =>
+          c.characterName.trim().toLowerCase() === charName.toLowerCase() &&
+          c.level === level &&
+          c.race.trim().toLowerCase() === race.toLowerCase()
+      );
+
+      let overwrite = false;
+      if (existingMatch) {
+        overwrite = window.confirm(
+          `A character named "${charName}" (Level ${level}, ${race}) already exists. Would you like to overwrite it?\n\nClick OK to overwrite, or Cancel to import as a new character.`
+        );
+      }
+
       let meta: SavedCharacterMeta;
-      if (isGoogleSignedIn()) {
-        try {
-          meta = await saveToDriveAppData(importedState);
-        } catch {
-          meta = saveCharacterLocally(importedState);
+      if (overwrite && existingMatch) {
+        if (existingMatch.storageType === 'cloud' && isGoogleSignedIn()) {
+          try {
+            meta = await saveToDriveAppData(importedState, existingMatch.driveFileId);
+          } catch {
+            meta = saveCharacterLocally(importedState, existingMatch.id);
+          }
+        } else {
+          meta = saveCharacterLocally(importedState, existingMatch.id);
         }
       } else {
-        meta = saveCharacterLocally(importedState);
+        if (isGoogleSignedIn()) {
+          try {
+            meta = await saveToDriveAppData(importedState);
+          } catch {
+            meta = saveCharacterLocally(importedState);
+          }
+        } else {
+          meta = saveCharacterLocally(importedState);
+        }
       }
 
       await loadCharacters();
@@ -190,7 +245,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       if (meta.storageType === 'cloud' && meta.driveFileId) {
         state = await loadFromDriveAppData(meta.driveFileId);
       } else {
-        state = loadCharacterLocally(meta.id);
+        state = await loadCharacterLocallyAsync(meta.id);
       }
 
       if (state) {
@@ -203,8 +258,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectCharacter, onCreateN
       alert('Error loading character for level up: ' + message);
     }
   };
-
-  const allCharacters = [...cloudChars, ...localChars];
 
   return (
     <div className="homepage-container" style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2.5rem 2rem' }}>

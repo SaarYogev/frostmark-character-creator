@@ -1,12 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { PDFDocument } from 'pdf-lib';
 import { importFromPDF } from '../src/logic/pdfImport';
 import { exportToPDF } from '../src/logic/pdf';
-import { getInitialState } from '../src/logic/state';
+import { getInitialState, getFinalCharacteristics, computeSkillPointsSummary, calculateSpentAccomplishmentPoints } from '../src/logic/state';
+import { getGlobalAPSummary } from '../src/utils/stateSanitizer';
 import { RACES } from '../src/data/races';
 import { BACKGROUNDS } from '../src/data/backgrounds';
+import { CharacterProvider, useCharacter } from '../src/contexts/CharacterContext';
+import RaceSelector from '../src/components/RaceSelector';
+import BackgroundSelector from '../src/components/BackgroundSelector';
+import { characterReducer, DEFAULT_CHARACTER } from '../src/types/Character';
+import { DEFAULT_RACE_STATE } from '../src/types/Race';
 
 function setupFetchMock() {
   const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
@@ -97,9 +106,12 @@ describe('PDF Import: importFromPDF', () => {
       expect(imported).toBeDefined();
       expect(imported.characterName).toBe('Aeloria Silverleaf');
       expect(imported.playerName).toBe('Alice');
-      expect(imported.race).toBe('Elf');
+      expect(imported.race.race).toBe('Elf');
+      expect(imported.race.subrace).toBe('High Elf');
+      expect(imported.raceState?.race).toBe('Elf');
+      expect(imported.raceState?.subrace).toBe('High Elf');
       expect(imported.subrace).toBe('High Elf');
-      expect(imported.background).toBe('Scholar');
+      expect(imported.background.name).toBe('Scholar');
       expect(imported.level).toBe(2);
 
       const intScore = imported.characteristics?.Intelligence ?? imported.baseCharacteristics?.Intelligence;
@@ -265,7 +277,7 @@ describe('PDF Import: importFromPDF', () => {
       expect(imported.ao?.selectedAOs).toContain('Devotion');
 
       const customAbilityDump = JSON.stringify(
-        imported.customFeatures ?? imported.abilities ?? imported.additionalAbilities ?? []
+        imported.ao?.customAbilities ?? imported.customAbilities ?? []
       );
       expect(customAbilityDump).toContain('Frost Aegis');
       expect(customAbilityDump).toContain('Runic Sight');
@@ -276,5 +288,439 @@ describe('PDF Import: importFromPDF', () => {
     } finally {
       teardown();
     }
+  });
+
+  describe('1. Race and Subrace', () => {
+    it('sets race object with DEFAULT_RACE_STATE and retains raceState on import', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+      form.getTextField('RACE').setText('Dwarf (Mountain Dwarf)');
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      expect(imported.race).toEqual({
+        ...DEFAULT_RACE_STATE,
+        race: 'Dwarf',
+        subrace: 'Mountain Dwarf',
+      });
+      expect(imported.raceState).toEqual({
+        race: 'Dwarf',
+        subrace: 'Mountain Dwarf',
+      });
+      expect(imported.subrace).toBe('Mountain Dwarf');
+    });
+
+    it('RaceSelector handles string or object race defensively', () => {
+      render(
+        React.createElement(
+          CharacterProvider,
+          { initialState: { race: 'Dwarf' as any, subrace: 'Hill Dwarf' as any } },
+          React.createElement(RaceSelector)
+        )
+      );
+
+      const dwarfCard = screen.getByText('Dwarf');
+      expect(dwarfCard.parentElement).toHaveClass('selected');
+      expect(screen.getByText('Hill Dwarf')).toBeInTheDocument();
+    });
+
+    it('CharacterProvider normalizes initialState via characterReducer LOAD_STATE', () => {
+      const StateConsumer: React.FC = () => {
+        const { state } = useCharacter();
+        return React.createElement(
+          'div',
+          null,
+          React.createElement('span', { 'data-testid': 'race-name' }, state.race.race),
+          React.createElement('span', { 'data-testid': 'subrace-name' }, state.race.subrace)
+        );
+      };
+
+      render(
+        React.createElement(
+          CharacterProvider,
+          { initialState: { race: 'Elf' as any, subrace: 'High Elf' as any } },
+          React.createElement(StateConsumer)
+        )
+      );
+
+      expect(screen.getByTestId('race-name')).toHaveTextContent('Elf');
+      expect(screen.getByTestId('subrace-name')).toHaveTextContent('High Elf');
+    });
+  });
+
+  describe('2. Background Details', () => {
+    it('resolves background against backgroundsData on import', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+      form.getTextField('BACKGROUND').setText('Scholar');
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      expect(imported.background.name).toBe('Scholar');
+      expect(imported.background.gold).toBe(10);
+      expect(imported.background.trait).toBe('Researcher');
+      expect(imported.background.freeSkillPoints).toBe(4);
+    });
+
+    it('BackgroundSelector renders details pane when state.background is a string', () => {
+      render(
+        React.createElement(
+          CharacterProvider,
+          { initialState: { background: 'Scholar' as any } },
+          React.createElement(BackgroundSelector)
+        )
+      );
+
+      expect(screen.getByRole('heading', { level: 3, name: 'Scholar' })).toBeInTheDocument();
+      expect(screen.getByText(/Researcher/)).toBeInTheDocument();
+    });
+
+    it('BackgroundSelector renders details pane when state.background is an object without name', () => {
+      render(
+        React.createElement(
+          CharacterProvider,
+          { initialState: { background: { trait: 'Ear to the Ground' } as any } },
+          React.createElement(BackgroundSelector)
+        )
+      );
+
+      expect(screen.getByRole('heading', { level: 3, name: 'Bounty Hunter' })).toBeInTheDocument();
+      expect(screen.getByText(/Ear to the Ground/)).toBeInTheDocument();
+    });
+  });
+
+  describe('3. Vitality and Cunning (Ability Scores)', () => {
+    it('subtracts racial bonuses so baseCharacteristics + racialBonuses = finalCharacteristics', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+
+      /* Mountain Dwarf: +2 Vitality from base Dwarf, +2 Brawn from Mountain Dwarf subrace */
+      form.getTextField('RACE').setText('Dwarf (Mountain Dwarf)');
+      form.getTextField('Brawn Ability Score').setText('16');
+      form.getTextField('Vitality Ability Score').setText('14');
+      form.getTextField('Cunning Ability Score').setText('10');
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      expect(imported.baseCharacteristics.Brawn).toBe(14);
+      expect(imported.baseCharacteristics.Vitality).toBe(12);
+      expect(imported.baseCharacteristics.Cunning).toBe(10);
+
+      expect(imported.characteristics.Brawn).toBe(16);
+      expect(imported.characteristics.Vitality).toBe(14);
+      expect(imported.finalCharacteristics.Brawn).toBe(16);
+      expect(imported.finalCharacteristics.Vitality).toBe(14);
+
+      const calculatedFinal = getFinalCharacteristics(imported, RACES);
+      expect(calculatedFinal.Brawn).toBe(16);
+      expect(calculatedFinal.Vitality).toBe(14);
+      expect(calculatedFinal.Cunning).toBe(10);
+    });
+  });
+
+  describe('4. Hit Points Maximum', () => {
+    it('sets manualHP: true and preserves maxHP and currentHP when maxHPText is present', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+      form.getTextField('Max HP').setText('34');
+      form.getTextField('Current HP').setText('22');
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      expect(imported.manualHP).toBe(true);
+      expect(imported.maxHP).toBe(34);
+      expect(imported.currentHP).toBe(22);
+      expect(imported.combat?.maxHP).toBe(34);
+      expect(imported.combat?.currentHP).toBe(22);
+    });
+
+    it('characterReducer LOAD_STATE preserves manualHP from action payload', () => {
+      const loaded = characterReducer(DEFAULT_CHARACTER, {
+        type: 'LOAD_STATE',
+        payload: {
+          manualHP: true,
+          maxHP: 34,
+          currentHP: 22,
+        } as any,
+      });
+
+      expect(loaded.manualHP).toBe(true);
+      expect(loaded.maxHP).toBe(34);
+      expect(loaded.currentHP).toBe(22);
+    });
+  });
+
+  describe('5. AO Abilities parser', () => {
+    it('matches premade abilities, assigns level selections, and sets primaryAO/secondaryAO', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+
+      form.getTextField('Essential Abilities 1').setText(
+        '=== Turn Undead (Devotion · Lv.1) ===\nChannel divinity to turn undead creatures.'
+      );
+      form.getTextField('Essential Abilities 2').setText(
+        '=== Righteous Smite (Devotion · Lv.1) ===\nDeals extra radiant damage on hit.'
+      );
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      expect(imported.primaryAO).toBe('Devotion');
+      expect(imported.ao?.selectedAOs).toContain('Devotion');
+      expect(imported.ao?.levelSelections?.[1]?.primaryAbility).toContain('turn-undead');
+      expect(imported.ao?.levelSelections?.[1]?.secondaryAbility).toContain('righteous-smite');
+    });
+
+    it('creates custom ability matching available slot and registers in customAbilities', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+
+      form.getTextField('Essential Abilities 1').setText(
+        '=== Mystic Ward (Custom · Lv.1) ===\nAbsorbs 10 magical damage.'
+      );
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      const customAb = imported.ao?.customAbilities?.find((a) => a.name === 'Mystic Ward');
+      expect(customAb).toBeDefined();
+      expect(customAb?.selection).toBe('Primary');
+      expect(imported.ao?.levelSelections?.[1]?.primaryAbility).toBe(customAb?.id);
+      expect(imported.ao?.selectedAOs).toContain('Custom');
+    });
+  });
+
+  describe('6. Custom Features / Notes', () => {
+    it('does NOT push race traits, background traits, or AO abilities to customFeatures', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+
+      form.getTextField('Essential Abilities 1').setText(
+        '=== Turn Undead (Devotion · Lv.1) ===\nChannel divinity.'
+      );
+      form.getTextField('Additional Abilities column 1').setText(
+        '=== Darkvision ===\nYou see in the dark.\n\n=== Researcher ===\nYou possess academic knowledge.'
+      );
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      const featuresDump = JSON.stringify(imported.customFeatures ?? []);
+      expect(featuresDump).not.toContain('Darkvision');
+      expect(featuresDump).not.toContain('Researcher');
+      expect(featuresDump).not.toContain('Turn Undead');
+    });
+
+    it('pushes truly miscellaneous notes to customFeatures', async () => {
+      const pdfPath = path.resolve(__dirname, '../public/Frostmark_Character_Sheet_v2.4-2.pdf');
+      const doc = await PDFDocument.load(new Uint8Array(fs.readFileSync(pdfPath)));
+      const form = doc.getForm();
+
+      form.getTextField('Additional Abilities column 2').setText(
+        '=== Campaign Notes ===\nRecovered the sacred talisman from the cavern depths.'
+      );
+      const bytes = await doc.save();
+
+      const imported = await importFromPDF(bytes, RACES, BACKGROUNDS);
+
+      const featuresDump = JSON.stringify(imported.customFeatures ?? []);
+      expect(featuresDump).toContain('Recovered the sacred talisman');
+    });
+  });
+
+  describe('7. Hidden Metadata for Accomplishment Points & Free Skill Points', () => {
+    it('embeds hidden metadata invisibly in PDF document properties during export and recovers on import', async () => {
+      const teardown = setupFetchMock();
+      try {
+        const state = getInitialState();
+        state.characterName = 'Hidden Meta Hero';
+        state.race = 'Dwarf';
+        state.subrace = 'Hill Dwarf';
+        state.background = 'Cultist';
+        state.primaryAO = 'Tactics';
+        state.level = 1;
+        state.skillRanks = {
+          Occult: 1,
+          Deception: 1,
+          Religion: 1,
+          Subterfuge: 2,
+          Athletics: 2,
+        };
+
+        const exportedBytes = await exportToPDF(state, RACES, BACKGROUNDS);
+        const doc = await PDFDocument.load(exportedBytes);
+
+        /*
+         * Verify metadata is embedded in document information dictionary (Subject & Keywords)
+         * and invisible across form text fields.
+         */
+        const subject = doc.getSubject();
+        expect(subject).toBeDefined();
+        expect(subject).toContain('FrostmarkMetadata:');
+
+        const form = doc.getForm();
+        const allFieldTexts = form.getFields().map((f: any) => {
+          try {
+            return f.getText ? f.getText() : '';
+          } catch {
+            return '';
+          }
+        }).join(' ');
+        expect(allFieldTexts).not.toContain('FrostmarkMetadata');
+
+        /*
+         * Import the PDF and verify accurate recovery of accomplishment points and skill pools.
+         */
+        const imported = await importFromPDF(exportedBytes, RACES, BACKGROUNDS);
+        expect(imported.importedMetadata).toBeDefined();
+        expect(typeof imported.accomplishmentPointsRemaining).toBe('number');
+        expect(typeof imported.freeSkillPointsRemaining).toBe('number');
+
+        /*
+         * getGlobalAPSummary must match the preserved accomplishment points.
+         */
+        const apSummary = getGlobalAPSummary(imported);
+        expect(apSummary.apRemaining).toBe(imported.accomplishmentPointsRemaining);
+      } finally {
+        teardown();
+      }
+    });
+
+    it('calculates Option A skill allocation correctly: background absorbs restricted skills, AO absorbs next, remainder takes AP', () => {
+      /*
+       * Test Option A allocation:
+       * Cultist has 4 free skill points restricted to Occult, Deception, Subterfuge, Religion.
+       * 4 points spent on restricted skills (Occult rank 1, Deception rank 1, Subterfuge rank 1, Religion rank 1) absorbs 4 bgFree points.
+       * 6 points spent on Subterfuge rank 3 (cumulative 6 points: 1 used by bg, 5 remaining) + Athletics rank 1 (1 point) = 6 points.
+       * 4 AO free points absorb 4 points, leaving exactly 2 points paid by Accomplishment Points.
+       */
+      const state = {
+        ...getInitialState(),
+        background: 'Cultist',
+        ao: {
+          primaryAO: 'Tactics',
+        },
+        skillRanks: {
+          Occult: 1,      // 1 point (Cultist restricted)
+          Deception: 1,   // 1 point (Cultist restricted)
+          Religion: 1,    // 1 point (Cultist restricted)
+          Subterfuge: 4,  // 6 cumulative points (1 point Cultist restricted, 5 points unrestricted/AO/AP)
+          Athletics: 1,   // 1 point (unrestricted/AO/AP)
+        },
+      };
+
+      const summary = computeSkillPointsSummary(state, BACKGROUNDS);
+      expect(summary.bgFree).toBe(4);
+      expect(summary.aoFree).toBe(4);
+      expect(summary.bgSpent).toBe(4);
+      expect(summary.bgFreeRemaining).toBe(0);
+
+      expect(summary.aoSpent).toBe(4);
+      expect(summary.aoFreeRemaining).toBe(0);
+
+      const apSpent = calculateSpentAccomplishmentPoints(state, BACKGROUNDS);
+      expect(apSpent.skillsSpent).toBe(2);
+      expect(apSpent.totalSpent).toBe(2);
+    });
+  });
+
+  describe('8. Gold, Appearance, and Features export/import refinements', () => {
+    it('exports remaining gold for fresh character and preserves stored gold for imported character', async () => {
+      const teardown = setupFetchMock();
+      try {
+        const freshState = {
+          ...getInitialState(),
+          proficiencies: {
+            ...getInitialState().proficiencies,
+            goldAmount: 20,
+          },
+          equipmentList: [
+            { name: 'Shortsword', cost: '10 gp', quantity: 1 },
+            { name: 'Dagger', cost: '2 gp', quantity: 2 },
+          ],
+        };
+
+        const freshPdfBytes = await exportToPDF(freshState, RACES, BACKGROUNDS);
+        const freshDoc = await PDFDocument.load(freshPdfBytes);
+        const freshForm = freshDoc.getForm();
+        expect(freshForm.getTextField('Gold Pieces').getText()).toBe('6');
+
+        const importedState = {
+          ...freshState,
+          isImported: true,
+          proficiencies: {
+            ...freshState.proficiencies,
+            goldAmount: 14,
+          },
+        };
+
+        const importedPdfBytes = await exportToPDF(importedState, RACES, BACKGROUNDS);
+        const importedDoc = await PDFDocument.load(importedPdfBytes);
+        const importedForm = importedDoc.getForm();
+        expect(importedForm.getTextField('Gold Pieces').getText()).toBe('14');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('exports and roundtrips appearance description and notes accurately', async () => {
+      const teardown = setupFetchMock();
+      try {
+        const state = {
+          ...getInitialState(),
+          identity: {
+            ...getInitialState().identity,
+            appearance: {
+              age: '30',
+              height: '180 cm',
+              weight: '80 kg',
+              description: 'Tall warrior with scarred cheek and silver braided hair.',
+            },
+          },
+        };
+
+        const exportedBytes = await exportToPDF(state, RACES, BACKGROUNDS);
+        const doc = await PDFDocument.load(exportedBytes);
+        const form = doc.getForm();
+        expect(form.getTextField('Appearance Additional').getText()).toBe('Tall warrior with scarred cheek and silver braided hair.');
+
+        const imported = await importFromPDF(exportedBytes, RACES, BACKGROUNDS);
+        expect(imported.identity.appearance.description).toBe('Tall warrior with scarred cheek and silver braided hair.');
+        expect(imported.identity.appearance.notes).toBe('Tall warrior with scarred cheek and silver braided hair.');
+      } finally {
+        teardown();
+      }
+    });
+
+    it('does not include custom notes in PDF additional features', async () => {
+      const teardown = setupFetchMock();
+      try {
+        const state = {
+          ...getInitialState(),
+          customFeatures: ['Hidden Secret Note: Carries strange amulet.'],
+        };
+
+        const exportedBytes = await exportToPDF(state, RACES, BACKGROUNDS);
+        const doc = await PDFDocument.load(exportedBytes);
+        const form = doc.getForm();
+        const col1 = form.getTextField('Additional Abilities column 1').getText() || '';
+        const col2 = form.getTextField('Additional Abilities column 2').getText() || '';
+        expect(col1).not.toContain('Hidden Secret Note');
+        expect(col2).not.toContain('Hidden Secret Note');
+      } finally {
+        teardown();
+      }
+    });
   });
 });

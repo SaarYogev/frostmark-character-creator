@@ -66,4 +66,15 @@ describe('ProficienciesSelector', () => {
     const intCheckbox = screen.getByLabelText(/Intelligence/);
     expect(intCheckbox).not.toBeDisabled();
   });
+
+  it('allows typing delimiters such as commas and spaces in languages textbox', () => {
+    renderWithProvider();
+
+    const langInput = screen.getByPlaceholderText('e.g. Elvish, Dwarvish');
+    fireEvent.change(langInput, { target: { value: 'Elvish, ' } });
+    expect(langInput).toHaveValue('Elvish, ');
+
+    fireEvent.change(langInput, { target: { value: 'Elvish, Dwarvish' } });
+    expect(langInput).toHaveValue('Elvish, Dwarvish');
+  });
 });

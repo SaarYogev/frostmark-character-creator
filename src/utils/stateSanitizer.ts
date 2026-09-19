@@ -19,7 +19,15 @@ export function getSanitizedState(state: any) {
     armorProficiencies: state.proficiencies?.armorProficiencies ?? state.armorProficiencies ?? {},
     savingThrowsProficient: state.proficiencies?.savingThrowsProficient ?? state.savingThrowsProficient ?? {},
     weaponProficiencies: state.proficiencies?.weaponProficiencies ?? state.weaponProficiencies ?? {},
-    skillRanks: state.skills?.skillRanks ?? state.skillRanks ?? {},
+    skillRanks: (() => {
+      const raw = state.skills?.skillRanks ?? state.skillRanks ?? {};
+      const res = { ...raw };
+      if (res['Subtlety'] != null && res['Subterfuge'] == null) {
+        res['Subterfuge'] = res['Subtlety'];
+        delete res['Subtlety'];
+      }
+      return res;
+    })(),
     academicsEntries: state.skills?.academicsEntries ?? state.academicsEntries ?? [],
     artsCraftEntries: state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [],
   };
@@ -27,10 +35,16 @@ export function getSanitizedState(state: any) {
 
 export function getGlobalAPSummary(state: any) {
   const sanitizedState = getSanitizedState(state);
-  const apLimit = getTotalAccomplishmentPointsLimit(sanitizedState) || 16;
+  const apLimit = state.importedMetadata?.accomplishmentPointsLimit ?? (getTotalAccomplishmentPointsLimit(sanitizedState) || 16);
   const apResult = calculateSpentAccomplishmentPoints(sanitizedState, BACKGROUNDS, ORIGINS);
   const totalSpent = (typeof apResult === 'number' ? apResult : apResult?.totalSpent) || 0;
-  const apRemaining = apLimit - totalSpent;
+  
+  let apRemaining = apLimit - totalSpent;
+  if (typeof state.importedMetadata?.accomplishmentPointsRemaining === 'number') {
+    apRemaining = state.importedMetadata.accomplishmentPointsRemaining;
+  } else if (typeof state.accomplishmentPointsRemaining === 'number') {
+    apRemaining = state.accomplishmentPointsRemaining;
+  }
 
   return {
     apLimit,

@@ -42,6 +42,19 @@ export interface CharacterState {
   combat?: Record<string, any>;
   customFeatures?: any[];
   importedPdfBytes?: Uint8Array | ArrayBuffer | string;
+  importedMetadata?: {
+    version?: number;
+    accomplishmentPointsRemaining?: number;
+    accomplishmentPointsLimit?: number;
+    bgFreeRemaining?: number;
+    aoFreeRemaining?: number;
+    freeSkillPointsRemaining?: number;
+  };
+  accomplishmentPointsRemaining?: number;
+  bgFreeRemaining?: number;
+  aoFreeRemaining?: number;
+  freeSkillPointsRemaining?: number;
+  isImported?: boolean;
   [key: string]: any;
 }
 
@@ -89,11 +102,11 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       const p = action.payload as any;
       if (!p) return state;
 
-      let raceName = 'Elf';
+      let raceName = '';
       if (typeof p.race === 'string') {
         raceName = p.race;
       } else if (p.race && typeof p.race === 'object') {
-        raceName = p.race.race || p.race.name || state.race?.race || 'Elf';
+        raceName = p.race.race || p.race.name || state.race?.race || '';
       } else if (p.raceState?.race) {
         raceName = p.raceState.race;
       } else if (state.race?.race) {
@@ -111,16 +124,44 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         subraceName = state.race.subrace;
       }
 
-      /* Validate subrace against selected race so invalid subraces (e.g. Garden Dwarf) are cleaned up */
+      /* Purge mismatched subraces belonging to other races (e.g. Garden Dwarf) while preserving custom or imported subraces */
       const raceDataObj = RACES.find((r) => r.name === raceName);
-      if (raceDataObj) {
+      if (raceDataObj && subraceName) {
         const isValidSubrace = raceDataObj.subraces?.some((sub) => sub.name === subraceName);
-        if (!isValidSubrace) {
+        const belongsToOtherRace = RACES.some((r) => r.name !== raceName && r.subraces?.some((sub) => sub.name === subraceName));
+        if (!isValidSubrace && belongsToOtherRace) {
           subraceName = '';
         }
       }
 
-      const bgName = typeof p.background === 'object' ? p.background?.name ?? (state.background as any)?.name : p.background ?? (state.background as any)?.name ?? 'Scholar';
+      let bgName = '';
+      let matchedBg: any = undefined;
+      if (typeof p.background === 'string') {
+        bgName = p.background;
+        matchedBg = BACKGROUNDS.find((b) => b.name.toLowerCase() === bgName.toLowerCase());
+      } else if (typeof p.background === 'object' && p.background !== null) {
+        if (p.background.name) {
+          bgName = p.background.name;
+          matchedBg = BACKGROUNDS.find((b) => b.name.toLowerCase() === bgName.toLowerCase());
+        }
+        if (!matchedBg && p.background.trait) {
+          matchedBg = BACKGROUNDS.find(
+            (b) => b.trait && b.trait.toLowerCase() === p.background.trait.toLowerCase()
+          );
+          if (matchedBg) bgName = matchedBg.name;
+        }
+        if (!matchedBg && p.background.desc) {
+          matchedBg = BACKGROUNDS.find(
+            (b) => b.desc && b.desc.toLowerCase() === p.background.desc.toLowerCase()
+          );
+          if (matchedBg) bgName = matchedBg.name;
+        }
+      }
+
+      if (!bgName && state.background?.name) {
+        bgName = state.background.name;
+        matchedBg = BACKGROUNDS.find((b) => b.name.toLowerCase() === bgName.toLowerCase());
+      }
       const primaryAO = p.primaryAO ?? p.ao?.primaryAO ?? state.ao?.primaryAO ?? '';
       const secondaryAO = p.secondaryAO ?? p.ao?.secondaryAO ?? state.ao?.secondaryAO ?? '';
       const selectedAOs = p.selectedAOs ?? p.ao?.selectedAOs ?? state.ao?.selectedAOs ?? (primaryAO ? [primaryAO] : []);
@@ -170,12 +211,15 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           manualRaces: p.manualRaces ?? p.race?.manualRaces ?? state.race?.manualRaces ?? false,
           racialStatOverrides: p.racialStatOverrides ?? p.race?.racialStatOverrides ?? state.race?.racialStatOverrides ?? {},
         },
-        background: (typeof p.background === 'object' && p.background?.freeSkillPoints !== undefined)
+        background: (typeof p.background === 'object' && p.background?.freeSkillPoints !== undefined && p.background?.name)
           ? p.background
-          : BACKGROUNDS.find(b => b.name === bgName) ?? {
-              ...DEFAULT_BACKGROUND,
-              name: bgName,
-            },
+          : (matchedBg
+              ? { ...matchedBg, ...(typeof p.background === 'object' ? p.background : {}), name: matchedBg.name }
+              : {
+                  ...DEFAULT_BACKGROUND,
+                  ...(typeof p.background === 'object' ? p.background : {}),
+                  name: bgName,
+                }),
         customBackground: p.customBackground ?? p.background?.customBackground ?? state.customBackground,
         baseCharacteristics: (() => {
           const finalStatsProvided = p.finalCharacteristics ?? p.characteristics;
@@ -204,7 +248,15 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         },
         skills: {
           ...state.skills,
-          skillRanks: p.skillRanks ?? p.skills?.skillRanks ?? state.skills?.skillRanks ?? {},
+          skillRanks: (() => {
+            const raw = p.skillRanks ?? p.skills?.skillRanks ?? state.skills?.skillRanks ?? {};
+            const res = { ...raw };
+            if (res['Subtlety'] != null && res['Subterfuge'] == null) {
+              res['Subterfuge'] = res['Subtlety'];
+              delete res['Subtlety'];
+            }
+            return res;
+          })(),
           academicsEntries: (p.academicsEntries && p.academicsEntries.length > 0)
             ? p.academicsEntries
             : (p.skills?.academicsEntries && p.skills.academicsEntries.length > 0)
@@ -250,9 +302,15 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         manualProficiencies: p.manualProficiencies ?? p.proficiencies?.manualProficiencies ?? state.manualProficiencies ?? false,
         manualEquipment: p.manualEquipment ?? p.equipment?.manualEquipment ?? state.manualEquipment ?? false,
         manualAbilityScores: p.manualAbilityScores ?? state.manualAbilityScores ?? false,
-        manualHP: false,
+        manualHP: p.manualHP ?? state.manualHP ?? false,
         customFeatures: p.customFeatures ?? state.customFeatures ?? [],
         importedPdfBytes: p.importedPdfBytes ?? state.importedPdfBytes,
+        importedMetadata: p.importedMetadata ?? state.importedMetadata,
+        accomplishmentPointsRemaining: p.accomplishmentPointsRemaining ?? p.importedMetadata?.accomplishmentPointsRemaining ?? state.accomplishmentPointsRemaining,
+        bgFreeRemaining: p.bgFreeRemaining ?? p.importedMetadata?.bgFreeRemaining ?? state.bgFreeRemaining,
+        aoFreeRemaining: p.aoFreeRemaining ?? p.importedMetadata?.aoFreeRemaining ?? state.aoFreeRemaining,
+        freeSkillPointsRemaining: p.freeSkillPointsRemaining ?? p.importedMetadata?.freeSkillPointsRemaining ?? state.freeSkillPointsRemaining,
+        isImported: p.isImported ?? state.isImported ?? false,
       };
     }
     case 'SET_CAMPAIGN_POWER_LEVEL':
@@ -318,6 +376,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
     case 'SET_CHARACTERISTICS':
       return {
         ...state,
+        importedMetadata: undefined,
+        accomplishmentPointsRemaining: undefined,
         baseCharacteristics: {
           ...state.baseCharacteristics,
           ...action.payload,
@@ -326,6 +386,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
     case 'SET_AO':
       return {
         ...state,
+        importedMetadata: undefined,
+        accomplishmentPointsRemaining: undefined,
         ao: {
           ...state.ao,
           ...action.payload,
@@ -338,6 +400,11 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       };
       return {
         ...state,
+        importedMetadata: undefined,
+        accomplishmentPointsRemaining: undefined,
+        freeSkillPointsRemaining: undefined,
+        bgFreeRemaining: undefined,
+        aoFreeRemaining: undefined,
         skills: updatedSkills,
         skillRanks: updatedSkills.skillRanks,
         manualSkills: updatedSkills.manualSkills ?? state.manualSkills,
@@ -350,6 +417,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       };
       return {
         ...state,
+        importedMetadata: undefined,
+        accomplishmentPointsRemaining: undefined,
         proficiencies: updatedProf,
         manualProficiencies: updatedProf.manualProficiencies ?? state.manualProficiencies,
         goldAmount: updatedProf.goldAmount ?? state.goldAmount,

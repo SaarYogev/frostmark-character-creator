@@ -2,7 +2,8 @@ import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants';
 import { getAbilityById } from '../data/abilities';
 import { ORIGINS } from '../data/origins';
-import { WEAPONS, ARMOR } from '../data/equipment';
+import { WEAPONS, ARMOR, findArmorData } from '../data/equipment';
+import { base64ToUint8Array } from '../services/storage/pdfStorageService';
 import {
   getFinalCharacteristics,
   getCharacteristicModifier,
@@ -13,16 +14,32 @@ import {
   getPrimaryHDForLevel,
   calculatePotentialGained,
   calculatePotentialRemaining,
+  computeSkillPointsSummary,
 } from './state';
+import { getGlobalAPSummary } from '../utils/stateSanitizer';
 import { deduplicateEquipmentList } from './equipmentUtils';
 import { resolveIdentityField } from '../types/Character';
 export { importFromPDF } from './pdfImport';
 
 const TEMPLATE_PDF_URL = `${import.meta.env.BASE_URL}Frostmark_Character_Sheet_v2.4-2.pdf`;
 
-async function loadTemplate(basePdfBytes?: Uint8Array | ArrayBuffer | string) {
+async function loadTemplate(basePdfBytes?: Uint8Array | ArrayBuffer | string | any) {
   if (basePdfBytes) {
-    return PDFDocument.load(basePdfBytes);
+    try {
+      if (basePdfBytes instanceof Uint8Array || basePdfBytes instanceof ArrayBuffer) {
+        return await PDFDocument.load(basePdfBytes);
+      }
+      if (typeof basePdfBytes === 'string') {
+        const raw = basePdfBytes.startsWith('data:') ? basePdfBytes.split(',')[1] : basePdfBytes;
+        return await PDFDocument.load(base64ToUint8Array(raw));
+      }
+      if (typeof basePdfBytes === 'object' && basePdfBytes !== null) {
+        const vals = Object.values(basePdfBytes) as number[];
+        return await PDFDocument.load(new Uint8Array(vals));
+      }
+    } catch {
+      /* Fallback to default template if parsing stored bytes fails */
+    }
   }
   const response = await fetch(TEMPLATE_PDF_URL);
   if (!response.ok) throw new Error(`Could not fetch PDF template: ${response.status}`);
@@ -104,6 +121,25 @@ export async function exportToPDF(state: any, racesData: any[], backgroundsData:
   fillEquipment(form, state, backgroundsData);
   fillMisc(form, state, racesData);
 
+  /*
+   * Embed character creation metadata (Accomplishment Points and free skill point pools)
+   * into PDF document metadata (Subject and Keywords). These properties are completely invisible
+   * on rendered and printed character sheets, preserving the authoring state losslessly across PDF round-trips.
+   */
+  const apSummary = getGlobalAPSummary(state);
+  const skillSummary = computeSkillPointsSummary(state, backgroundsData);
+  const frostmarkMeta = {
+    version: 1,
+    accomplishmentPointsRemaining: apSummary.apRemaining,
+    accomplishmentPointsLimit: apSummary.apLimit,
+    bgFreeRemaining: skillSummary.bgFreeRemaining,
+    aoFreeRemaining: skillSummary.aoFreeRemaining,
+    freeSkillPointsRemaining: skillSummary.freeSkillPointsRemaining,
+  };
+  const metaString = `FrostmarkMetadata:${JSON.stringify(frostmarkMeta)}`;
+  pdfDoc.setSubject(metaString);
+  pdfDoc.setKeywords(['FrostmarkMetadata', metaString]);
+
   const pdfBytes = await pdfDoc.save();
   return pdfBytes;
 }
@@ -150,7 +186,7 @@ function fillIdentity(form: any, state: any, finalStats: Record<string, number>,
   safeSetText(form, 'Appearance Age', appearance.age ?? '');
   safeSetText(form, 'Appearance Height', appearance.height ?? '');
   safeSetText(form, 'Appearance Weight', appearance.weight ?? '');
-  safeSetText(form, 'Appearance Additional', appearance.notes ?? '');
+  safeSetText(form, 'Appearance Additional', appearance.description ?? appearance.notes ?? '');
   safeSetText(form, 'Personality and Backstory', state.identity?.personalityBackstory ?? state.personalityBackstory ?? '');
 
   const profsList: string[] = [];
@@ -417,11 +453,13 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
     safeSetText(form, `Defense ${n} Type`, '');
   }
 
-  // Defenses slots 1-6 are for shields, resistances, and special defenses only (body armor goes to Items)
+  // Defenses slots 1-6 are for special defenses and resistances only (shields and body armor go to Items)
   const nonBodyDefenses = armors.filter((a: any) => {
     const cat = (a.category ?? a.type ?? '').toLowerCase();
     const name = (a.name ?? '').toLowerCase();
-    return cat === 'shield' || name.includes('shield') || cat === 'defense' || cat === 'resistance' || a.isDefenseOnly;
+    const isShield = cat === 'shield' || name.includes('shield');
+    if (isShield) return false;
+    return cat === 'defense' || cat === 'resistance' || a.isDefenseOnly;
   });
 
   nonBodyDefenses.slice(0, 6).forEach((a: any, idx: number) => {
@@ -436,7 +474,7 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
   let shieldBonus = 0;
 
   armors.forEach((a: any) => {
-    const matchedArmorData = ARMOR.find((item) => item.name.toLowerCase() === (a.name ?? '').toLowerCase());
+    const matchedArmorData = findArmorData(a.name ?? '');
     const category = a.category ?? matchedArmorData?.category ?? a.type ?? '';
     const isShield = a.name === 'Shield' || category === 'Shield' || (a.name ?? '').toLowerCase().includes('shield');
 
@@ -532,6 +570,15 @@ export function getSpellSlotsForLevel(level: number): number {
   return slotCounts[level] ?? 0;
 }
 
+function getItemGoldCost(item: any): number {
+  if (!item || !item.cost) return 0;
+  const match = String(item.cost).match(/(\d+)/);
+  if (!match) return 0;
+  const parsed = parseInt(match[1], 10);
+  const qty = typeof item.quantity === 'number' && item.quantity > 0 ? item.quantity : 1;
+  return isNaN(parsed) ? 0 : parsed * qty;
+}
+
 function fillEquipment(form: any, state: any, backgroundsData: any[]) {
   const rawItems = state.equipment?.equipmentList ?? state.equipmentList ?? [];
   const items = deduplicateEquipmentList(rawItems);
@@ -549,9 +596,20 @@ function fillEquipment(form: any, state: any, backgroundsData: any[]) {
   });
 
   const goldAmount = state.proficiencies?.goldAmount ?? state.goldAmount ?? 0;
+  const isImportedCharacter = Boolean(state.isImported || state.importedPdfBytes || state.importedMetadata);
+
+  let exportedGold = goldAmount;
+  if (!isImportedCharacter) {
+    let goldSpent = 0;
+    items.forEach((item: any) => {
+      goldSpent += getItemGoldCost(item);
+    });
+    exportedGold = Math.max(0, goldAmount - goldSpent);
+  }
+
   const silverAmount = state.proficiencies?.silverAmount ?? state.silverAmount ?? 0;
   const copperAmount = state.proficiencies?.copperAmount ?? state.copperAmount ?? 0;
-  safeSetText(form, 'Gold Pieces', String(goldAmount));
+  safeSetText(form, 'Gold Pieces', String(exportedGold));
   safeSetText(form, 'Silver Pieces', String(silverAmount));
   safeSetText(form, 'Copper Pieces', String(copperAmount));
 }
@@ -620,40 +678,11 @@ function fillMisc(form: any, state: any, racesData?: any[]) {
   if (selectedAbilityFeatures[0]) safeSetText(form, 'Essential Abilities 1', selectedAbilityFeatures[0]);
   if (selectedAbilityFeatures[1]) safeSetText(form, 'Essential Abilities 2', selectedAbilityFeatures[1]);
 
-  /* Additional features: overflow AO abilities (>2), race/subrace traits, background traits, custom features */
   const overflowAO = selectedAbilityFeatures.slice(2);
-  const activeLevelSelections = Object.entries(levelSelections ?? {})
-    .filter(([lvl]) => Number(lvl) <= currentLevel)
-    .map(([, sel]) => sel);
-
-  const activeAONames = (
-    activeLevelSelections.length > 0
-      ? activeLevelSelections.flatMap((s: any) => [s?.primaryAO, s?.secondaryAO])
-      : [state.ao?.primaryAO, state.ao?.secondaryAO]
-  ).filter(Boolean);
-
-  const cleanCustomFeatures = (state.customFeatures ?? []).filter((feat: any) => {
-    if (typeof feat !== 'string') return true;
-    const originMatch = feat.match(/\(([^·)]+)\s*·\s*Lv\.\d+\)/);
-    if (originMatch) {
-      const featOrigin = originMatch[1].trim();
-      if (featOrigin.toLowerCase() !== 'custom') {
-        const isActive = activeAONames.some((aoName: string) => aoName.toLowerCase() === featOrigin.toLowerCase());
-        if (!isActive) return false;
-      }
-    }
-    // Filter known stale AO abilities from Drew when not actively studying that AO at current level
-    if (/Alchemical Secrets|Fabricate|Spellbook/i.test(feat)) {
-      const hasOccult = activeAONames.some((aoName: string) => aoName.toLowerCase() === 'occult student');
-      if (!hasOccult) return false;
-    }
-    return true;
-  });
 
   const otherFeatures = [
     ...raceTraitFeatures,
     ...backgroundFeatures,
-    ...cleanCustomFeatures,
   ].filter((feat) => {
     if (typeof feat === 'string') {
       return !selectedAbilityFeatures.some((aoFeat) => aoFeat.trim() === feat.trim());

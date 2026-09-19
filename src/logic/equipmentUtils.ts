@@ -1,4 +1,4 @@
-import { ARMOR, WEAPONS } from '../data/equipment';
+import { ARMOR, WEAPONS, findArmorData } from '../data/equipment';
 
 export function lookupCatalogWeight(name: unknown): number | string | undefined {
   if (typeof name !== 'string') {
@@ -10,7 +10,7 @@ export function lookupCatalogWeight(name: unknown): number | string | undefined 
     return undefined;
   }
 
-  const armorMatch = ARMOR.find((a) => a.name.toLowerCase() === cleanName);
+  const armorMatch = findArmorData(cleanName);
   if (armorMatch && armorMatch.weight != null) {
     return armorMatch.weight;
   }

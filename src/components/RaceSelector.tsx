@@ -103,8 +103,23 @@ const CustomRaceForm: React.FC<{
     });
   };
 
+  const [languagesInput, setLanguagesInput] = React.useState<string>(() =>
+    Array.isArray(customRace.languages) ? customRace.languages.join(', ') : ''
+  );
+
+  React.useEffect(() => {
+    const formatted = Array.isArray(customRace.languages) ? customRace.languages.join(', ') : '';
+    const parsedCurrent = languagesInput.split(',').map((s) => s.trim()).filter(Boolean);
+    const parsedStore = Array.isArray(customRace.languages) ? customRace.languages : [];
+    if (parsedCurrent.join('|') !== parsedStore.join('|')) {
+      setLanguagesInput(formatted);
+    }
+  }, [customRace.languages]);
+
   const handleLanguagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const languages = e.target.value
+    const val = e.target.value;
+    setLanguagesInput(val);
+    const languages = val
       .split(',')
       .map((s: string) => s.trim())
       .filter(Boolean);
@@ -173,7 +188,7 @@ const CustomRaceForm: React.FC<{
         <input
           type="text"
           className="input"
-          value={customRace.languages.join(', ')}
+          value={languagesInput}
           onChange={handleLanguagesChange}
         />
       </div>
@@ -277,7 +292,18 @@ const ManualRacesSection: React.FC<{
 
 export default function RaceSelector({ initialState = {} }: RaceSelectorProps) {
   const { state: characterState, dispatch } = useCharacter();
-  const state = characterState.race;
+  const rawRace = characterState.race;
+  const state: RaceState = typeof rawRace === 'string'
+    ? {
+        ...DEFAULT_RACE_STATE,
+        race: rawRace,
+        subrace: (characterState as any).subrace || (characterState as any).raceState?.subrace || '',
+      }
+    : {
+        ...DEFAULT_RACE_STATE,
+        ...((characterState as any).raceState || {}),
+        ...(rawRace || {}),
+      };
 
   useEffect(() => {
     if (Object.keys(initialState).length > 0) {
