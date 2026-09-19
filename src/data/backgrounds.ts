@@ -30,7 +30,7 @@ export const BACKGROUNDS: BackgroundData[] = [
   },
   {
     name: 'Charlatan',
-    skills: ['Deception', 'Manipulation', 'Subtlety', 'Persuasion'],
+    skills: ['Deception', 'Manipulation', 'Subterfuge', 'Persuasion'],
     gold: 15,
     equipment: 'A set of fine clothes, a disguise kit, false documentation, 15 gp',
     trait: 'False Identity',
@@ -38,17 +38,17 @@ export const BACKGROUNDS: BackgroundData[] = [
   },
   {
     name: 'Criminal',
-    skills: ['Deception', 'Subtlety', 'Stealth', 'Athletics'],
+    skills: ['Deception', 'Subterfuge', 'Stealth', 'Athletics'],
     gold: 15,
     equipment: 'A crowbar, a set of dark common clothes with a hood, 15 gp',
     trait: 'Criminal Contact',
     desc: 'You have a history of breaking the law.',
     freeSkillPoints: 5,
-    restrictSkills: ['Athletics', 'Deception', 'Perception', 'Subtlety', 'Stealth']
+    restrictSkills: ['Athletics', 'Deception', 'Perception', 'Subterfuge', 'Stealth']
   },
   {
     name: 'Cultist',
-    skills: ['Occult', 'Deception', 'Subtlety', 'Religion'],
+    skills: ['Occult', 'Deception', 'Subterfuge', 'Religion'],
     gold: 10,
     equipment: 'Vestments of your cult, a dark hood, a sacrificial dagger, 10 gp',
     trait: 'Occult Knowledge',
@@ -137,7 +137,7 @@ export const BACKGROUNDS: BackgroundData[] = [
   },
   {
     name: 'Sailor',
-    skills: ['Athletics', 'Perception', 'Survival', 'Subtlety'],
+    skills: ['Athletics', 'Perception', 'Survival', 'Subterfuge'],
     gold: 10,
     equipment: '50 feet of silk rope, a lucky charm, common clothes, 10 gp',
     trait: 'Ship’s Passage',
@@ -170,7 +170,7 @@ export const BACKGROUNDS: BackgroundData[] = [
   },
   {
     name: 'Urchin',
-    skills: ['Subtlety', 'Stealth', 'Deception', 'Perception'],
+    skills: ['Subterfuge', 'Stealth', 'Deception', 'Perception'],
     gold: 10,
     equipment: 'A small knife, a map of your hometown, a pet mouse, common clothes, 10 gp',
     trait: 'City Secrets',

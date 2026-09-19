@@ -4,6 +4,8 @@ export interface Appearance {
   age?: string;
   height?: string;
   weight?: string;
+  description?: string;
+  notes?: string;
 }
 
 export interface IdentityState {

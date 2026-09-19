@@ -92,7 +92,7 @@ export const SKILLS: SkillInfo[] = [
   { name: 'Athletics', stats: ['Brawn', 'Dexterity'], key: 'Ath' },
   { name: 'Persuasion', stats: ['Presence', 'Manipulation'], key: 'Persu' },
   { name: 'Deception', stats: ['Presence', 'Manipulation'], key: 'Decep' },
-  { name: 'Subtlety', stats: ['Dexterity', 'Cunning'], key: 'Sub' },
+  { name: 'Subterfuge', stats: ['Dexterity', 'Cunning'], key: 'Sub' },
   { name: 'Empathy', stats: ['Manipulation', 'Composure'], key: 'Emp' },
   { name: 'Stealth', stats: ['Dexterity', 'Cunning'], key: 'Stealth' },
   { name: 'Investigation', stats: ['Cunning', 'Cunning'], key: 'Inv' },

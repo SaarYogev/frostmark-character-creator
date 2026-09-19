@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CHARACTERISTICS, WEAPON_PROFICIENCY_COSTS, SAVE_PROFICIENCY_COSTS } from '../data/constants';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
@@ -86,8 +86,22 @@ const ProficienciesSelector: React.FC = () => {
     } as any);
   };
 
+  const [languagesInput, setLanguagesInput] = useState<string>(() =>
+    Array.isArray(languages) ? languages.join(', ') : ''
+  );
+
+  useEffect(() => {
+    const formatted = Array.isArray(languages) ? languages.join(', ') : '';
+    const parsedCurrent = languagesInput.split(',').map((s) => s.trim()).filter(Boolean);
+    const parsedStore = Array.isArray(languages) ? languages : [];
+    if (parsedCurrent.join('|') !== parsedStore.join('|')) {
+      setLanguagesInput(formatted);
+    }
+  }, [languages]);
+
   const handleLanguagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    setLanguagesInput(val);
     const langList = val.split(',').map((s) => s.trim()).filter(Boolean);
     dispatch({
       type: 'SET_PROFICIENCIES',
@@ -295,7 +309,7 @@ const ProficienciesSelector: React.FC = () => {
             <input
               type="text"
               className="input"
-              value={Array.isArray(languages) ? languages.join(', ') : ''}
+              value={languagesInput}
               onChange={handleLanguagesChange}
               placeholder="e.g. Elvish, Dwarvish"
             />

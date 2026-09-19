@@ -133,11 +133,28 @@ const BackgroundSelector: React.FC = () => {
     }
   };
 
-  const bgNameStr = typeof state.background === 'string'
-    ? state.background
-    : state.background?.name ?? '';
+  const rawBg = state.background as any;
+  const bgNameCandidate = typeof rawBg === 'string'
+    ? rawBg
+    : (rawBg?.name ?? rawBg?.background ?? rawBg?.id ?? (state as any)?.backgroundName ?? '');
 
-  const isCustomSelected = bgNameStr === 'Custom' || bgNameStr === 'Custom / Enter Manually...' || (Boolean(bgNameStr) && !BACKGROUNDS.find(b => b.name === bgNameStr));
+  const matchedBgFromCatalog = Array.isArray(BACKGROUNDS)
+    ? BACKGROUNDS.find(b => {
+        if (!bgNameCandidate) return false;
+        return b.name.toLowerCase() === bgNameCandidate.toLowerCase();
+      })
+    : undefined;
+
+  const matchedByTraitOrDesc = Array.isArray(BACKGROUNDS) && typeof rawBg === 'object' && rawBg
+    ? BACKGROUNDS.find(b => (rawBg.trait && b.trait === rawBg.trait) || (rawBg.desc && b.desc === rawBg.desc))
+    : undefined;
+
+  const resolvedBg = matchedBgFromCatalog
+    || matchedByTraitOrDesc
+    || (typeof rawBg === 'object' && rawBg?.name ? rawBg : (typeof rawBg === 'string' && rawBg ? { ...DEFAULT_BACKGROUND, name: rawBg } : undefined));
+
+  const bgNameStr = resolvedBg?.name ?? bgNameCandidate;
+  const isCustomSelected = bgNameStr === 'Custom' || bgNameStr === 'Custom / Enter Manually...' || (Boolean(bgNameStr) && !matchedBgFromCatalog && !matchedByTraitOrDesc && typeof rawBg === 'object' && rawBg?.isCustom);
 
   return (
     <div className="background-selector">
@@ -185,12 +202,9 @@ const BackgroundSelector: React.FC = () => {
           />
         )}
 
-        {state.background && state.background.name && !isCustomSelected && (() => {
-          const fullBg = Array.isArray(BACKGROUNDS)
-            ? BACKGROUNDS.find(b => b.name === state.background.name) ?? state.background
-            : state.background;
-          return <BackgroundDetails background={fullBg as Background} />;
-        })()}
+        {state.background && resolvedBg && !isCustomSelected && (
+          <BackgroundDetails background={resolvedBg as Background} />
+        )}
       </div>
     </div>
   );

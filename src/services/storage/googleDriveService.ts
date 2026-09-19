@@ -1,6 +1,7 @@
 import { CharacterState } from '../../types/Character';
 import { SavedCharacterMeta } from './types';
 import { extractCharacterMeta } from './localStorageService';
+import { uint8ArrayToBase64, base64ToUint8Array } from './pdfStorageService';
 
 const DRIVE_FILE_PREFIX = 'frostmark_char_';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -151,7 +152,19 @@ export async function saveToDriveAppData(state: CharacterState, driveFileId?: st
     },
   };
 
-  const fileContent = JSON.stringify(state, null, 2);
+  let stateToSave: any = state;
+  if (state.importedPdfBytes) {
+    const pdfBytesArray = state.importedPdfBytes instanceof Uint8Array
+      ? state.importedPdfBytes
+      : new Uint8Array(state.importedPdfBytes as ArrayBuffer);
+    stateToSave = {
+      ...state,
+      importedPdfBase64: uint8ArrayToBase64(pdfBytesArray),
+    };
+    delete stateToSave.importedPdfBytes;
+  }
+
+  const fileContent = JSON.stringify(stateToSave, null, 2);
   const boundary = 'frostmark_boundary_multipart';
   const delimiter = `\r\n--${boundary}\r\n`;
   const closeDelimiter = `\r\n--${boundary}--`;
@@ -209,7 +222,11 @@ export async function loadFromDriveAppData(driveFileId: string): Promise<Charact
     throw new Error(`Failed to load character from Google Drive: ${res.statusText}`);
   }
 
-  return await res.json();
+  const data = await res.json();
+  if (data && data.importedPdfBase64) {
+    data.importedPdfBytes = base64ToUint8Array(data.importedPdfBase64);
+  }
+  return data;
 }
 
 export async function deleteFromDriveAppData(driveFileId: string): Promise<void> {

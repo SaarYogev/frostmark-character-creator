@@ -113,4 +113,26 @@ describe('SkillsSelector', () => {
 
     expect(entry.querySelector('.skill-cost')).toHaveTextContent('Cost: 4 pts');
   });
+
+  it('restricts background free points to allowed skills for standard backgrounds', () => {
+    const cultistBg = BACKGROUNDS.find(b => b.name === 'Cultist');
+    render(
+      <CharacterProvider
+        initialState={{
+          background: cultistBg as any,
+        }}
+      >
+        <SkillsSelector />
+      </CharacterProvider>
+    );
+
+    expect(screen.getByText(/Background Skill Restriction/)).toBeInTheDocument();
+    expect(screen.getByText(/Occult, Deception, Subterfuge, Religion/)).toBeInTheDocument();
+
+    const occultRow = screen.getByText('Occult').closest('.skill-row')!;
+    expect(occultRow.querySelector('.restricted-skill-badge')).toBeInTheDocument();
+
+    const athleticsRow = screen.getByText('Athletics').closest('.skill-row')!;
+    expect(athleticsRow.querySelector('.restricted-skill-badge')).not.toBeInTheDocument();
+  });
 });

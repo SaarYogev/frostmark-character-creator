@@ -220,7 +220,7 @@ export function getCharacteristicModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
 
-export function computeFreeSkillPools(state: any, backgroundsData: any[]) {
+export function computeFreeSkillPools(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
   let bgFree = 0;
   let builtInRanks: Record<string, number> = {};
   let builtInAcademics: Record<string, number> = {};
@@ -237,8 +237,11 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[]) {
     if (bg) {
       bgFree = bg.freeSkillPoints ?? 4;
       builtInRanks = bg.builtInRanks ?? {};
-      builtInAcademics = bg.builtInAcademics ?? {};
-      restrictSkills = bg.restrictSkills ?? null;
+      /*
+       * Background free skill points are restricted to the background's allowed skills
+       * unless explicitly defined otherwise or empty (e.g. Sacred Arms Agent allowing free distribution).
+       */
+      restrictSkills = bg.restrictSkills ?? (Array.isArray(bg.skills) && bg.skills.length > 0 ? bg.skills : null);
     }
   }
 
@@ -252,7 +255,7 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[]) {
     for (let i = 1; i <= currentLevel; i++) {
       const selection = levelSelections[i];
       if (selection && selection.primaryAO) {
-        let origin = ORIGINS.find(o => o.name === selection.primaryAO);
+        let origin = originsData.find(o => o.name === selection.primaryAO);
         if (!origin && selection.primaryAO === 'Custom') {
           origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
         } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
@@ -270,7 +273,7 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[]) {
   } else {
     const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
     const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-    const primaryOrigin = ORIGINS.find(o => o.name === primaryAO);
+    const primaryOrigin = originsData.find(o => o.name === primaryAO);
     const primaryExtra = primaryAO === 'Custom' ? (customPrimaryAO?.extraSkills ?? 0) : (primaryOrigin?.extraSkills ?? 0);
     if (primaryExtra > 0) {
       aoFree = 4;
@@ -286,10 +289,8 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[]) {
   };
 }
 
-export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: any[]) {
-  let spent = 0;
-
-  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, backgroundsData);
+export function computeSkillPointsSummary(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
+  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, backgroundsData, originsData);
 
   let restrictedSpent = 0;
   let unrestrictedSpent = 0;
@@ -306,9 +307,9 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
     }
   }
 
-  const isAcaRestricted = restrictSkills && (restrictSkills.includes('Academics') || restrictSkills.includes('Academic'));
-  const acaEntries = state.skills?.academicsEntries ?? state.academicsEntries ?? [];
-  if (acaEntries.length > 0) {
+  const isAcaRestricted = restrictSkills && restrictSkills.includes('Academics');
+  const acaEntries = state.skills?.academicsEntries ?? state.academicsEntries;
+  if (acaEntries && Array.isArray(acaEntries) && acaEntries.length > 0) {
     for (const entry of acaEntries) {
       const rank = entry.rank ?? 0;
       const builtIn = builtInAcademics[entry.name] ?? 0;
@@ -345,6 +346,24 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
     }
   }
 
+  let bgSpent = 0;
+  let aoSpent = 0;
+
+  if (restrictSkills) {
+    bgSpent = Math.min(bgFree, restrictedSpent);
+    const excessRestricted = restrictedSpent - bgSpent;
+    const totalUnrestricted = excessRestricted + unrestrictedSpent;
+    aoSpent = Math.min(aoFree, totalUnrestricted);
+  } else {
+    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
+    bgSpent = Math.min(bgFree, totalSpentPoints);
+    aoSpent = Math.min(aoFree, Math.max(0, totalSpentPoints - bgSpent));
+  }
+
+  const bgFreeRemaining = Math.max(0, bgFree - bgSpent);
+  const aoFreeRemaining = Math.max(0, aoFree - aoSpent);
+  const freeSkillPointsRemaining = bgFreeRemaining + aoFreeRemaining;
+
   let skillsSpent = 0;
   if (restrictSkills) {
     const restrictedDiscount = Math.min(bgFree, restrictedSpent);
@@ -357,34 +376,53 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
     skillsSpent = Math.max(0, totalSpentPoints - totalFreePoints);
   }
 
+  return {
+    bgFree,
+    aoFree,
+    bgSpent,
+    aoSpent,
+    bgFreeRemaining,
+    aoFreeRemaining,
+    freeSkillPointsRemaining,
+    restrictedSpent,
+    unrestrictedSpent,
+    skillsSpent,
+  };
+}
+
+export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
+  let otherSpent = 0;
+
+  const { skillsSpent } = computeSkillPointsSummary(state, backgroundsData, originsData);
+
   const savingThrows = state.proficiencies?.savingThrowsProficient ?? state.savingThrowsProficient ?? {};
   for (const save in savingThrows) {
     if (savingThrows[save]) {
-      spent += SAVE_PROFICIENCY_COSTS[save] || 1;
+      otherSpent += SAVE_PROFICIENCY_COSTS[save] || 1;
     }
   }
 
   const armorProfs = state.proficiencies?.armorProficiencies ?? state.armorProficiencies ?? {};
   if (armorProfs.Heavy) {
-    spent += 3;
+    otherSpent += 3;
   } else if (armorProfs.Medium) {
-    spent += 2;
+    otherSpent += 2;
   } else if (armorProfs.Light) {
-    spent += 1;
+    otherSpent += 1;
   }
   if (armorProfs.Shields) {
-    spent += 1;
+    otherSpent += 1;
   }
 
   const weaponProfs = state.proficiencies?.weaponProficiencies ?? state.weaponProficiencies;
   if (weaponProfs && Array.isArray(weaponProfs)) {
     for (const group of weaponProfs) {
       if (WEAPON_PROFICIENCY_COSTS.Groups1pt.includes(group)) {
-        spent += 1;
+        otherSpent += 1;
       } else if (WEAPON_PROFICIENCY_COSTS.Groups2pt.includes(group)) {
-        spent += 2;
+        otherSpent += 2;
       } else if (WEAPON_PROFICIENCY_COSTS.Groups3pt.includes(group)) {
-        spent += 3;
+        otherSpent += 3;
       }
     }
   }
@@ -402,13 +440,13 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
   const goldAmount = state.proficiencies?.goldAmount ?? state.goldAmount ?? 10;
   if (goldAmount > bgGold) {
     const excess = goldAmount - bgGold;
-    spent += Math.ceil(excess / 25);
+    otherSpent += Math.ceil(excess / 25);
   }
 
   return {
     skillsSpent,
-    otherSpent: spent,
-    totalSpent: skillsSpent + spent
+    otherSpent,
+    totalSpent: skillsSpent + otherSpent
   };
 }
 

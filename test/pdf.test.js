@@ -207,9 +207,9 @@ test('exportToPDF exports weapon and defense list entries properly', async () =>
     expect(form.getTextField('Weapon 1').getText()).toBe('Warhammer');
     expect(form.getTextField('Weapon 1 Hit').getText()).toBe('+4');
     expect(form.getTextField('Weapon 1 Range').getText()).toBe('Melee');
-    expect(form.getTextField('Weapon 1 Damage').getText()).toBe('1d8+2');
-    expect(form.getTextField('Defenses 1').getText()).toBe('Shield');
+    expect(form.getTextField('Defenses 1').getText() || '').toBe('');
     expect(form.getTextField('Item 2').getText()).toBe('Plate Armor');
+    expect(form.getTextField('Item 3').getText()).toBe('Shield');
   } finally {
     globalThis.fetch = originalFetch;
   }

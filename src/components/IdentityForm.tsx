@@ -39,13 +39,19 @@ export default function IdentityForm({ initialState = {} }: IdentityFormProps) {
     dispatch({ type: 'SET_IDENTITY', payload: { [field]: Math.max(1, Math.min(20, value)) } });
   };
 
-  const handleAppearanceChange = (field: keyof Appearance) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    dispatch({ type: 'SET_IDENTITY', payload: {
-      appearance: {
-        ...state.appearance,
-        [field]: e.target.value,
-      }
-    } });
+  const handleAppearanceChange = (field: keyof Appearance) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    dispatch({
+      type: 'SET_IDENTITY',
+      payload: {
+        appearance: {
+          ...state.appearance,
+          [field]: e.target.value,
+          ...(field === 'description' ? { notes: e.target.value } : {}),
+        },
+      },
+    });
   };
 
   return (
@@ -155,6 +161,18 @@ export default function IdentityForm({ initialState = {} }: IdentityFormProps) {
             onChange={handleAppearanceChange('weight')}
           />
         </div>
+      </div>
+
+      <div className="form-group" style={{ marginTop: '1rem' }}>
+        <label htmlFor="app-description">Appearance Details</label>
+        <textarea
+          id="app-description"
+          className="textarea"
+          rows={4}
+          placeholder="Describe your character's physical appearance, features, clothing, style, distinct markings..."
+          value={state.appearance?.description ?? state.appearance?.notes ?? ''}
+          onChange={handleAppearanceChange('description')}
+        />
       </div>
     </div>
   );

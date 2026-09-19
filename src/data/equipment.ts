@@ -37,20 +37,31 @@ export const WEAPONS: WeaponData[] = [
 ];
 
 export const ARMOR: ArmorData[] = [
-  { name: 'Padded', category: 'Light', cost: '5 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Disadvantage', weight: 4 },
-  { name: 'Leather', category: 'Light', cost: '10 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 5 },
-  { name: 'Reinforced Leather', category: 'Light', cost: '45 gp', av: 12, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 7 },
+  { name: 'Padded Armor', category: 'Light', cost: '5 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Disadvantage', weight: 4 },
+  { name: 'Leather Armor', category: 'Light', cost: '10 gp', av: 11, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 5 },
+  { name: 'Reinforced Leather Armor', category: 'Light', cost: '45 gp', av: 12, mod: 'Dex', maxMod: null, stealth: 'Normal', weight: 7 },
   
-  { name: 'Hide', category: 'Medium', cost: '10 gp', av: 12, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 6 },
-  { name: 'Chain Shirt', category: 'Medium', cost: '50 gp', av: 13, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 10 },
-  { name: 'Scale Mail', category: 'Medium', cost: '50 gp', av: 14, mod: 'Dex', maxMod: 2, stealth: 'Disadvantage', weight: 24 },
-  { name: 'Breastplate', category: 'Medium', cost: '400 gp', av: 14, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 10 },
-  { name: 'Half-Plate', category: 'Medium', cost: '750 gp', av: 15, mod: 'Dex', maxMod: 2, stealth: 'Disadvantage', weight: 20 },
+  { name: 'Hide Armor', category: 'Medium', cost: '10 gp', av: 12, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 6 },
+  { name: 'Chain Shirt Armor', category: 'Medium', cost: '50 gp', av: 13, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 10 },
+  { name: 'Scale Mail Armor', category: 'Medium', cost: '50 gp', av: 14, mod: 'Dex', maxMod: 2, stealth: 'Disadvantage', weight: 24 },
+  { name: 'Breastplate Armor', category: 'Medium', cost: '400 gp', av: 14, mod: 'Dex', maxMod: 2, stealth: 'Normal', weight: 10 },
+  { name: 'Half-Plate Armor', category: 'Medium', cost: '750 gp', av: 15, mod: 'Dex', maxMod: 2, stealth: 'Disadvantage', weight: 20 },
   
-  { name: 'Ring Mail', category: 'Heavy', cost: '30 gp', av: 14, mod: null, maxMod: 0, stealth: 'Disadvantage', weight: 20 },
-  { name: 'Chain Mail', category: 'Heavy', cost: '75 gp', av: 16, mod: null, maxMod: 0, brawnMin: 13, stealth: 'Disadvantage', weight: 25 },
-  { name: 'Splint', category: 'Heavy', cost: '200 gp', av: 17, mod: null, maxMod: 0, brawnMin: 15, stealth: 'Disadvantage', weight: 30 },
-  { name: 'Plate', category: 'Heavy', cost: '1500 gp', av: 18, mod: null, maxMod: 0, brawnMin: 15, stealth: 'Disadvantage', weight: 35 },
+  { name: 'Ring Mail Armor', category: 'Heavy', cost: '30 gp', av: 14, mod: null, maxMod: 0, stealth: 'Disadvantage', weight: 20 },
+  { name: 'Chain Mail Armor', category: 'Heavy', cost: '75 gp', av: 16, mod: null, maxMod: 0, brawnMin: 13, stealth: 'Disadvantage', weight: 25 },
+  { name: 'Splint Armor', category: 'Heavy', cost: '200 gp', av: 17, mod: null, maxMod: 0, brawnMin: 15, stealth: 'Disadvantage', weight: 30 },
+  { name: 'Plate Armor', category: 'Heavy', cost: '1500 gp', av: 18, mod: null, maxMod: 0, brawnMin: 15, stealth: 'Disadvantage', weight: 35 },
   
   { name: 'Shield', category: 'Shield', cost: '10 gp', av: 2, mod: null, maxMod: null, stealth: 'Normal', weight: 3 }
 ];
+
+export function findArmorData(name: string): ArmorData | undefined {
+  if (!name) return undefined;
+  const clean = name.trim().toLowerCase();
+  const cleanWithoutArmor = clean.replace(/\s*armor$/i, '').trim();
+  return ARMOR.find((a) => {
+    const aLower = a.name.toLowerCase();
+    const aWithoutArmor = aLower.replace(/\s*armor$/i, '').trim();
+    return aLower === clean || aWithoutArmor === cleanWithoutArmor;
+  });
+}

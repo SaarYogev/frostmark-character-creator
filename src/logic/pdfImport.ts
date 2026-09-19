@@ -3,10 +3,13 @@ import { SKILLS, CHARACTERISTICS } from '../data/constants';
 import { RACES } from '../data/races';
 import { BACKGROUNDS } from '../data/backgrounds';
 import { ORIGINS } from '../data/origins';
-import { ARMOR, WEAPONS } from '../data/equipment';
+import { ARMOR, WEAPONS, findArmorData } from '../data/equipment';
 import { ABILITIES } from '../data/abilities';
 import { CharacterState, DEFAULT_CHARACTER } from '../types/Character';
 import { AbilityItem } from '../types/AO';
+import { DEFAULT_RACE_STATE } from '../types/Race';
+import { DEFAULT_BACKGROUND } from '../types/Background';
+import { getRacialStatBonuses } from './state';
 import { deduplicateEquipmentList } from './equipmentUtils';
 
 function safeGetText(form: any, fieldName: string): string {
@@ -63,6 +66,30 @@ export async function importFromPDF(
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const form = pdfDoc.getForm();
 
+  let importedMetadata: {
+    version?: number;
+    accomplishmentPointsRemaining?: number;
+    accomplishmentPointsLimit?: number;
+    bgFreeRemaining?: number;
+    aoFreeRemaining?: number;
+    freeSkillPointsRemaining?: number;
+  } | undefined = undefined;
+
+  try {
+    const subject = pdfDoc.getSubject();
+    if (subject && subject.startsWith('FrostmarkMetadata:')) {
+      importedMetadata = JSON.parse(subject.slice('FrostmarkMetadata:'.length));
+    } else {
+      const keywords = pdfDoc.getKeywords();
+      const metaKeyword = keywords?.find((k) => k.startsWith('FrostmarkMetadata:'));
+      if (metaKeyword) {
+        importedMetadata = JSON.parse(metaKeyword.slice('FrostmarkMetadata:'.length));
+      }
+    }
+  } catch {
+    /* Silent catch handles third-party or manually edited PDFs lacking metadata */
+  }
+
   const charName = safeGetText(form, 'CHARACTER NAME');
   const playerName = safeGetText(form, 'PLAYER NAME');
   const raceRaw = safeGetText(form, 'RACE');
@@ -81,7 +108,19 @@ export async function importFromPDF(
     }
   }
 
-  let backgroundName = bgRaw || 'Scholar';
+  let backgroundName = bgRaw || '';
+  if (!backgroundName && Array.isArray(backgroundsData)) {
+    const allAbilityText = `${safeGetText(form, 'Essential Abilities 1')}\n${safeGetText(form, 'Essential Abilities 2')}\n${safeGetText(form, 'Additional Abilities column 1')}\n${safeGetText(form, 'Additional Abilities column 2')}`;
+    for (const bg of backgroundsData) {
+      if (bg.trait && new RegExp(`===\\s*${bg.trait}\\s*===|^${bg.trait}:|\\b${bg.trait}\\b`, 'i').test(allAbilityText)) {
+        backgroundName = bg.name;
+        break;
+      }
+    }
+  }
+  if (!backgroundName) {
+    backgroundName = 'Scholar';
+  }
   let primaryAO = '';
   let secondaryAO = '';
   let level = 1;
@@ -101,6 +140,19 @@ export async function importFromPDF(
     }
   }
 
+  const selectedAOs: string[] = [];
+  if (primaryAO) selectedAOs.push(primaryAO);
+  if (secondaryAO && !selectedAOs.includes(secondaryAO)) {
+    selectedAOs.push(secondaryAO);
+  }
+
+  const matchedBackground = Array.isArray(backgroundsData)
+    ? backgroundsData.find((b: any) => b.name?.toLowerCase() === backgroundName.toLowerCase())
+    : undefined;
+  const resolvedBackground = matchedBackground
+    ? { ...matchedBackground }
+    : { ...DEFAULT_BACKGROUND, name: backgroundName };
+
   const age = safeGetText(form, 'Appearance Age');
   const height = safeGetText(form, 'Appearance Height');
   const weight = safeGetText(form, 'Appearance Weight');
@@ -114,6 +166,14 @@ export async function importFromPDF(
       safeGetText(form, c.key) ||
       safeGetText(form, `${c.key} Score`);
     characteristics[c.key] = parseInteger(textScore, 10);
+  });
+
+  const racialBonuses = getRacialStatBonuses({ race, subrace }, racesData);
+  const baseCharacteristics: Record<string, number> = {};
+  CHARACTERISTICS.forEach((c) => {
+    const finalVal = characteristics[c.key] ?? 10;
+    const bonus = racialBonuses[c.key] ?? 0;
+    baseCharacteristics[c.key] = finalVal - bonus;
   });
 
   const savingThrowsProficient: Record<string, boolean> = {};
@@ -221,7 +281,7 @@ export async function importFromPDF(
       }
 
       const cleanName = rawDefName.replace(/\s*\([^)]*\)/g, '').trim() || rawDefName;
-      const knownArmor = ARMOR.find((a) => cleanName.toLowerCase().includes(a.name.toLowerCase()));
+      const knownArmor = findArmorData(cleanName);
 
       if (av === undefined && knownArmor) {
         av = knownArmor.av;
@@ -246,7 +306,7 @@ export async function importFromPDF(
     if (itemName) {
       const itemWeight = safeGetText(form, `Item ${i} weight`);
       const matchedWeapon = WEAPONS.find((w) => w.name.toLowerCase() === itemName.toLowerCase());
-      const matchedArmor = ARMOR.find((a) => itemName.toLowerCase().includes(a.name.toLowerCase()));
+      const matchedArmor = findArmorData(itemName);
 
       if (matchedWeapon) {
         const existingWeapon = equipmentList.find(
@@ -376,85 +436,248 @@ export async function importFromPDF(
   const col1 = safeGetText(form, 'Additional Abilities column 1');
   const col2 = safeGetText(form, 'Additional Abilities column 2');
 
+  const raceTraitNames = new Set<string>();
+  if (Array.isArray(racesData)) {
+    for (const r of racesData) {
+      if (r.traits && Array.isArray(r.traits)) {
+        for (const t of r.traits) {
+          if (t?.name) raceTraitNames.add(t.name.toLowerCase().trim());
+        }
+      }
+      if (r.subraces && Array.isArray(r.subraces)) {
+        for (const sr of r.subraces) {
+          if (sr.traits && Array.isArray(sr.traits)) {
+            for (const t of sr.traits) {
+              if (t?.name) raceTraitNames.add(t.name.toLowerCase().trim());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const backgroundTraitNames = new Set<string>();
+  if (Array.isArray(backgroundsData)) {
+    for (const bg of backgroundsData) {
+      if (bg?.trait) {
+        backgroundTraitNames.add(bg.trait.toLowerCase().trim());
+      }
+    }
+  }
+
   const customFeatures: any[] = [];
   const customAbilities: AbilityItem[] = [];
-  const levelSelections: Record<number, { primaryAbility?: string; secondaryAbility?: string }> = {};
+  const levelSelections: Record<number, { primaryAO?: string; secondaryAO?: string; primaryAbility?: string; secondaryAbility?: string }> = {};
 
-  const parseAbilityText = (rawText: string, isEssential: boolean) => {
+  const assignAbilityToSlot = (
+    abilityId: string,
+    origin: string,
+    targetLvl: number,
+    preferredSlot?: 'Primary' | 'Secondary',
+    allowOverflow = false
+  ): { assignedLevel: number; assignedSlot: 'Primary' | 'Secondary' } | null => {
+    let lvl = targetLvl;
+    if (!levelSelections[lvl]) {
+      levelSelections[lvl] = {};
+    }
+
+    let slot: 'Primary' | 'Secondary' | null = null;
+    if (preferredSlot === 'Primary') {
+      if (!levelSelections[lvl].primaryAbility) {
+        slot = 'Primary';
+      } else if (!levelSelections[lvl].secondaryAbility) {
+        slot = 'Secondary';
+      }
+    } else if (preferredSlot === 'Secondary') {
+      if (!levelSelections[lvl].secondaryAbility) {
+        slot = 'Secondary';
+      } else if (!levelSelections[lvl].primaryAbility) {
+        slot = 'Primary';
+      }
+    } else {
+      if (!levelSelections[lvl].primaryAbility) {
+        slot = 'Primary';
+      } else if (!levelSelections[lvl].secondaryAbility) {
+        slot = 'Secondary';
+      }
+    }
+
+    if (!slot) {
+      for (let l = 1; l <= level; l++) {
+        if (!levelSelections[l]) {
+          levelSelections[l] = {};
+        }
+        if (!levelSelections[l].primaryAbility) {
+          lvl = l;
+          slot = 'Primary';
+          break;
+        } else if (!levelSelections[l].secondaryAbility) {
+          lvl = l;
+          slot = 'Secondary';
+          break;
+        }
+      }
+    }
+
+    if (!slot && allowOverflow) {
+      lvl = Math.max(level, lvl) + 1;
+      levelSelections[lvl] = {};
+      slot = 'Primary';
+    }
+
+    if (!slot) {
+      return null;
+    }
+
+    if (slot === 'Primary') {
+      levelSelections[lvl].primaryAbility = abilityId;
+      if (origin) {
+        levelSelections[lvl].primaryAO = origin;
+      }
+    } else {
+      levelSelections[lvl].secondaryAbility = abilityId;
+      if (origin) {
+        levelSelections[lvl].secondaryAO = origin;
+      }
+    }
+
+    if (origin) {
+      if (!primaryAO) {
+        primaryAO = origin;
+      } else if (!secondaryAO && origin.toLowerCase() !== primaryAO.toLowerCase()) {
+        secondaryAO = origin;
+      }
+      if (!selectedAOs.some((ao) => ao.toLowerCase() === origin.toLowerCase())) {
+        selectedAOs.push(origin);
+      }
+    }
+
+    return { assignedLevel: lvl, assignedSlot: slot };
+  };
+
+  const parseAbilityText = (rawText: string, isEssential: boolean, defaultSlot?: 'Primary' | 'Secondary') => {
     if (!rawText) return;
-    const blocks = rawText.split('\n\n').map((b) => b.trim()).filter(Boolean);
+    const blocks = rawText.split(/\r?\n\r?\n/).map((b) => b.trim()).filter(Boolean);
 
     for (const block of blocks) {
-      /*
-       * Match structured headers formatted as: === Name (Origin · Lv.X) === or === Name ===
-       */
       const headerMatch = block.match(/^===\s*(.+?)(?:\s*\((.*?)\s*·\s*Lv\.(\d+)\))?\s*===\s*\n?([\s\S]*)$/);
+      let candidateName = '';
+      let originInHeader: string | undefined;
+      let levelInHeader: number | undefined;
+      let desc = '';
+      let hasAbilityHeader = false;
+
       if (headerMatch) {
-        const abilityName = headerMatch[1].trim();
-        const originName = (headerMatch[2] || primaryAO || 'Devotion').trim();
-        const abilityLvl = headerMatch[3] ? parseInt(headerMatch[3], 10) : 1;
-        const desc = (headerMatch[4] || '').trim();
+        candidateName = headerMatch[1].trim();
+        originInHeader = headerMatch[2]?.trim();
+        levelInHeader = headerMatch[3] ? parseInt(headerMatch[3], 10) : undefined;
+        desc = (headerMatch[4] || '').trim();
+        hasAbilityHeader = true;
+      } else {
+        const colonMatch = block.match(/^([^:\n]+)[:\-]\s*([\s\S]*)$/);
+        if (colonMatch) {
+          candidateName = colonMatch[1].trim();
+          desc = (colonMatch[2] || '').trim();
+        } else if (isEssential) {
+          const firstLine = block.split(/\r?\n/)[0].trim();
+          candidateName = firstLine.replace(/[:\-].*$/, '').trim();
+          desc = block.substring(firstLine.length).trim();
+        } else {
+          /* Plain text blocks without header or key-value format represent miscellaneous journal notes */
+          customFeatures.push(block);
+          continue;
+        }
+      }
 
-        const premade = ABILITIES.find((a) => a.name.toLowerCase() === abilityName.toLowerCase());
-        const targetLvl = premade ? premade.level : abilityLvl;
-        const abilityId = premade ? premade.id : `custom-${abilityName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const nameLower = candidateName.toLowerCase();
 
-        if (!premade) {
+      /* Race and background traits are dynamically reconstructed by data modules and must not be imported as abilities */
+      if (raceTraitNames.has(nameLower) || backgroundTraitNames.has(nameLower)) {
+        continue;
+      }
+
+      /* Explicit miscellaneous note headers are preserved as campaign notes rather than AO abilities */
+      if (/^(?:notes?|misc|miscellaneous|campaign notes?|session notes?|backstory)$/i.test(candidateName)) {
+        customFeatures.push(block);
+        continue;
+      }
+
+      const premade =
+        ABILITIES.find((a) => {
+          if (a.name.toLowerCase() !== nameLower) return false;
+          if (originInHeader && a.origin.toLowerCase() !== originInHeader.toLowerCase()) return false;
+          return true;
+        }) || ABILITIES.find((a) => a.name.toLowerCase() === nameLower);
+
+      if (premade) {
+        const targetLvl = levelInHeader ?? premade.level ?? 1;
+        const origin = premade.origin || originInHeader || primaryAO || 'Devotion';
+        assignAbilityToSlot(premade.id, origin, targetLvl, defaultSlot, true);
+        continue;
+      }
+
+      if (hasAbilityHeader || isEssential) {
+        const targetLvl = levelInHeader ?? 1;
+        const origin = originInHeader || primaryAO || 'Custom';
+        const abilityId = `custom-${candidateName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+        const assignment = assignAbilityToSlot(abilityId, origin, targetLvl, defaultSlot, true);
+        if (assignment) {
           customAbilities.push({
             id: abilityId,
-            name: abilityName,
-            origin: originName,
-            level: targetLvl,
-            selection: 'Custom',
+            name: candidateName,
+            origin,
+            level: assignment.assignedLevel,
+            selection: assignment.assignedSlot,
             desc,
             short_desc: desc,
             full_desc: desc,
           } as any);
         }
-
-        if (!levelSelections[targetLvl]) {
-          levelSelections[targetLvl] = {};
-        }
-
-        if (!levelSelections[targetLvl].primaryAbility) {
-          levelSelections[targetLvl].primaryAbility = abilityId;
-        } else if (!levelSelections[targetLvl].secondaryAbility) {
-          levelSelections[targetLvl].secondaryAbility = abilityId;
-        }
-
-        /*
-         * Retain block in customFeatures so custom text or notes are fully queryable and never lost
-         */
-        customFeatures.push(block);
-      } else if (isEssential) {
-        /*
-         * Essential ability without strict === header: attempt matching against premade abilities
-         */
-        const firstLine = block.split('\n')[0].trim();
-        const cleanName = firstLine.replace(/[:\-].*$/, '').trim();
-        const premade = ABILITIES.find((a) => a.name.toLowerCase() === cleanName.toLowerCase());
-        if (premade) {
-          const targetLvl = premade.level || 1;
-          if (!levelSelections[targetLvl]) {
-            levelSelections[targetLvl] = {};
-          }
-          if (!levelSelections[targetLvl].primaryAbility) {
-            levelSelections[targetLvl].primaryAbility = premade.id;
-          } else if (!levelSelections[targetLvl].secondaryAbility) {
-            levelSelections[targetLvl].secondaryAbility = premade.id;
-          }
-        }
-        customFeatures.push(block);
-      } else {
-        customFeatures.push(block);
+        continue;
       }
+
+      if (candidateName.length > 0) {
+        const targetLvl = levelInHeader ?? 1;
+        const origin = originInHeader || primaryAO || 'Custom';
+        const abilityId = `custom-${candidateName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+        const assignment = assignAbilityToSlot(abilityId, origin, targetLvl, defaultSlot, false);
+        if (assignment) {
+          customAbilities.push({
+            id: abilityId,
+            name: candidateName,
+            origin,
+            level: assignment.assignedLevel,
+            selection: assignment.assignedSlot,
+            desc,
+            short_desc: desc,
+            full_desc: desc,
+          } as any);
+          continue;
+        }
+      }
+
+      customFeatures.push(block);
     }
   };
 
-  parseAbilityText(ess1, true);
-  parseAbilityText(ess2, true);
+  parseAbilityText(ess1, true, 'Primary');
+  parseAbilityText(ess2, true, 'Secondary');
   parseAbilityText(col1, false);
   parseAbilityText(col2, false);
+
+  /* Level progression logic requires each level selection record to retain explicit AO origins to prevent orphaned abilities */
+  for (const lvlStr of Object.keys(levelSelections)) {
+    const lvl = Number(lvlStr);
+    const sel = levelSelections[lvl];
+    if (!sel.primaryAO && primaryAO) {
+      sel.primaryAO = primaryAO;
+    }
+    if (!sel.secondaryAO && (secondaryAO || primaryAO)) {
+      sel.secondaryAO = secondaryAO || primaryAO;
+    }
+  }
 
   const profsBlock =
     safeGetText(form, 'Lang/profs column') ||
@@ -490,19 +713,19 @@ export async function importFromPDF(
     });
   }
 
-  const selectedAOs: string[] = [];
-  if (primaryAO) selectedAOs.push(primaryAO);
-  if (secondaryAO && !selectedAOs.includes(secondaryAO)) {
-    selectedAOs.push(secondaryAO);
-  }
+  const hasManualHP = Boolean(maxHPText);
 
   const importedState: any = {
     ...DEFAULT_CHARACTER,
     characterName: charName,
     playerName: playerName,
-    race,
+    race: {
+      ...DEFAULT_RACE_STATE,
+      race,
+      subrace,
+    },
     subrace,
-    background: backgroundName,
+    background: resolvedBackground,
     primaryAO: primaryAO || 'Devotion',
     secondaryAO,
     selectedAOs,
@@ -516,7 +739,7 @@ export async function importFromPDF(
     silverAmount,
     copperAmount,
     potentialGained,
-    baseCharacteristics: { ...characteristics },
+    baseCharacteristics: { ...baseCharacteristics },
     characteristics: { ...characteristics },
     finalCharacteristics: { ...characteristics },
     skillRanks,
@@ -543,11 +766,13 @@ export async function importFromPDF(
       souls,
     },
     customFeatures,
+    customAbilities,
+    levelSelections,
     manualSkills: false,
     manualProficiencies: false,
     manualEquipment: false,
     manualAbilityScores: false,
-    manualHP: false,
+    manualHP: hasManualHP,
     manualSpells: false,
     identity: {
       characterName: charName,
@@ -559,6 +784,8 @@ export async function importFromPDF(
         age,
         height,
         weight,
+        description: appearanceNotes,
+        notes: appearanceNotes,
       },
     },
     raceState: {
@@ -592,7 +819,13 @@ export async function importFromPDF(
       equipmentList: finalEquipmentList,
       manualEquipment: false,
     },
+    isImported: true,
     importedPdfBytes: pdfBytes instanceof Uint8Array ? new Uint8Array(pdfBytes) : new Uint8Array(pdfBytes),
+    importedMetadata,
+    accomplishmentPointsRemaining: importedMetadata?.accomplishmentPointsRemaining,
+    bgFreeRemaining: importedMetadata?.bgFreeRemaining,
+    aoFreeRemaining: importedMetadata?.aoFreeRemaining,
+    freeSkillPointsRemaining: importedMetadata?.freeSkillPointsRemaining,
   };
 
   return importedState as CharacterState;

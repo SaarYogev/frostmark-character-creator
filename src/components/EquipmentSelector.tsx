@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
-import { WEAPONS, ARMOR as ARMORS } from '../data/equipment';
+import { WEAPONS, ARMOR as ARMORS, findArmorData } from '../data/equipment';
 
 export interface EquipmentItem {
   name: string;
@@ -234,13 +234,12 @@ const EquipmentSelector: React.FC = () => {
   const armorsList = useMemo(() => {
     const preset = ARMORS ?? [];
     const customList = customArmorsStore.filter((c) => !preset.some((p) => p.name === c.name));
-    return [...preset, ...customArmorsStore];
+    return [...preset, ...customList];
   }, [customArmorsStore]);
 
   const otherItems = useMemo(() => {
     const presetWeapons = (WEAPONS ?? []).map((w) => w.name);
-    const presetArmors = (ARMORS ?? []).map((a) => a.name);
-    return equipmentList.filter((i) => !i.isWeapon && !i.isArmor && !presetWeapons.includes(i.name) && !presetArmors.includes(i.name));
+    return equipmentList.filter((i) => !i.isWeapon && !i.isArmor && !findArmorData(i.name) && !presetWeapons.includes(i.name));
   }, [equipmentList]);
 
   const selectedNames = useMemo(() => equipmentList.map((i) => i.name), [equipmentList]);
