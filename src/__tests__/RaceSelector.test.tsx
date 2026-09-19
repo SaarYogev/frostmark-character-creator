@@ -90,14 +90,14 @@ describe('RaceSelector', () => {
   it('shows manual stat override section', () => {
     renderWithProvider(<RaceSelector />);
 
-    expect(screen.getByText('Manual Stat Allocation Override')).toBeInTheDocument();
-    expect(screen.getByText('Customize stat bonuses manually (+2 to one stat, +1 to another)')).toBeInTheDocument();
+    expect(screen.getByText('Manual Racial Bonuses & Skills Override')).toBeInTheDocument();
+    expect(screen.getByText('Customize racial bonuses and starting skills manually')).toBeInTheDocument();
   });
 
   it('toggles manual stat override', () => {
     renderWithProvider(<RaceSelector />);
 
-    const checkbox = screen.getByText('Customize stat bonuses manually (+2 to one stat, +1 to another)');
+    const checkbox = screen.getByText('Customize racial bonuses and starting skills manually');
     fireEvent.click(checkbox);
 
     // After toggling, the select dropdowns should appear
@@ -109,7 +109,7 @@ describe('RaceSelector', () => {
     renderWithProvider(<RaceSelector />);
 
     // Toggle manual races first
-    const checkbox = screen.getByText('Customize stat bonuses manually (+2 to one stat, +1 to another)');
+    const checkbox = screen.getByText('Customize racial bonuses and starting skills manually');
     fireEvent.click(checkbox);
 
     // Select +2 attribute
@@ -135,7 +135,7 @@ describe('RaceSelector', () => {
     renderWithProvider(<RaceSelector />);
 
     // Toggle manual races first
-    const checkbox = screen.getByText('Customize stat bonuses manually (+2 to one stat, +1 to another)');
+    const checkbox = screen.getByText('Customize racial bonuses and starting skills manually');
     fireEvent.click(checkbox);
 
     // Select +2 attribute

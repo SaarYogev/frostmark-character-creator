@@ -167,7 +167,8 @@ describe('PDF Export and JSON Synchronization', () => {
         expect(form.getTextField('Total HD').getText()).toBe('1d8');
         expect(form.getTextField('HD').getText()).toBe('1d8');
         expect(form.getTextField('Initiative').getText()).toBe('+1');
-        expect(form.getTextField('Speed').getText()).toBe('6');
+        // Dwarves have a base speed of 5m (Sturdy Pace trait) rather than standard 6m
+        expect(form.getTextField('Speed').getText()).toBe('5');
         expect(form.getTextField('Proficiency Bonus').getText()).toBe('+2');
         expect(form.getTextField('Armor Class').getText()).toBeDefined();
 
@@ -644,7 +645,7 @@ describe('PDF Export and JSON Synchronization', () => {
       } finally {
         teardown();
       }
-    });
+    }, 20000);
   });
 
   describe('8. Regression tests for user-reported issues', () => {

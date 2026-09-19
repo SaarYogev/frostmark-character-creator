@@ -29,15 +29,15 @@ const SkillsSelector: React.FC = () => {
 
   const bgName = typeof integratedState.background === 'object' ? integratedState.background?.name : integratedState.background;
   const bgData = BACKGROUNDS.find((b) => b.name === bgName);
-  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(integratedState, BACKGROUNDS, ORIGINS);
+  const { bgFree, aoFree, racialFree = 0, builtInRanks, builtInAcademics, restrictSkills, racialRestrictSkills } = computeFreeSkillPools(integratedState, BACKGROUNDS, ORIGINS, RACES);
 
   const skillRanks = state.skills?.skillRanks ?? state.skillRanks ?? {};
   const academicsEntries = state.skills?.academicsEntries ?? state.academicsEntries ?? [];
   const artsCraftEntries = state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [];
   const manualSkills = state.skills?.manualSkills ?? state.manualSkills ?? false;
 
-  const summary = computeSkillPointsSummary(integratedState, BACKGROUNDS, ORIGINS);
-  let { bgSpent, aoSpent, bgFreeRemaining, aoFreeRemaining, freeSkillPointsRemaining: freeRemaining } = summary;
+  const summary = computeSkillPointsSummary(integratedState, BACKGROUNDS, ORIGINS, RACES);
+  let { bgSpent, aoSpent, racialSpent = 0, bgFreeRemaining, aoFreeRemaining, racialFreeRemaining = 0, freeSkillPointsRemaining: freeRemaining } = summary;
 
   if (typeof state.importedMetadata?.freeSkillPointsRemaining === 'number') {
     freeRemaining = state.importedMetadata.freeSkillPointsRemaining;
@@ -63,10 +63,13 @@ const SkillsSelector: React.FC = () => {
   };
 
   const handleAdjustSkill = (skillName: string, delta: number) => {
-    const currentRank = skillRanks[skillName] ?? 0;
+    const startingRank = builtInRanks[skillName] ?? 0;
+    const currentRank = skillRanks[skillName] ?? startingRank;
     const nextRank = currentRank + delta;
+    const minRank = manualSkills ? 0 : startingRank;
 
-    if (nextRank < 0 || nextRank > 5) return;
+    if (nextRank < minRank) return;
+    if (!manualSkills && nextRank > 5) return;
 
     dispatch({
       type: 'SET_SKILLS',
@@ -104,11 +107,12 @@ const SkillsSelector: React.FC = () => {
     const entry = academicsEntries[index];
     if (!entry) return;
     const builtIn = builtInAcademics[entry.name] ?? 0;
-    const minRank = index === 0 ? Math.max(1, builtIn) : 1;
+    const minRank = manualSkills ? 0 : (index === 0 ? Math.max(1, builtIn) : 1);
     const currentRank = entry.rank ?? 1;
     const nextRank = currentRank + delta;
 
-    if (nextRank < minRank || nextRank > 5) return;
+    if (nextRank < minRank) return;
+    if (!manualSkills && nextRank > 5) return;
     if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
 
     const nextEntries = academicsEntries.map((e, idx) => {
@@ -147,11 +151,12 @@ const SkillsSelector: React.FC = () => {
     const entry = artsCraftEntries[index];
     if (!entry) return;
     const builtIn = builtInRanks['Arts & Craft'] ?? 0;
-    const minRank = index === 0 ? Math.max(1, builtIn) : 1;
+    const minRank = manualSkills ? 0 : (index === 0 ? Math.max(1, builtIn) : 1);
     const currentRank = entry.rank ?? 1;
     const nextRank = currentRank + delta;
 
-    if (nextRank < minRank || nextRank > 5) return;
+    if (nextRank < minRank) return;
+    if (!manualSkills && nextRank > 5) return;
     if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
 
     const nextEntries = artsCraftEntries.map((e, idx) => {
@@ -208,7 +213,24 @@ const SkillsSelector: React.FC = () => {
           </div>
         )}
 
-        {/* Double Point Buy Trackers (Background Free Points Used + AO Free Points Used) */}
+        {racialRestrictSkills && (
+          <div
+            className="restriction-banner"
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'rgba(155, 89, 182, 0.1)',
+              color: '#9b59b6',
+              borderRadius: '6px',
+              marginBottom: '1.5rem',
+              fontSize: '0.85rem',
+              border: '1px solid rgba(155, 89, 182, 0.3)',
+            }}
+          >
+            <strong>🌍 Racial Skill Restriction:</strong> The {racialFree} free skill points from your race/subrace can only be spent on: <strong>{racialRestrictSkills.join(', ')}</strong>.
+          </div>
+        )}
+
+        {/* Triple Point Buy Trackers (Background Free Points + Racial Free Points + AO Free Points Used) */}
         <div
           className={`point-buy-tracker ${apRemaining < 0 ? 'over-budget' : ''}`}
           style={{
@@ -228,6 +250,13 @@ const SkillsSelector: React.FC = () => {
             <strong style={{ fontSize: '1.1rem', marginLeft: '0.25rem', color: '#2ecc71' }}>{bgSpent}</strong>
             <span> / {bgFree}</span>
           </div>
+          {racialFree > 0 && (
+            <div>
+              <span>Racial Free Skill Points Used: </span>
+              <strong style={{ fontSize: '1.1rem', marginLeft: '0.25rem', color: '#2ecc71' }}>{racialSpent}</strong>
+              <span> / {racialFree}</span>
+            </div>
+          )}
           <div>
             <span>Ability Origin Free Skill Points Used: </span>
             <strong style={{ fontSize: '1.1rem', marginLeft: '0.25rem', color: '#2ecc71' }}>{aoSpent}</strong>
@@ -262,16 +291,20 @@ const SkillsSelector: React.FC = () => {
               const incrementalCost = nextCost - currentCost;
 
               const isRestrictedSkill = restrictSkills ? restrictSkills.includes(skill.name) : true;
-              const canUseFreePoints = isRestrictedSkill
-                ? (bgFreeRemaining > 0 || aoFreeRemaining > 0)
-                : (aoFreeRemaining > 0);
+              const isRacialRestrictedSkill = racialRestrictSkills ? racialRestrictSkills.includes(skill.name) : true;
+              const canUseFreePoints =
+                (isRestrictedSkill && bgFreeRemaining > 0) ||
+                (isRacialRestrictedSkill && racialFreeRemaining > 0) ||
+                aoFreeRemaining > 0;
               const costsAP = !canUseFreePoints;
               const canAfford = !costsAP || apRemaining >= incrementalCost;
               const isLevelRestricted = rank >= maxSkillRank && !manualSkills;
-              const plusDisabled = rank >= 5 || isLevelRestricted || (!canAfford && !manualSkills);
+              const plusDisabled = manualSkills ? false : (rank >= 5 || isLevelRestricted || !canAfford);
 
               let plusTooltip = '';
-              if (rank >= 5) {
+              if (manualSkills) {
+                plusTooltip = '';
+              } else if (rank >= 5) {
                 plusTooltip = 'Max rank 5 reached';
               } else if (isLevelRestricted) {
                 if (maxSkillRank === 3) {
@@ -279,12 +312,13 @@ const SkillsSelector: React.FC = () => {
                 } else if (maxSkillRank === 4) {
                   plusTooltip = 'Requires level 8 and a relevant feat/ability to advance to rank 5.';
                 }
-              } else if (!canAfford && !manualSkills) {
+              } else if (!canAfford) {
                 plusTooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
               }
 
               const allowedSkills = restrictSkills ?? bgData?.skills ?? null;
               const isAllowedSkill = allowedSkills && allowedSkills.includes(skill.name);
+              const isRacialAllowed = racialRestrictSkills && racialRestrictSkills.includes(skill.name);
 
               return (
                 <div key={skill.key} className="skill-row" id={`skill-row-${skill.key}`}>
@@ -301,7 +335,7 @@ const SkillsSelector: React.FC = () => {
                           borderRadius: '4px',
                           marginLeft: '0.5rem',
                         }}
-                        title="Starting rank from background"
+                        title="Starting rank from background or race"
                       >
                         Starting: {builtInRank}
                       </span>
@@ -339,13 +373,33 @@ const SkillsSelector: React.FC = () => {
                         Allowed for Background Free Points
                       </span>
                     )}
+                    {isRacialAllowed && (
+                      <span
+                        className="restricted-skill-badge"
+                        style={{
+                          background: 'rgba(155,89,182,0.15)',
+                          color: '#9b59b6',
+                          padding: '0.2rem 0.4rem',
+                          fontSize: '0.72rem',
+                          borderRadius: '4px',
+                          display: 'inline-block',
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
+                          lineHeight: '1.2',
+                          marginTop: '0.25rem',
+                        }}
+                        title="Racial free points can be used here"
+                      >
+                        Allowed for Racial Free Points
+                      </span>
+                    )}
                   </div>
 
                   <div className="rank-controls" style={{ flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
                         className="rank-btn minus"
-                        disabled={rank <= 0}
+                        disabled={manualSkills ? rank <= 0 : rank <= builtInRank}
                         onClick={() => handleAdjustSkill(skill.name, -1)}
                       >
                         −
@@ -414,7 +468,11 @@ const SkillsSelector: React.FC = () => {
                   </button>
                 </div>
                 <div className="rank-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <button className="rank-btn minus" onClick={() => handleAdjustAcademic(idx, -1)}>
+                  <button
+                    className="rank-btn minus"
+                    disabled={manualSkills ? (entry.rank ?? 1) <= 0 : (entry.rank ?? 1) <= (idx === 0 ? Math.max(1, builtInAcademics[entry.name] ?? 0) : 1)}
+                    onClick={() => handleAdjustAcademic(idx, -1)}
+                  >
                     −
                   </button>
                   <div className="rank-pips">
@@ -422,7 +480,11 @@ const SkillsSelector: React.FC = () => {
                       <div key={n} className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`} />
                     ))}
                   </div>
-                  <button className="rank-btn plus" onClick={() => handleAdjustAcademic(idx, 1)}>
+                  <button
+                    className="rank-btn plus"
+                    disabled={!manualSkills && ((entry.rank ?? 1) >= 5 || (entry.rank ?? 1) >= maxSkillRank)}
+                    onClick={() => handleAdjustAcademic(idx, 1)}
+                  >
                     +
                   </button>
                 </div>
@@ -469,7 +531,11 @@ const SkillsSelector: React.FC = () => {
                   </button>
                 </div>
                 <div className="rank-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <button className="rank-btn minus" onClick={() => handleAdjustArts(idx, -1)}>
+                  <button
+                    className="rank-btn minus"
+                    disabled={manualSkills ? (entry.rank ?? 1) <= 0 : (entry.rank ?? 1) <= (idx === 0 ? Math.max(1, builtInRanks['Arts & Craft'] ?? 0) : 1)}
+                    onClick={() => handleAdjustArts(idx, -1)}
+                  >
                     −
                   </button>
                   <div className="rank-pips">
@@ -477,7 +543,11 @@ const SkillsSelector: React.FC = () => {
                       <div key={n} className={`pip ${n <= (entry.rank ?? 1) ? 'filled' : ''}`} />
                     ))}
                   </div>
-                  <button className="rank-btn plus" onClick={() => handleAdjustArts(idx, 1)}>
+                  <button
+                    className="rank-btn plus"
+                    disabled={!manualSkills && ((entry.rank ?? 1) >= 5 || (entry.rank ?? 1) >= maxSkillRank)}
+                    onClick={() => handleAdjustArts(idx, 1)}
+                  >
                     +
                   </button>
                 </div>
