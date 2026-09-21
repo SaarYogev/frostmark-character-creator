@@ -31,3 +31,8 @@
 - `gh-pages` requires `dist/` directory structure
 - TOML file changes won't hot-reload in dev without rebuild
 - PDF generation may fail if `pdf-lib` version changes
+
+## Token Efficiency & Large Data Handling
+- **Never `view_file` the full `spells.toml` or `spells.js`**: `src/data/toml/spells.toml` alone is ~360 KB (~90,000 tokens). Reading it directly into working context causes every subsequent tool step to re-send that entire payload, generating millions of tokens per turn. Use targeted `grep_search`, `node -e` queries, or narrow line ranges when inspecting entries.
+- **Isolate Ingest & Wiki Scraping Scripts**: When running wiki scraping scripts (`scripts/enrich_spells.js`, `scripts/ingest_abilities.js`), execute them as background or terminal processes that log brief summary statistics instead of dumping raw HTML pages (~300 KB each) or full data diffs into the chat transcript.
+- **Do Not Dump Full Character State / JSON Dumps**: For character state debugging, extract only the specific slice under test (e.g. `character.spells` or `character.stats`) instead of viewing entire serialization outputs.
