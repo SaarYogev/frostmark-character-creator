@@ -714,6 +714,9 @@ export async function importFromPDF(
   }
 
   const hasManualHP = Boolean(maxHPText);
+  const hasOutOfRangeBaseStats = Object.values(baseCharacteristics).some(
+    (score) => score < 6 || score > 17
+  );
 
   const importedState: any = {
     ...DEFAULT_CHARACTER,
@@ -771,7 +774,7 @@ export async function importFromPDF(
     manualSkills: false,
     manualProficiencies: false,
     manualEquipment: false,
-    manualAbilityScores: false,
+    manualAbilityScores: hasOutOfRangeBaseStats,
     manualHP: hasManualHP,
     manualSpells: false,
     identity: {

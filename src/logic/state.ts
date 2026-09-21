@@ -121,7 +121,16 @@ export function getTotalAccomplishmentPointsLimit(state: any): number {
 }
 
 export function getAttributePointCost(score: number): number {
-  return POINT_BUY_COSTS[score] ?? 0;
+  if (POINT_BUY_COSTS[score] !== undefined) {
+    return POINT_BUY_COSTS[score];
+  }
+  if (score > 17) {
+    return (POINT_BUY_COSTS[17] ?? 9) + (score - 17) * 2;
+  }
+  if (score < 6) {
+    return (POINT_BUY_COSTS[6] ?? -5) - (6 - score) * 2;
+  }
+  return 0;
 }
 
 export function calculateSpentAbilityPoints(state: any): number {
