@@ -10,11 +10,23 @@ import {
   MONEY_AP_COST,
   SKILLS
 } from '../data/constants';
+import { getAttributePointCost } from '../logic/state';
 
 test('POINT_BUY_COSTS map has expected values', () => {
   expect(POINT_BUY_COSTS[10]).toBe(0);
   expect(POINT_BUY_COSTS[14]).toBe(4);
   expect(POINT_BUY_COSTS[6]).toBe(-5);
+});
+
+test('getAttributePointCost computes correct values inside and beyond standard point-buy bounds', () => {
+  expect(getAttributePointCost(10)).toBe(0);
+  expect(getAttributePointCost(16)).toBe(7);
+  expect(getAttributePointCost(17)).toBe(9);
+  expect(getAttributePointCost(18)).toBe(11);
+  expect(getAttributePointCost(19)).toBe(13);
+  expect(getAttributePointCost(6)).toBe(-5);
+  expect(getAttributePointCost(5)).toBe(-7);
+  expect(getAttributePointCost(4)).toBe(-9);
 });
 
 test('CHARACTERISTICS has 9 characteristics', () => {
