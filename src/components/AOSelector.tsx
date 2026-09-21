@@ -131,16 +131,23 @@ const AOSelector: React.FC = () => {
     const isUnselecting = levelSel[isPrimarySlot ? 'primaryAbility' : 'secondaryAbility'] === abilityId;
 
     let updatedPrimaryAO = levelSel.primaryAO;
+    let updatedSecondaryAO = levelSel.secondaryAO;
     if (isPrimarySlot && !isUnselecting) {
       const chosenAbility = [...getInspectedAbilityList(), ...customAbilities].find((ab) => ab.id === abilityId);
       if (chosenAbility?.origin) {
         updatedPrimaryAO = chosenAbility.origin;
+      }
+    } else if (!isPrimarySlot && !isUnselecting) {
+      const chosenAbility = [...getInspectedAbilityList(), ...customAbilities].find((ab) => ab.id === abilityId);
+      if (chosenAbility?.origin) {
+        updatedSecondaryAO = chosenAbility.origin;
       }
     }
 
     const nextLevelSel = {
       ...levelSel,
       primaryAO: updatedPrimaryAO,
+      secondaryAO: updatedSecondaryAO,
       [isPrimarySlot ? 'primaryAbility' : 'secondaryAbility']: isUnselecting ? '' : abilityId,
     };
 

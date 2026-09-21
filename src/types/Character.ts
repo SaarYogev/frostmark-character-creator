@@ -281,7 +281,7 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           silverAmount: p.silverAmount ?? p.proficiencies?.silverAmount ?? (state as any).proficiencies?.silverAmount ?? 0,
           copperAmount: p.copperAmount ?? p.proficiencies?.copperAmount ?? (state as any).proficiencies?.copperAmount ?? 0,
         },
-        spellcasting: p.spellcasting ?? (state as any).spellcasting ?? { cantrips: [], spells: [], slots: {} },
+        spellcasting: p.spellcasting ?? (state as any).spellcasting ?? { cantrips: [], spells: [], spellbookSpells: [], slots: {} },
         equipment: {
           ...((state as any).equipment ?? {}),
           equipmentList: deduplicateEquipmentList(

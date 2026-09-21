@@ -3,7 +3,13 @@ import { useCharacter } from '../contexts/CharacterContext';
 import { CANTRIPS, SPELLS } from '../data/spells';
 import { ORIGINS } from '../data/origins';
 import { RACES } from '../data/races';
-import { calculatePotentialGained } from '../logic/state';
+import {
+  calculatePotentialGained,
+  calculatePotentialSpent,
+  calculateSpellCost,
+  hasSpellbookAbility,
+  getSpellbookStartingFreeSpells,
+} from '../logic/state';
 import { getRacialSpells, hasRacialFreeCantrip } from '../logic/racialAbilities';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
@@ -43,24 +49,31 @@ const SpellsSelector: React.FC = () => {
   const spellcasting = (state as any).spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
   const selectedSpells: { name: string; level: number }[] = spellcasting.spells ?? [];
+  const spellbookSpells: string[] = spellcasting.spellbookSpells ?? [];
   const slots: Record<number, number> = spellcasting.slots ?? {};
   const manualSpells: boolean = spellcasting.manualSpells ?? false;
 
-  const potentialLimit = calculatePotentialGained(sanitizedState, ORIGINS);
+  const hasSpellbook = hasSpellbookAbility(sanitizedState);
+  const characterLevel = Number(sanitizedState.level ?? 1);
   const racialSpells = useMemo(() => getRacialSpells(state, RACES), [state]);
   const hasFreeCantrip = useMemo(() => hasRacialFreeCantrip(state, RACES), [state]);
   const freeCantripCount = hasFreeCantrip ? 1 : 0;
 
-  const potentialSpent = useMemo(() => {
-    // Garden Elf grants 1 free cantrip choice from the spell list
-    const paidCantrips = Math.max(0, cantrips.length - freeCantripCount);
-    let spent = paidCantrips * 10;
-    selectedSpells.forEach((s) => { spent += 10 * (s.level ?? 1); });
-    for (let lvl = 1; lvl <= 9; lvl++) {
-      spent += (slots[lvl] ?? 0) * 10 * lvl;
+  const freeSpellbookSpells = useMemo(() => {
+    if (!hasSpellbook) return new Set<string>();
+    if (characterLevel >= 2) {
+      const locked = Array.isArray(spellcasting.freeSpells)
+        ? spellcasting.freeSpells
+        : Array.isArray(spellcasting.startingFreeSpells)
+        ? spellcasting.startingFreeSpells
+        : null;
+      if (locked) return new Set(locked);
     }
-    return spent;
-  }, [cantrips, selectedSpells, slots, freeCantripCount]);
+    return getSpellbookStartingFreeSpells(selectedSpells, spellbookSpells);
+  }, [hasSpellbook, characterLevel, spellcasting.freeSpells, spellcasting.startingFreeSpells, selectedSpells, spellbookSpells]);
+
+  const potentialLimit = calculatePotentialGained(sanitizedState, ORIGINS);
+  const potentialSpent = useMemo(() => calculatePotentialSpent(sanitizedState, RACES), [sanitizedState]);
   const potentialRemaining = potentialLimit - potentialSpent;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,11 +118,27 @@ const SpellsSelector: React.FC = () => {
     } else {
       const isSelected = selectedSpells.some((s) => s.name === spell.name);
       if (isSelected) {
-        updateSpellcasting({ spells: selectedSpells.filter((s) => s.name !== spell.name) });
+        updateSpellcasting({
+          spells: selectedSpells.filter((s) => s.name !== spell.name),
+          spellbookSpells: spellbookSpells.filter((n) => n !== spell.name),
+        });
       } else {
-        updateSpellcasting({ spells: [...selectedSpells, { name: spell.name, level: spell.level ?? 1 }] });
+        const nextSpellbook = hasSpellbook && !spellbookSpells.includes(spell.name)
+          ? [...spellbookSpells, spell.name]
+          : spellbookSpells;
+        updateSpellcasting({
+          spells: [...selectedSpells, { name: spell.name, level: spell.level ?? 1 }],
+          spellbookSpells: nextSpellbook,
+        });
       }
     }
+  };
+
+  const handleToggleSpellbook = (spellName: string) => {
+    const next = spellbookSpells.includes(spellName)
+      ? spellbookSpells.filter((n) => n !== spellName)
+      : [...spellbookSpells, spellName];
+    updateSpellcasting({ spellbookSpells: next });
   };
 
   const allSpells: SpellEntry[] = useMemo(() => {
@@ -159,6 +188,24 @@ const SpellsSelector: React.FC = () => {
   const getSpellIsSelected = (spell: SpellEntry) =>
     spell.level === 0 ? cantrips.includes(spell.name) : selectedSpells.some((s) => s.name === spell.name);
 
+  const getCostForNewSpell = (spell: SpellEntry) => {
+    if (spell.level === 0) return 10;
+    if (!hasSpellbook) return 10 * spell.level;
+    const simSpells = [...selectedSpells, { name: spell.name, level: spell.level }];
+    const simSpellbook = spellbookSpells.includes(spell.name)
+      ? spellbookSpells
+      : [...spellbookSpells, spell.name];
+    const simSpent = calculatePotentialSpent({
+      ...sanitizedState,
+      spellcasting: {
+        ...spellcasting,
+        spells: simSpells,
+        spellbookSpells: simSpellbook,
+      },
+    });
+    return Math.max(0, simSpent - potentialSpent);
+  };
+
   const getSpellDisabled = (spell: SpellEntry) => {
     if (manualSpells) return false;
     if (getSpellIsSelected(spell)) return false;
@@ -166,7 +213,7 @@ const SpellsSelector: React.FC = () => {
     const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
     if (isFreeCantrip) return false;
     if (isCantrip && cantrips.length >= 5) return true;
-    const cost = isCantrip ? 10 : 10 * spell.level;
+    const cost = getCostForNewSpell(spell);
     return potentialRemaining < cost;
   };
 
@@ -176,7 +223,7 @@ const SpellsSelector: React.FC = () => {
     const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
     if (isFreeCantrip) return '';
     if (isCantrip && cantrips.length >= 5 && !manualSpells) return 'Maximum 5 cantrips allowed by the character sheet.';
-    const cost = isCantrip ? 10 : 10 * spell.level;
+    const cost = getCostForNewSpell(spell);
     if (potentialRemaining < cost && !manualSpells) return `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
     return '';
   };
@@ -299,6 +346,32 @@ const SpellsSelector: React.FC = () => {
           <h5>Description</h5>
           <p>{activeSpell.desc}</p>
         </div>
+        {activeSpell.level > 0 && hasSpellbook && (
+          <div className="spell-detail-spellbook" style={{ background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', border: '1px solid var(--border-color)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+              <strong style={{ fontSize: '0.85rem' }}>📖 Spellbook</strong>
+              {(isSelected ? freeSpellbookSpells.has(activeSpell.name) : (characterLevel === 1 && getCostForNewSpell(activeSpell) === 0)) ? (
+                <span style={{ fontSize: '0.75rem', color: '#34d399', fontWeight: 600 }}>Free (Level 1 Allowance)</span>
+              ) : characterLevel >= 2 && (!isSelected || spellbookSpells.includes(activeSpell.name)) ? (
+                <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 600 }}>
+                  Discounted: {calculateSpellCost(activeSpell, true, characterLevel, true)} Potential
+                </span>
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: '#a0a5c0' }}>Standard Cost ({10 * activeSpell.level} Pot)</span>
+              )}
+            </div>
+            {isSelected && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8rem', marginTop: '0.4rem' }}>
+                <input
+                  type="checkbox"
+                  checked={spellbookSpells.includes(activeSpell.name)}
+                  onChange={() => handleToggleSpellbook(activeSpell.name)}
+                />
+                <span>Transcribed in Spellbook</span>
+              </label>
+            )}
+          </div>
+        )}
         <div className="spell-detail-actions">
           <button
             className={`btn ${isSelected ? 'btn-danger' : 'btn-primary'} learn-spell-btn`}
@@ -353,6 +426,49 @@ const SpellsSelector: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {hasSpellbook && (
+          <div
+            className="spellbook-banner"
+            style={{
+              background: 'rgba(108, 141, 255, 0.08)',
+              border: '1px solid var(--border-active, rgba(108, 141, 255, 0.4))',
+              borderRadius: '8px',
+              padding: '0.85rem 1rem',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.35rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: '#fff' }}>
+              <span>📖</span>
+              <span>Occult Student Spellbook</span>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  background: 'rgba(74,144,226,0.25)',
+                  color: '#4a90e2',
+                  padding: '2px 8px',
+                  borderRadius: '999px',
+                  fontWeight: 600,
+                }}
+              >
+                {characterLevel === 1 ? 'Level 1 Starting Free Spells' : `Level ${characterLevel} Discounts`}
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#a0a5c0' }}>
+              {characterLevel === 1
+                ? 'Free starting transcribed spells: Choose either three 1st-level spells, one 1st-level and one 2nd-level spell, or one 3rd-level spell. Additional spells cost standard Potential.'
+                : 'Transcribed spells in your spellbook cost 5 Potential for 1st-level spells (-5 discount), and 10 Potential less for 2nd-level and higher spells (-10 discount).'}
+            </p>
+            {characterLevel === 1 && (
+              <div style={{ fontSize: '0.8rem', color: '#34d399', fontWeight: 500 }}>
+                Active Free Spells ({freeSpellbookSpells.size}): {Array.from(freeSpellbookSpells).join(', ') || 'None selected yet'}
+              </div>
+            )}
+          </div>
+        )}
 
         {hasFreeCantrip && (
           <div className="racial-free-cantrip-banner" style={{ marginBottom: '1.5rem', padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '6px', fontSize: '0.85rem', color: '#93c5fd' }}>
@@ -484,26 +600,50 @@ const SpellsSelector: React.FC = () => {
                 <span style={{ color: '#606580', fontStyle: 'italic', fontSize: '0.85rem' }}>None</span>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  {allSelectedSpellsCombined.map((s) => (
-                    <div
-                      key={s.name}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(108, 141, 255, 0.15)', border: '1px solid var(--border-active)', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}
-                    >
-                      <span>{s.name} <small style={{ opacity: 0.7 }}>({s.isCantrip ? 'Cantrip' : `Lv.${s.level}`})</small></span>
-                      <button
-                        onClick={() => {
-                          if (s.isCantrip) {
-                            updateSpellcasting({ cantrips: cantrips.filter((c) => c !== s.name) });
-                          } else {
-                            updateSpellcasting({ spells: selectedSpells.filter((sp) => sp.name !== s.name) });
-                          }
-                        }}
-                        style={{ background: 'transparent', border: 'none', color: '#a0a5c0', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                  {allSelectedSpellsCombined.map((s) => {
+                    const isTranscribed = !s.isCantrip && spellbookSpells.includes(s.name);
+                    const isFree = !s.isCantrip && freeSpellbookSpells.has(s.name);
+                    return (
+                      <div
+                        key={s.name}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'rgba(108, 141, 255, 0.15)', border: '1px solid var(--border-active)', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}
                       >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+                        <span>
+                          {s.name} <small style={{ opacity: 0.7 }}>({s.isCantrip ? 'Cantrip' : `Lv.${s.level}`})</small>
+                          {isFree && <span style={{ marginLeft: '0.35rem', color: '#34d399', fontWeight: 600, fontSize: '0.75rem' }}>[Free]</span>}
+                          {!isFree && isTranscribed && characterLevel >= 2 && (
+                            <span style={{ marginLeft: '0.35rem', color: '#38bdf8', fontWeight: 600, fontSize: '0.75rem' }}>
+                              [{calculateSpellCost(s, true, characterLevel, true)} Pot]
+                            </span>
+                          )}
+                        </span>
+                        {!s.isCantrip && hasSpellbook && (
+                          <button
+                            onClick={() => handleToggleSpellbook(s.name)}
+                            title={isTranscribed ? 'Remove from Spellbook' : 'Add to Spellbook'}
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px', opacity: isTranscribed ? 1 : 0.4 }}
+                          >
+                            📖
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (s.isCantrip) {
+                              updateSpellcasting({ cantrips: cantrips.filter((c) => c !== s.name) });
+                            } else {
+                              updateSpellcasting({
+                                spells: selectedSpells.filter((sp) => sp.name !== s.name),
+                                spellbookSpells: spellbookSpells.filter((n) => n !== s.name),
+                              });
+                            }
+                          }}
+                          style={{ background: 'transparent', border: 'none', color: '#a0a5c0', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -539,6 +679,9 @@ const SpellsSelector: React.FC = () => {
                         >
                           <span className="spell-name" style={{ fontSize: '0.82rem', fontWeight: 500, wordBreak: 'break-word' }}>{spell.name}</span>
                           <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexShrink: 0 }}>
+                            {hasSpellbook && spell.level > 0 && spellbookSpells.includes(spell.name) && (
+                              <span className="spell-tag-badge spellbook" title="Transcribed in Spellbook" style={{ fontSize: '0.65rem', background: 'rgba(108, 141, 255, 0.2)', color: '#a5b4fc', padding: '1px 4px', borderRadius: '4px', fontWeight: 600, lineHeight: 1 }}>📖</span>
+                            )}
                             {spell.ritual && (
                               <span className="spell-tag-badge ritual" title="Ritual" style={{ fontSize: '0.65rem', background: 'rgba(52, 211, 153, 0.15)', color: '#34d399', padding: '1px 4px', borderRadius: '4px', fontWeight: 600, lineHeight: 1 }}>R</span>
                             )}

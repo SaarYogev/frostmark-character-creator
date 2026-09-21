@@ -4,6 +4,9 @@ import {
   getFinalCharacteristics,
   calculateTotalHP,
   getMaxSkillRank,
+  calculatePotentialGained,
+  hasSpellbookAbility,
+  getSpellbookStartingFreeSpells,
 } from './state';
 import { OriginData } from '../data/origins';
 import { CharacterState } from '../types/Character';
@@ -138,10 +141,10 @@ export function levelUp(
   const newMaxHP = currentMaxHP + deltaHP;
   const newCurrentHP = currentHP + deltaHP;
 
-  const potentialGain = getPotentialGain(state, newLevel, originsData);
-  const apGain = profBonusIncreased(newLevel) ? 2 : 0;
-
-  const prevLevelSelections = (state as any).levelSelections ?? state.ao?.levelSelections ?? {};
+  const prevLevelSelections = {
+    ...((state as any).levelSelections ?? {}),
+    ...(state.ao?.levelSelections ?? {}),
+  };
   const existingLevelSel = prevLevelSelections[newLevel] ?? {
     primaryAO: currentPrimaryAO,
     secondaryAO: currentSecondaryAO,
@@ -159,13 +162,60 @@ export function levelUp(
     [newLevel]: updatedLevelSel,
   };
 
+  /*
+   * Calculate cumulative potential across all levels up to newLevel rather than adding
+   * a single level's delta to an uninitialized potentialGained field.
+   */
+  const intermediateState = {
+    ...state,
+    level: newLevel,
+    identity: {
+      ...(state.identity ?? {}),
+      level: newLevel,
+    },
+    levelSelections: nextLevelSelections,
+    ao: {
+      ...(state.ao ?? {}),
+      levelSelections: nextLevelSelections,
+    },
+  };
+  const totalPotentialGained = calculatePotentialGained(intermediateState, originsData);
+  const apGain = profBonusIncreased(newLevel) ? 2 : 0;
+
+  const spellcasting = (state as any).spellcasting;
+  let nextSpellcasting = spellcasting;
+  if (spellcasting && hasSpellbookAbility(state)) {
+    /*
+     * When leveling up from Level 1, lock in the chosen Level 1 free spell allowance
+     * into freeSpells so their zero-cost is preserved permanently in higher levels.
+     */
+    const existingFreeSpells = Array.isArray(spellcasting.freeSpells)
+      ? spellcasting.freeSpells
+      : Array.isArray(spellcasting.startingFreeSpells)
+      ? spellcasting.startingFreeSpells
+      : null;
+
+    if (!existingFreeSpells && currentLevel === 1) {
+      const computedFree = Array.from(
+        getSpellbookStartingFreeSpells(
+          spellcasting.spells ?? [],
+          spellcasting.spellbookSpells ?? []
+        )
+      );
+      nextSpellcasting = {
+        ...spellcasting,
+        freeSpells: computedFree,
+      };
+    }
+  }
+
   return {
     ...state,
     level: newLevel,
     maxHP: newMaxHP,
     currentHP: newCurrentHP,
     hpBonus: (state.hpBonus ?? 0) + deltaHP,
-    potentialGained: (state.potentialGained ?? 0) + potentialGain,
+    potentialGained: totalPotentialGained,
     accomplishmentPointsTotal: (state.accomplishmentPointsTotal ?? DEFAULT_STARTING_AP) + apGain,
     levelSelections: nextLevelSelections,
     ao: {
@@ -176,6 +226,7 @@ export function levelUp(
       ...(state.identity ?? {}),
       level: newLevel,
     },
+    ...(nextSpellcasting ? { spellcasting: nextSpellcasting } : {}),
   };
 }
 

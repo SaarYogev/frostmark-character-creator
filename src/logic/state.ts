@@ -72,6 +72,7 @@ export function getInitialState() {
     spellcasting: {
       cantrips: [] as string[],
       spells: [] as { name: string; level: number }[],
+      spellbookSpells: [] as string[],
       slots: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 } as Record<number, number>
     },
 
@@ -656,7 +657,7 @@ export function exportCharacterJSON(state: any, raceData?: any[]): string {
 }
 
 export function calculatePotentialGained(state: any, originsData: OriginData[]): number {
-  if (typeof state.potentialGained === 'number' && state.potentialGained > 0) {
+  if (state.isImported && typeof state.potentialGained === 'number' && state.potentialGained > 0) {
     return state.potentialGained;
   }
 
@@ -666,40 +667,67 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
     Major:    [60, 60, 60, 60, 60, 100, 100, 100, 100, 100, 140, 140, 140, 140, 140, 180, 180, 180, 180, 180]
   };
 
+  const tierWeight: Record<string, number> = {
+    Major: 3,
+    Moderate: 2,
+    Minor: 1,
+  };
+
+  const resolveOriginSpellcasting = (originName?: string): 'Minor' | 'Moderate' | 'Major' => {
+    if (!originName) return 'Minor';
+    let origin = originsData.find((o) => o.name === originName);
+    if (!origin && originName === 'Custom') {
+      origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
+    } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
+      const customList = state.ao?.customAOs ?? state.customAOs;
+      origin = customList.find((o: any) => o.name === originName);
+    }
+    return origin?.spellcasting ?? 'Minor';
+  };
+
   const level = state.identity?.level ?? state.level ?? 1;
   let total = 0;
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
   const hasLevelSelections = levelSelections && Object.keys(levelSelections).length > 0;
 
   for (let i = 1; i <= level; i++) {
-    let tag: 'Minor' | 'Moderate' | 'Major' = 'Minor';
-    if (hasLevelSelections) {
-      const selection = levelSelections[i];
-      if (selection && selection.primaryAO) {
-        let origin = originsData.find(o => o.name === selection.primaryAO);
-        if (!origin && selection.primaryAO === 'Custom') {
-          origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-        } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
-          const customList = state.ao?.customAOs ?? state.customAOs;
-          origin = customList.find((o: any) => o.name === selection.primaryAO);
-        }
-        tag = origin?.spellcasting ?? 'Minor';
-      } else {
-        const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-        const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-        const origin = primaryAO === 'Custom'
-          ? customPrimaryAO
-          : originsData.find(o => o.name === primaryAO);
-        tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
+    let chosenAO = '';
+    if (hasLevelSelections && levelSelections[i]) {
+      const sel = levelSelections[i];
+      if (sel.primaryAO) {
+        chosenAO = sel.primaryAO;
+      } else if (sel.secondaryAO) {
+        chosenAO = sel.secondaryAO;
+      } else if (sel.primaryAbility || sel.secondaryAbility) {
+        const abilityId = sel.primaryAbility || sel.secondaryAbility;
+        const abOrigin = String(abilityId).split('-')[0];
+        const matched = originsData.find((o) => o.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === abOrigin);
+        if (matched) chosenAO = matched.name;
       }
-    } else {
-      const primaryAO = state.ao?.primaryAO ?? state.primaryAO;
-      const customPrimaryAO = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
-      const origin = primaryAO === 'Custom'
-        ? customPrimaryAO
-        : originsData.find(o => o.name === primaryAO);
-      tag = origin?.spellcasting ?? state.primaryAOSpellcasting ?? 'Minor';
     }
+
+    if (!chosenAO) {
+      const fallbackPrimary = state.ao?.primaryAO ?? state.primaryAO;
+      const fallbackSecondary = state.ao?.secondaryAO ?? state.secondaryAO;
+      const poolAOs = state.ao?.selectedAOs ?? state.selectedAOs ?? [];
+
+      const candidateOrigins: string[] = [];
+      if (fallbackPrimary) candidateOrigins.push(fallbackPrimary);
+      if (fallbackSecondary) candidateOrigins.push(fallbackSecondary);
+      if (Array.isArray(poolAOs)) candidateOrigins.push(...poolAOs);
+
+      let highestWeight = 0;
+      for (const cand of candidateOrigins) {
+        const candTier = resolveOriginSpellcasting(cand);
+        const weight = tierWeight[candTier] ?? 1;
+        if (weight > highestWeight) {
+          highestWeight = weight;
+          chosenAO = cand;
+        }
+      }
+    }
+
+    const tag = resolveOriginSpellcasting(chosenAO);
 
     const gain = table[tag]?.[i - 1] ?? 0;
     total += gain;
@@ -707,24 +735,153 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
   return total;
 }
 
+export function hasSpellbookAbility(state: any): boolean {
+  if (!state) return false;
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections ?? {};
+  return Object.values(levelSelections).some((sel: any) => {
+    if (!sel) return false;
+    const p = String(sel.primaryAbility ?? '').toLowerCase();
+    const s = String(sel.secondaryAbility ?? '').toLowerCase();
+    return (
+      p === 'occult-student-1-secondary-spellbook' ||
+      s === 'occult-student-1-secondary-spellbook' ||
+      p.includes('spellbook') ||
+      s.includes('spellbook')
+    );
+  });
+}
+
+export function getSpellbookStartingFreeSpells(
+  spells: { name: string; level: number }[],
+  spellbookSpells: string[]
+): Set<string> {
+  const freeNames = new Set<string>();
+  const transcribed = spells.filter((s) => spellbookSpells.includes(s.name));
+
+  const l1Spells = transcribed.filter((s) => (s.level ?? 1) === 1);
+  const l2Spells = transcribed.filter((s) => s.level === 2);
+  const l3Spells = transcribed.filter((s) => s.level === 3);
+
+  /*
+   * The Occult Student's Spellbook ability at Level 1 allows selecting one of three packages:
+   * A: up to three 1st-level spells
+   * B: one 1st-level spell and one 2nd-level spell
+   * C: one 3rd-level spell
+   * Greedily select the package that yields the highest Potential savings.
+   */
+  const savingsA = Math.min(l1Spells.length, 3) * 10;
+  const savingsB = Math.min(l1Spells.length, 1) * 10 + Math.min(l2Spells.length, 1) * 20;
+  const savingsC = Math.min(l3Spells.length, 1) * 30;
+
+  if (savingsC >= savingsA && savingsC >= savingsB && l3Spells[0]?.name) {
+    freeNames.add(l3Spells[0].name);
+  } else if (savingsB >= savingsA && (l1Spells.length > 0 || l2Spells.length > 0)) {
+    if (l1Spells[0]?.name) freeNames.add(l1Spells[0].name);
+    if (l2Spells[0]?.name) freeNames.add(l2Spells[0].name);
+  } else {
+    for (let i = 0; i < Math.min(l1Spells.length, 3); i++) {
+      if (l1Spells[i]?.name) {
+        freeNames.add(l1Spells[i].name);
+      }
+    }
+  }
+
+  return freeNames;
+}
+
+export function calculateSpellCost(
+  spell: { name: string; level: number },
+  isSpellbook: boolean,
+  charLevel: number,
+  hasAbility: boolean,
+  isFreeAtLevel1: boolean = false
+): number {
+  if (!hasAbility || !isSpellbook) {
+    return (spell.level ?? 1) * 10;
+  }
+  if (isFreeAtLevel1) {
+    return 0;
+  }
+  if (charLevel === 1) {
+    return (spell.level ?? 1) * 10;
+  }
+  if (spell.level === 1) {
+    return 5;
+  }
+  return Math.max(0, 10 * spell.level - 10);
+}
+
 export function calculatePotentialSpent(state: any, raceData: any[] = RACES): number {
   const spellcasting = state.spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
   const spells: { name: string; level: number }[] = spellcasting.spells ?? [];
   const slots: Record<number, number> = spellcasting.slots ?? {};
+  const spellbookSpells: string[] = spellcasting.spellbookSpells ?? [];
 
   const freeCantrips = hasRacialFreeCantrip(state, raceData) ? 1 : 0;
   const paidCantrips = Math.max(0, cantrips.length - freeCantrips);
-
   let spent = paidCantrips * 10;
-  spells.forEach((s) => { spent += 10 * (s.level ?? 1); });
+
+  const charLevel = Number(state.identity?.level ?? state.level ?? 1);
+  const isSpellbookUser = hasSpellbookAbility(state);
+
+  if (!isSpellbookUser) {
+    spells.forEach((s) => {
+      spent += 10 * (s.level ?? 1);
+    });
+  } else if (charLevel === 1) {
+    const freeSpells = getSpellbookStartingFreeSpells(spells, spellbookSpells);
+    spells.forEach((s) => {
+      if (spellbookSpells.includes(s.name) && freeSpells.has(s.name)) {
+        return;
+      }
+      spent += 10 * (s.level ?? 1);
+    });
+  } else {
+    /*
+     * At Level 2+, spells learned as Level 1 free allowance retain their 0 cost if locked in freeSpells/startingFreeSpells.
+     * All other transcribed spells receive the standard Level 2+ transcribed discount:
+     * - Level 1 spells cost 5 Potential (50% discount from 10)
+     * - Level 2+ spells cost (10 * level - 10) Potential (flat 10 Potential discount)
+     */
+    const lockedFreeSpells = new Set(
+      Array.isArray(spellcasting.freeSpells)
+        ? spellcasting.freeSpells
+        : Array.isArray(spellcasting.startingFreeSpells)
+        ? spellcasting.startingFreeSpells
+        : []
+    );
+    spells.forEach((s) => {
+      const lvl = s.level ?? 1;
+      const isTranscribed = spellbookSpells.includes(s.name);
+      if (isTranscribed && lockedFreeSpells.has(s.name)) {
+        return;
+      }
+      if (isTranscribed) {
+        spent += lvl === 1 ? 5 : Math.max(0, 10 * lvl - 10);
+      } else {
+        spent += 10 * lvl;
+      }
+    });
+  }
+
   for (let lvl = 1; lvl <= 9; lvl++) {
     spent += (slots[lvl] ?? 0) * 10 * lvl;
   }
   return spent;
 }
 
-export function calculatePotentialRemaining(state: any, originsData: OriginData[], raceData: any[] = RACES): number {
+export function calculatePotentialRemaining(
+  state: any,
+  originsData: OriginData[],
+  raceData: any[] = RACES
+): number {
+  if (state.isImported && typeof state.potentialRemaining === 'number') {
+    return state.potentialRemaining;
+  }
+  if (state.isImported && typeof state.importedMetadata?.potentialRemaining === 'number') {
+    return state.importedMetadata.potentialRemaining;
+  }
   const total = calculatePotentialGained(state, originsData);
   const spent = calculatePotentialSpent(state, raceData);
   return total - spent;
