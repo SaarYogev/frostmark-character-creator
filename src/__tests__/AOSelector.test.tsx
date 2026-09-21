@@ -197,4 +197,36 @@ describe('AOSelector', () => {
       expect(asiSelect).toHaveValue('+2 Brawn');
     }
   });
+
+  it('renders two dropdowns when "+1 to Two Ability Scores" is selected and properly records choices', () => {
+    renderWithProvider(undefined, 4);
+
+    // Select Artistry origin
+    const artistryCard = screen.getByRole('button', { name: /Artistry/ });
+    fireEvent.click(artistryCard);
+
+    // Find Level 4 Ability Score Improvement or Feat card
+    const asiCards = screen.queryAllByText('Ability Score Improvement or Feat');
+    expect(asiCards.length).toBeGreaterThan(0);
+    fireEvent.click(asiCards[0]);
+
+    // Select '+1 to Two Ability Scores'
+    const selects = screen.getAllByRole('combobox');
+    const mainAsiSelect = selects[0];
+    fireEvent.change(mainAsiSelect, { target: { value: '+1 to Two Ability Scores' } });
+
+    // Should now show two separate attribute dropdowns
+    const firstScoreSelect = screen.getByLabelText(/First Ability Score/i);
+    const secondScoreSelect = screen.getByLabelText(/Second Ability Score/i);
+
+    expect(firstScoreSelect).toBeInTheDocument();
+    expect(secondScoreSelect).toBeInTheDocument();
+
+    // Select Brawn and Vitality
+    fireEvent.change(firstScoreSelect, { target: { value: 'Brawn' } });
+    fireEvent.change(secondScoreSelect, { target: { value: 'Vitality' } });
+
+    expect(firstScoreSelect).toHaveValue('Brawn');
+    expect(secondScoreSelect).toHaveValue('Vitality');
+  });
 });

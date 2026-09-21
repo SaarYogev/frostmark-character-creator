@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { levelUp, computeLevelUpPreview } from '../src/logic/levelUp';
-import { getInitialState } from '../src/logic/state';
+import { getInitialState, getFinalCharacteristics } from '../src/logic/state';
 import { ORIGINS } from '../src/data/origins';
 import { RACES } from '../src/data/races';
 
@@ -296,6 +296,52 @@ describe('Level Up System', () => {
       expect(nextState.levelSelections[2].primaryAbility).toBe('artistry-2-primary-song-of-rest');
       expect(nextState.levelSelections[3].primaryAbility).toBe('artistry-3-primary-cutting-words');
       expect(nextState.levelSelections[3].secondaryAbility).toBe('artistry-3-secondary-expertise');
+    });
+
+    it('raises ability scores when +2 to an ability score is chosen at level 4', () => {
+      const state = getInitialState();
+      state.level = 4;
+      state.identity = { ...state.identity, level: 4 };
+      state.baseCharacteristics.Brawn = 12;
+
+      state.levelSelections = {
+        4: {
+          primaryAO: 'Artistry',
+          secondaryAO: '',
+          primaryAbility: 'artistry-4-primary-ability-score-improvement-or-feat',
+          secondaryAbility: '',
+          upgradeChoices: {
+            'artistry-4-primary-ability-score-improvement-or-feat': '+2 Brawn'
+          }
+        }
+      };
+
+      const finalStats = getFinalCharacteristics(state, RACES);
+      expect(finalStats.Brawn).toBe(14);
+    });
+
+    it('raises both ability scores when +1 to two ability scores is chosen at level 4', () => {
+      const state = getInitialState();
+      state.level = 4;
+      state.identity = { ...state.identity, level: 4 };
+      state.baseCharacteristics.Brawn = 14;
+      state.baseCharacteristics.Vitality = 12;
+
+      state.levelSelections = {
+        4: {
+          primaryAO: 'Artistry',
+          secondaryAO: '',
+          primaryAbility: 'artistry-4-primary-ability-score-improvement-or-feat',
+          secondaryAbility: '',
+          upgradeChoices: {
+            'artistry-4-primary-ability-score-improvement-or-feat': '+1 to Two Ability Scores: Brawn, Vitality'
+          }
+        }
+      };
+
+      const finalStats = getFinalCharacteristics(state, RACES);
+      expect(finalStats.Brawn).toBe(15);
+      expect(finalStats.Vitality).toBe(13);
     });
   });
 });
