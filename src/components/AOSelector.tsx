@@ -7,7 +7,7 @@ import { getAOChoiceDefinition } from '../data/aoChoices';
 import { CHARACTERISTICS } from '../data/constants';
 
 const AOSelector: React.FC = () => {
-  const { state, dispatch } = useCharacter();
+  const { state, dispatch, editMode } = useCharacter();
   const [selectedAbilityForDetailId, setSelectedAbilityForDetailId] = useState<string | null>(null);
 
   // Modal / Form state for Custom AO creation
@@ -27,13 +27,21 @@ const AOSelector: React.FC = () => {
   const [customAbilityFullDesc, setCustomAbilityFullDesc] = useState('');
 
   const currentLevel = state.identity?.level ?? 1;
+  const [activeLevelFilter, setActiveLevelFilter] = useState<number | 'all'>(currentLevel > 1 ? currentLevel : 'all');
   const selectedAOs = state.ao?.selectedAOs ?? [];
   const customAOs = state.ao?.customAOs ?? [];
   const customAbilities = (state.ao as any)?.customAbilities ?? [];
 
+  const lockedChoices = state.lockedChoices ?? {};
+  const lockedPoolAOs: string[] = lockedChoices.poolAOs ?? [];
+  const lockedLevelSelections = lockedChoices.levelSelections ?? {};
+
   const handleTogglePoolAO = (aoName: string) => {
     let nextAOs = [...selectedAOs];
     if (nextAOs.includes(aoName)) {
+      if (!editMode && lockedPoolAOs.includes(aoName)) {
+        return;
+      }
       nextAOs = nextAOs.filter((n) => n !== aoName);
     } else if (nextAOs.length < 4) {
       nextAOs.push(aoName);
@@ -119,17 +127,63 @@ const AOSelector: React.FC = () => {
     setCustomAbilityFullDesc('');
   };
 
+  const getLockedAbilityId = (lvl: number, slot: 'primary' | 'secondary'): string | undefined => {
+    if (editMode) return undefined;
+    const isPrimarySlot = slot === 'primary';
+    const lockedSel = lockedLevelSelections[lvl];
+    const explicitLockedId = isPrimarySlot ? lockedSel?.primaryAbility : lockedSel?.secondaryAbility;
+    if (explicitLockedId) return explicitLockedId;
+    if (lvl < currentLevel) {
+      const currentLevelSel = (state.ao?.levelSelections ?? {})[lvl];
+      return isPrimarySlot ? currentLevelSel?.primaryAbility : currentLevelSel?.secondaryAbility;
+    }
+    return undefined;
+  };
+
   const handleSelectAbility = (level: number, slot: 'primary' | 'secondary', abilityId: string) => {
+    const lockedAbilityId = getLockedAbilityId(level, slot);
+
+    /*
+     * If clicking the locked ability for this level, it cannot be deselected or changed in standard mode.
+     * Only full editMode allows changing a previously-locked selection.
+     */
+    if (!editMode && lockedAbilityId && lockedAbilityId === abilityId) {
+      setSelectedAbilityForDetailId(abilityId);
+      return;
+    }
+
+    /*
+     * In standard progression mode (!editMode), earlier level slots are locked milestones.
+     * Any unchosen ability selected from an earlier level is chosen as the currentLevel's slot.
+     */
+    const targetLevel = (!editMode && level < currentLevel) ? currentLevel : level;
+    const effectiveSlot = (targetLevel > 3) ? 'primary' : slot;
+    const isPrimarySlot = effectiveSlot === 'primary';
+
     const currentSelections = state.ao?.levelSelections ?? {};
-    const levelSel = currentSelections[level] ?? {
+    const levelSel = currentSelections[targetLevel] ?? {
       primaryAO: state.ao?.primaryAO || selectedAOs[0] || '',
       secondaryAO: state.ao?.secondaryAO || '',
       primaryAbility: '',
       secondaryAbility: '',
     };
 
-    const isPrimarySlot = slot === 'primary';
     const isUnselecting = levelSel[isPrimarySlot ? 'primaryAbility' : 'secondaryAbility'] === abilityId;
+
+    // Prevent selecting an ability that has already been chosen in any other level or slot
+    if (!isUnselecting) {
+      const allLevelSelections = state.ao?.levelSelections ?? {};
+      const isAlreadyPickedElsewhere = Object.entries(allLevelSelections).some(([lvlStr, s]) => {
+        const otherLvl = parseInt(lvlStr, 10);
+        if (otherLvl === targetLevel) {
+          return isPrimarySlot ? s.secondaryAbility === abilityId : s.primaryAbility === abilityId;
+        }
+        return s.primaryAbility === abilityId || s.secondaryAbility === abilityId;
+      });
+      if (isAlreadyPickedElsewhere) {
+        return;
+      }
+    }
 
     let updatedPrimaryAO = levelSel.primaryAO;
     let updatedSecondaryAO = levelSel.secondaryAO;
@@ -157,7 +211,7 @@ const AOSelector: React.FC = () => {
       payload: {
         levelSelections: {
           ...currentSelections,
-          [level]: nextLevelSel,
+          [targetLevel]: nextLevelSel,
         },
       },
     });
@@ -168,7 +222,7 @@ const AOSelector: React.FC = () => {
       payload: {
         levelSelections: {
           ...currentSelections,
-          [level]: nextLevelSel,
+          [targetLevel]: nextLevelSel,
         },
       },
     } as any);
@@ -231,6 +285,7 @@ const AOSelector: React.FC = () => {
     const choiceValue = selectedLevel
       ? state.ao?.levelSelections?.[selectedLevel]?.upgradeChoices?.[abilityTarget.id] || ''
       : '';
+    const isChoiceLocked = !editMode && selectedLevel !== null && Boolean(lockedLevelSelections[selectedLevel]?.upgradeChoices?.[abilityTarget.id]);
 
     const isUpgrade =
       (abilityTarget.name ?? '').includes('Upgrade') ||
@@ -244,6 +299,9 @@ const AOSelector: React.FC = () => {
 
     const handleUpgradeChoiceChange = (val: string) => {
       const targetLvl = selectedLevel || abilityTarget.level;
+      if (!editMode && lockedLevelSelections[targetLvl]?.upgradeChoices?.[abilityTarget.id]) {
+        return;
+      }
       const currentSelections = state.ao?.levelSelections ?? {};
       const levelSel = currentSelections[targetLvl] ?? {
         primaryAO: state.ao?.primaryAO || selectedAOs[0] || '',
@@ -350,128 +408,136 @@ const AOSelector: React.FC = () => {
         {/* 1. Structured Choice (Single Select Dropdown) */}
         {choiceDef && choiceDef.type === 'single' && (() => {
           const isSplitASI = choiceValue.startsWith('+1 to Two Ability Scores');
-            let splitFirst = '';
-            let splitSecond = '';
-            if (isSplitASI) {
-              const cleaned = choiceValue.replace(/^\+1 to Two Ability Scores(?::\s*)?/i, '');
-              const parts = cleaned.split(/[,&]+/).map(p => p.trim().replace(/^\+1\s+/, '')).filter(Boolean);
-              splitFirst = parts[0] || '';
-              splitSecond = parts[1] || '';
-            }
+          let splitFirst = '';
+          let splitSecond = '';
+          if (isSplitASI) {
+            const cleaned = choiceValue.replace(/^\+1 to Two Ability Scores(?::\s*)?/i, '');
+            const parts = cleaned.split(/[,&]+/).map(p => p.trim().replace(/^\+1\s+/, '')).filter(Boolean);
+            splitFirst = parts[0] || '';
+            splitSecond = parts[1] || '';
+          }
 
-            const isKnownOption = choiceDef.options.includes(choiceValue) || isSplitASI;
-            const mainSelectValue = isSplitASI
-              ? '+1 to Two Ability Scores'
-              : choiceDef.options.includes(choiceValue)
-              ? choiceValue
-              : (choiceValue ? 'Other' : '');
+          const isKnownOption = choiceDef.options.includes(choiceValue) || isSplitASI;
+          const mainSelectValue = isSplitASI
+            ? '+1 to Two Ability Scores'
+            : choiceDef.options.includes(choiceValue)
+            ? choiceValue
+            : (choiceValue ? 'Other' : '');
 
-            return (
-              <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
-                  {choiceDef.label}:
-                </label>
-                <select
-                  className="select"
-                  style={{ marginTop: '0.35rem', width: '100%' }}
-                  value={mainSelectValue}
+          return (
+            <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
+                {choiceDef.label}:
+              </label>
+              <select
+                className="select"
+                style={{ marginTop: '0.35rem', width: '100%' }}
+                disabled={isChoiceLocked}
+                title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
+                value={mainSelectValue}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === 'Other') {
+                    handleUpgradeChoiceChange('Other: ');
+                  } else if (val === '+1 to Two Ability Scores') {
+                    handleUpgradeChoiceChange('+1 to Two Ability Scores: Brawn, Dexterity');
+                  } else {
+                    handleUpgradeChoiceChange(val);
+                  }
+                }}
+              >
+                <option value="">-- Select Option --</option>
+                {choiceDef.options.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+                <option value="Other">Other / Specific Details...</option>
+              </select>
+
+              {isSplitASI && (
+                <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div>
+                    <label htmlFor={`asi-split-1-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                      First Ability Score (+1):
+                    </label>
+                    <select
+                      id={`asi-split-1-${abilityTarget.id}`}
+                      className="select"
+                      style={{ width: '100%' }}
+                      disabled={isChoiceLocked}
+                      title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
+                      value={splitFirst}
+                      onChange={(e) => {
+                        const newFirst = e.target.value;
+                        const newSecond = splitSecond || (newFirst === 'Brawn' ? 'Dexterity' : 'Brawn');
+                        handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
+                      }}
+                    >
+                      <option value="">-- Select Stat --</option>
+                      {CHARACTERISTICS.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.key}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor={`asi-split-2-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                      Second Ability Score (+1):
+                    </label>
+                    <select
+                      id={`asi-split-2-${abilityTarget.id}`}
+                      className="select"
+                      style={{ width: '100%' }}
+                      disabled={isChoiceLocked}
+                      title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
+                      value={splitSecond}
+                      onChange={(e) => {
+                        const newSecond = e.target.value;
+                        const newFirst = splitFirst || (newSecond === 'Brawn' ? 'Dexterity' : 'Brawn');
+                        handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
+                      }}
+                    >
+                      <option value="">-- Select Stat --</option>
+                      {CHARACTERISTICS.map((c) => (
+                        <option key={c.key} value={c.key}>
+                          {c.key}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {!isSplitASI && (choiceValue.startsWith('Other:') ||
+                choiceValue === 'Feat' ||
+                (!isKnownOption && choiceValue !== '')) && (
+                <input
+                  type="text"
+                  className="input"
+                  style={{ marginTop: '0.5rem', width: '100%' }}
+                  disabled={isChoiceLocked}
+                  title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
+                  placeholder={
+                    choiceValue === 'Feat'
+                      ? 'Enter Feat Name...'
+                      : 'Enter custom choice details...'
+                  }
+                  value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
                   onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'Other') {
-                      handleUpgradeChoiceChange('Other: ');
-                    } else if (val === '+1 to Two Ability Scores') {
-                      handleUpgradeChoiceChange('+1 to Two Ability Scores: Brawn, Dexterity');
+                    if (choiceValue === 'Feat') {
+                      handleUpgradeChoiceChange(e.target.value);
                     } else {
-                      handleUpgradeChoiceChange(val);
+                      handleUpgradeChoiceChange(`Other: ${e.target.value}`);
                     }
                   }}
-                >
-                  <option value="">-- Select Option --</option>
-                  {choiceDef.options.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                  <option value="Other">Other / Specific Details...</option>
-                </select>
-
-                {isSplitASI && (
-                  <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div>
-                      <label htmlFor={`asi-split-1-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
-                        First Ability Score (+1):
-                      </label>
-                      <select
-                        id={`asi-split-1-${abilityTarget.id}`}
-                        className="select"
-                        style={{ width: '100%' }}
-                        value={splitFirst}
-                        onChange={(e) => {
-                          const newFirst = e.target.value;
-                          const newSecond = splitSecond || (newFirst === 'Brawn' ? 'Dexterity' : 'Brawn');
-                          handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
-                        }}
-                      >
-                        <option value="">-- Select Stat --</option>
-                        {CHARACTERISTICS.map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {c.key}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor={`asi-split-2-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
-                        Second Ability Score (+1):
-                      </label>
-                      <select
-                        id={`asi-split-2-${abilityTarget.id}`}
-                        className="select"
-                        style={{ width: '100%' }}
-                        value={splitSecond}
-                        onChange={(e) => {
-                          const newSecond = e.target.value;
-                          const newFirst = splitFirst || (newSecond === 'Brawn' ? 'Dexterity' : 'Brawn');
-                          handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
-                        }}
-                      >
-                        <option value="">-- Select Stat --</option>
-                        {CHARACTERISTICS.map((c) => (
-                          <option key={c.key} value={c.key}>
-                            {c.key}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-
-                {!isSplitASI && (choiceValue.startsWith('Other:') ||
-                  choiceValue === 'Feat' ||
-                  (!isKnownOption && choiceValue !== '')) && (
-                  <input
-                    type="text"
-                    className="input"
-                    style={{ marginTop: '0.5rem', width: '100%' }}
-                    placeholder={
-                      choiceValue === 'Feat'
-                        ? 'Enter Feat Name...'
-                        : 'Enter custom choice details...'
-                    }
-                    value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
-                    onChange={(e) => {
-                      if (choiceValue === 'Feat') {
-                        handleUpgradeChoiceChange(e.target.value);
-                      } else {
-                        handleUpgradeChoiceChange(`Other: ${e.target.value}`);
-                      }
-                    }}
-                  />
-                )}
-              </div>
-            );
-          })()}
+                />
+              )}
+            </div>
+          );
+        })()}
 
         {/* 2. Structured Choice (Multi-Select Pills / Checkboxes) */}
         {choiceDef && choiceDef.type === 'multi' && (
@@ -487,6 +553,8 @@ const AOSelector: React.FC = () => {
                   <button
                     key={opt}
                     type="button"
+                    disabled={isChoiceLocked}
+                    title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
                     className={`btn btn-sm ${isChecked ? 'btn-accent' : 'btn-secondary'}`}
                     style={{ fontSize: '0.78rem', padding: '0.25rem 0.6rem' }}
                     onClick={() => handleMultiChoiceToggle(opt, choiceDef.maxChoices || 2)}
@@ -511,6 +579,8 @@ const AOSelector: React.FC = () => {
             <input
               type="text"
               className="input"
+              disabled={isChoiceLocked}
+              title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
               style={{ marginTop: '0.35rem' }}
               placeholder="e.g. +1 AC, Advantage on Perception..."
               value={choiceValue}
@@ -629,7 +699,13 @@ const AOSelector: React.FC = () => {
             </div>
             {allPoolOrigins.map((o) => {
               const isSelected = selectedAOs.includes(o.name);
-              const isDisabled = !isSelected && selectedAOs.length >= 4;
+              const isLocked = !editMode && lockedPoolAOs.includes(o.name);
+              const isDisabled = (!isSelected && selectedAOs.length >= 4) || (isSelected && isLocked);
+              const tooltip = isLocked
+                ? 'Origin pool choice was locked at a previous level. Enable Full Edit Mode to deselect.'
+                : (!isSelected && selectedAOs.length >= 4)
+                ? 'Maximum 4 origins selected in pool.'
+                : '';
 
               return (
                 <div
@@ -639,6 +715,7 @@ const AOSelector: React.FC = () => {
                   role="button"
                   tabIndex={0}
                   aria-selected={isSelected}
+                  title={tooltip}
                   onClick={() => !isDisabled && handleTogglePoolAO(o.name)}
                   onKeyDown={(e) => {
                     if (!isDisabled && (e.key === 'Enter' || e.key === ' ')) {
@@ -648,7 +725,10 @@ const AOSelector: React.FC = () => {
                   }}
                   style={{ cursor: isDisabled ? 'not-allowed' : 'pointer' }}
                 >
-                  <div className="card-option-name">{o.name}</div>
+                  <div className="card-option-name">
+                    {o.name}
+                    {isLocked && <span style={{ marginLeft: '0.4rem', fontSize: '0.75rem' }}>🔒</span>}
+                  </div>
                   <div className="card-option-sub">
                     d{o.hd} HD · {o.spellcasting} casting
                   </div>
@@ -674,10 +754,37 @@ const AOSelector: React.FC = () => {
             <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${detailsWidth}`, gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* Left: Level Selections */}
             <div className="ao-levels-column" style={{ flex: 1 }}>
-              <h3 className="section-title">2. Level Selections (Levels 1 to {currentLevel})</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                <h3 className="section-title" style={{ margin: 0 }}>2. Level Selections</h3>
+                {currentLevel > 1 && (
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${activeLevelFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                      onClick={() => setActiveLevelFilter('all')}
+                    >
+                      All (1–{currentLevel})
+                    </button>
+                    {Array.from({ length: currentLevel }, (_, idx) => idx + 1).map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        className={`btn btn-sm ${activeLevelFilter === lvl ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                        onClick={() => setActiveLevelFilter(lvl)}
+                      >
+                        Lvl {lvl}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="ao-levels-accordion">
-                {Array.from({ length: currentLevel }, (_, idx) => idx + 1).map((lvl) => {
+                {Array.from({ length: currentLevel }, (_, idx) => idx + 1)
+                  .filter((lvl) => activeLevelFilter === 'all' || activeLevelFilter === lvl)
+                  .map((lvl) => {
                   const levelSelections = state.ao?.levelSelections ?? {};
                   const sel = levelSelections[lvl] ?? {
                     primaryAO: '',
@@ -686,14 +793,22 @@ const AOSelector: React.FC = () => {
                     secondaryAbility: '',
                   };
                   const isSecondaryAllowed = lvl <= 3;
+                  const allPickedAbilities = new Map<string, { level: number; slot: 'Primary' | 'Secondary' }>();
+                  Object.entries(levelSelections).forEach(([lvlKey, s]) => {
+                    const lNum = parseInt(lvlKey, 10);
+                    if (s.primaryAbility) {
+                      allPickedAbilities.set(s.primaryAbility, { level: lNum, slot: 'Primary' });
+                    }
+                    if (s.secondaryAbility) {
+                      allPickedAbilities.set(s.secondaryAbility, { level: lNum, slot: 'Secondary' });
+                    }
+                  });
 
-                  // Pre-made abilities from selected AOs
                   const premadePrimary = selectedAOs.flatMap((ao) => getAbilitiesForLevel(lvl, 'Primary', ao));
                   const premadeSecondary = isSecondaryAllowed
                     ? selectedAOs.flatMap((ao) => getAbilitiesForLevel(lvl, 'Secondary', ao))
                     : [];
 
-                  // Custom abilities created for this level & selection slot
                   const customPrimary = customAbilities.filter(
                     (a: AbilityItem) => a.level === lvl && a.selection === 'Primary' && selectedAOs.includes(a.origin)
                   );
@@ -806,43 +921,118 @@ const AOSelector: React.FC = () => {
                           )}
 
                           <div className="ao-abilities-grid card-selector">
-                            <div
-                              className="ability-card custom-card-square"
-                              onClick={() => {
-                                if (customAbilityLevel === lvl && customAbilitySlot === 'primary') {
-                                  setCustomAbilityLevel(null);
-                                } else {
-                                  setCustomAbilityLevel(lvl);
-                                  setCustomAbilitySlot('primary');
-                                  setCustomAbilityOrigin(selectedAOs[0] || '');
+                            {(() => {
+                              const lockedPrimaryId = getLockedAbilityId(lvl, 'primary');
+                              const isPrimaryLocked = Boolean(!editMode && lockedPrimaryId);
+                              return (
+                                <div
+                                  className={`ability-card custom-card-square ${isPrimaryLocked ? 'disabled' : ''}`}
+                                  title={isPrimaryLocked ? 'Ability slot is locked from a previous level. Enable Full Edit Mode to change.' : ''}
+                                  onClick={() => {
+                                    if (isPrimaryLocked) return;
+                                    if (customAbilityLevel === lvl && customAbilitySlot === 'primary') {
+                                      setCustomAbilityLevel(null);
+                                    } else {
+                                      setCustomAbilityLevel(lvl);
+                                      setCustomAbilitySlot('primary');
+                                      setCustomAbilityOrigin(selectedAOs[0] || '');
+                                    }
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                  style={{ cursor: isPrimaryLocked ? 'not-allowed' : 'pointer', opacity: isPrimaryLocked ? 0.5 : 1 }}
+                                >
+                                  <div className="custom-card-icon">＋</div>
+                                  <div className="custom-card-title">Custom Ability</div>
+                                </div>
+                              );
+                            })()}
+                            {(() => {
+                              if (sel.primaryAbility && !primaryAbilities.some((a: any) => a.id === sel.primaryAbility)) {
+                                const chosenAb = getInspectedAbility(sel.primaryAbility);
+                                if (chosenAb) {
+                                  const isInspected = activeDetailId === chosenAb.id;
+                                  return (
+                                    <React.Fragment key={chosenAb.id}>
+                                      <div
+                                        className={`ability-card card-option selected ${isInspected ? 'inspected' : ''}`}
+                                        data-ability-id={chosenAb.id}
+                                        data-level={lvl}
+                                        data-slot="primary"
+                                        onClick={() => {
+                                          handleSelectAbility(lvl, 'primary', chosenAb.id);
+                                          setSelectedAbilityForDetailId(null);
+                                        }}
+                                        style={{ cursor: 'pointer' }}
+                                      >
+                                        <div className="ability-card-header">
+                                          <span className="ability-origin-tag">
+                                            {chosenAb.origin} (Lvl {chosenAb.level})
+                                          </span>
+                                          <span className="selected-badge"> ✓ Selected</span>
+                                        </div>
+                                        <h4 className="ability-card-title">{chosenAb.name}</h4>
+                                      </div>
+                                      {isInspected && (
+                                        <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+                                          {renderAODetailContent(chosenAb)}
+                                        </div>
+                                      )}
+                                    </React.Fragment>
+                                  );
                                 }
-                              }}
-                              role="button"
-                              tabIndex={0}
-                            >
-                              <div className="custom-card-icon">＋</div>
-                              <div className="custom-card-title">Custom Ability</div>
-                            </div>
+                              }
+                              return null;
+                            })()}
                             {primaryAbilities.map((ab: any) => {
-                                const isPicked = sel.primaryAbility === ab.id;
+                                const lockedPrimaryId = getLockedAbilityId(lvl, 'primary');
+                                const isLocked = Boolean(lockedPrimaryId && ab.id === lockedPrimaryId);
+                                const isPickedThisLevel = sel.primaryAbility === ab.id;
                                 const isInspected = activeDetailId === ab.id;
+                                const pickedInfo = allPickedAbilities.get(ab.id);
+                                const isPickedForCurrentLevel = Boolean(
+                                  pickedInfo &&
+                                  pickedInfo.level === currentLevel &&
+                                  pickedInfo.slot === 'Primary' &&
+                                  currentLevel !== lvl
+                                );
+                                const isPickedElsewhere = Boolean(
+                                  pickedInfo &&
+                                  (pickedInfo.level !== lvl || pickedInfo.slot !== 'Primary') &&
+                                  !isPickedForCurrentLevel
+                                );
+                                const isSelected = isPickedThisLevel || isPickedForCurrentLevel;
+                                const isDisabled = isPickedElsewhere;
+
+                                const cardTitle = isLocked
+                                  ? 'Ability was locked at a previous level. Enable Full Edit Mode to change.'
+                                  : isPickedElsewhere
+                                  ? `Already selected at Level ${pickedInfo?.level} (${pickedInfo?.slot})`
+                                  : '';
 
                                 return (
                                   <React.Fragment key={ab.id}>
                                     <div
-                                      className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
+                                      className={`ability-card card-option ${isSelected ? 'selected' : ''} ${isInspected ? 'inspected' : ''} ${isDisabled ? 'disabled' : ''}`}
                                       data-ability-id={ab.id}
                                       data-level={lvl}
                                       data-slot="primary"
+                                      title={cardTitle}
                                       onClick={() => {
+                                        if (isDisabled) return;
                                         handleSelectAbility(lvl, 'primary', ab.id);
-                                        setSelectedAbilityForDetailId(isPicked ? null : ab.id);
+                                        setSelectedAbilityForDetailId(isSelected && !isLocked ? null : ab.id);
                                       }}
-                                      style={{ cursor: 'pointer' }}
+                                      style={{ cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isDisabled ? 0.5 : 1 }}
                                     >
                                       <div className="ability-card-header">
-                                        <span className="ability-origin-tag">{ab.origin}</span>
-                                        {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                        <span className="ability-origin-tag">
+                                          {ab.origin}
+                                        </span>
+                                        {isLocked && <span className="selected-badge"> 🔒 Locked</span>}
+                                        {!isLocked && isPickedThisLevel && <span className="selected-badge"> ✓ Selected</span>}
+                                        {isPickedForCurrentLevel && <span className="selected-badge"> ✓ Selected (Lvl {currentLevel})</span>}
+                                        {isPickedElsewhere && <span className="selected-badge" style={{ color: 'var(--text-secondary)' }}>Lvl {pickedInfo?.level}</span>}
                                       </div>
                                       <h4 className="ability-card-title">{ab.name}</h4>
                                     </div>
@@ -935,34 +1125,126 @@ const AOSelector: React.FC = () => {
                             )}
 
                             <div className="ao-abilities-grid card-selector">
+                              {(() => {
+                                const lockedSecondaryId = getLockedAbilityId(lvl, 'secondary');
+                                const isSecondaryLocked = Boolean(!editMode && lockedSecondaryId);
+                                return (
+                                  <div
+                                    className={`ability-card custom-card-square ${isSecondaryLocked ? "disabled" : ""}`}
+                                    title={isSecondaryLocked ? "Ability slot is locked from a previous level. Enable Full Edit Mode to change." : ""}
+                                    onClick={() => {
+                                      if (isSecondaryLocked) return;
+                                      if (customAbilityLevel === lvl && customAbilitySlot === "secondary") {
+                                        setCustomAbilityLevel(null);
+                                      } else {
+                                        setCustomAbilityLevel(lvl);
+                                        setCustomAbilitySlot("secondary");
+                                        setCustomAbilityOrigin(selectedAOs[0] || "");
+                                      }
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    style={{ cursor: isSecondaryLocked ? "not-allowed" : "pointer", opacity: isSecondaryLocked ? 0.5 : 1 }}
+                                  >
+                                    <div className="custom-card-icon">＋</div>
+                                    <div className="custom-card-title">Custom Ability</div>
+                                  </div>
+                                );
+                              })()}
+                              {(() => {
+                                if (sel.secondaryAbility && !secondaryAbilities.some((a: any) => a.id === sel.secondaryAbility)) {
+                                  const chosenAb = getInspectedAbility(sel.secondaryAbility);
+                                  if (chosenAb) {
+                                    const isInspected = activeDetailId === chosenAb.id;
+                                    return (
+                                      <React.Fragment key={chosenAb.id}>
+                                        <div
+                                          className={`ability-card card-option selected ${isInspected ? "inspected" : ""}`}
+                                          data-ability-id={chosenAb.id}
+                                          data-level={lvl}
+                                          data-slot="secondary"
+                                          onClick={() => {
+                                            handleSelectAbility(lvl, "secondary", chosenAb.id);
+                                            setSelectedAbilityForDetailId(null);
+                                          }}
+                                          style={{ cursor: "pointer" }}
+                                        >
+                                          <div className="ability-card-header">
+                                            <span className="ability-origin-tag">
+                                              {chosenAb.origin} (Lvl {chosenAb.level})
+                                            </span>
+                                            <span className="selected-badge"> ✓ Selected</span>
+                                          </div>
+                                          <h4 className="ability-card-title">{chosenAb.name}</h4>
+                                        </div>
+                                        {isInspected && (
+                                          <div className="mobile-inline-ao-detail" style={{ gridColumn: "1 / -1", marginBottom: "0.5rem" }}>
+                                            {renderAODetailContent(chosenAb)}
+                                          </div>
+                                        )}
+                                      </React.Fragment>
+                                    );
+                                  }
+                                }
+                                return null;
+                              })()}
                               {secondaryAbilities.length === 0 ? (
                                 <div className="no-abilities">No secondary abilities found for level {lvl} in pool</div>
                               ) : (
                                 secondaryAbilities.map((ab: any) => {
-                                  const isPicked = sel.secondaryAbility === ab.id;
+                                  const lockedSecondaryId = getLockedAbilityId(lvl, 'secondary');
+                                  const isLocked = Boolean(lockedSecondaryId && ab.id === lockedSecondaryId);
+                                  const isPickedThisLevel = sel.secondaryAbility === ab.id;
                                   const isInspected = activeDetailId === ab.id;
+                                  const pickedInfo = allPickedAbilities.get(ab.id);
+                                  const isPickedForCurrentLevel = Boolean(
+                                    pickedInfo &&
+                                    pickedInfo.level === currentLevel &&
+                                    pickedInfo.slot === "Secondary" &&
+                                    currentLevel !== lvl
+                                  );
+                                  const isPickedElsewhere = Boolean(
+                                    pickedInfo &&
+                                    (pickedInfo.level !== lvl || pickedInfo.slot !== "Secondary") &&
+                                    !isPickedForCurrentLevel
+                                  );
+                                  const isSelected = isPickedThisLevel || isPickedForCurrentLevel;
+                                  const isDisabled = isPickedElsewhere;
+
+                                  const cardTitle = isLocked
+                                    ? "Ability was locked at a previous level. Enable Full Edit Mode to change."
+                                    : isPickedElsewhere
+                                    ? `Already selected at Level ${pickedInfo?.level} (${pickedInfo?.slot})`
+                                    : "";
 
                                   return (
                                     <React.Fragment key={ab.id}>
                                       <div
-                                        className={`ability-card card-option ${isPicked ? 'selected' : ''} ${isInspected ? 'inspected' : ''}`}
+                                        className={`ability-card card-option ${isSelected ? "selected" : ""} ${isInspected ? "inspected" : ""} ${isDisabled ? "disabled" : ""}`}
                                         data-ability-id={ab.id}
                                         data-level={lvl}
                                         data-slot="secondary"
+                                        title={cardTitle}
                                         onClick={() => {
-                                          handleSelectAbility(lvl, 'secondary', ab.id);
-                                          setSelectedAbilityForDetailId(isPicked ? null : ab.id);
+                                          if (isDisabled) return;
+                                          handleSelectAbility(lvl, "secondary", ab.id);
+                                          setSelectedAbilityForDetailId(isSelected && !isLocked ? null : ab.id);
                                         }}
-                                        style={{ cursor: 'pointer' }}
+                                        style={{ cursor: isDisabled ? "not-allowed" : "pointer", opacity: isDisabled ? 0.5 : 1 }}
                                       >
                                         <div className="ability-card-header">
-                                          <span className="ability-origin-tag">{ab.origin}</span>
-                                          {isPicked && <span className="selected-badge"> ✓ Selected</span>}
+                                          <span className="ability-origin-tag">
+                                            {ab.origin}
+                                          </span>
+                                          {isLocked && <span className="selected-badge"> 🔒 Locked</span>}
+                                          {!isLocked && isPickedThisLevel && <span className="selected-badge"> ✓ Selected</span>}
+                                          {isPickedForCurrentLevel && <span className="selected-badge"> ✓ Selected (Lvl {currentLevel})</span>}
+                                          {isPickedElsewhere && <span className="selected-badge" style={{ color: "var(--text-secondary)" }}>Lvl {pickedInfo?.level}</span>}
                                         </div>
                                         <h4 className="ability-card-title">{ab.name}</h4>
                                       </div>
                                       {isInspected && (
-                                        <div className="mobile-inline-ao-detail" style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+                                        <div className="mobile-inline-ao-detail" style={{ gridColumn: "1 / -1", marginBottom: "0.5rem" }}>
                                           {renderAODetailContent(ab)}
                                         </div>
                                       )}

@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { STEPS } from '../types/Steps';
+import { Step, STEPS, getStepsForLevel } from '../types/Steps';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CharacterSummaryPanel } from './CharacterSummaryPanel';
 import { AutoSaveIndicator } from './AutoSaveIndicator';
@@ -16,38 +16,33 @@ interface LayoutProps {
   isCloud?: boolean;
   onRetrySave?: () => void;
   autoOpenLevelUp?: boolean;
+  showAllSteps?: boolean;
+  onToggleShowAllSteps?: () => void;
 }
 
-const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => void }> = ({ currentStep, onNavigate }) => {
-  const getStepLockReason = (stepIndex: number): string | null => {
-    const stepId = STEPS[stepIndex]?.id;
-    if (stepId === 'spellslots' || stepId === 'spellcasting') {
-      return null;
-    }
-    return null;
-  };
-
+const StepNav: React.FC<{
+  steps: Step[];
+  currentStepId: string;
+  onNavigate: (stepIndex: number) => void;
+}> = ({ steps, currentStepId, onNavigate }) => {
   return (
     <nav className="step-nav" id="step-nav">
-      {STEPS.map((step, i) => {
-        const lockReason = getStepLockReason(i);
-        const isLocked = lockReason !== null;
-        const isActive = i === currentStep;
+      {steps.map((step) => {
+        const globalIndex = STEPS.findIndex((s) => s.id === step.id);
+        const isActive = step.id === currentStepId;
 
         return (
           <button
             key={step.id}
-            className={`step-nav-item ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+            className={`step-nav-item ${isActive ? 'active' : ''}`}
             id={`nav-${step.id}`}
-            data-step={i}
-            data-lock-reason={lockReason ?? ''}
-            aria-disabled={isLocked}
-            onClick={() => !isLocked && onNavigate(i)}
-            disabled={isLocked}
+            data-step={globalIndex}
+            data-lock-reason=""
+            aria-disabled={false}
+            onClick={() => onNavigate(globalIndex)}
           >
             <span className="step-icon">{step.icon}</span>
             <span className="step-label">{step.title}</span>
-            {isLocked && <span className="step-lock-icon">🔒</span>}
           </button>
         );
       })}
@@ -56,15 +51,23 @@ const StepNav: React.FC<{ currentStep: number; onNavigate: (step: number) => voi
 };
 
 const Sidebar: React.FC<{
-  currentStep: number;
-  onNavigate: (step: number) => void;
+  steps: Step[];
+  currentStepId: string;
+  onNavigate: (stepIndex: number) => void;
   onNavigateHome: () => void;
   onOpenAbout: () => void;
+  level: number;
+  showAllSteps: boolean;
+  onToggleShowAllSteps?: () => void;
 }> = ({
-  currentStep,
+  steps,
+  currentStepId,
   onNavigate,
   onNavigateHome,
   onOpenAbout,
+  level,
+  showAllSteps,
+  onToggleShowAllSteps,
 }) => {
   return (
     <aside className="sidebar" id="sidebar">
@@ -77,7 +80,30 @@ const Sidebar: React.FC<{
         <img src={`${import.meta.env.BASE_URL}frostmark-logo.png`} alt="Frostmark" className="sidebar-logo" />
         <p className="sidebar-subtitle">Character Creator</p>
       </div>
-      <StepNav currentStep={currentStep} onNavigate={onNavigate} />
+
+      {level > 1 && (
+        <div style={{ padding: '0.4rem 1rem 0.6rem 1rem' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            id="btn-toggle-edit-mode"
+            onClick={onToggleShowAllSteps}
+            style={{
+              width: '100%',
+              fontSize: '0.78rem',
+              padding: '0.4rem 0.6rem',
+              borderRadius: '6px',
+              border: showAllSteps ? '1px solid var(--accent-gold, #f59e0b)' : '1px solid var(--border-subtle)',
+              color: showAllSteps ? 'var(--accent-gold, #f59e0b)' : '#a0a5c0',
+            }}
+          >
+            {showAllSteps ? '🔒 Standard Progression Mode' : '🔓 Full Edit Mode (Unlock All)'}
+          </button>
+        </div>
+      )}
+
+      <StepNav steps={steps} currentStepId={currentStepId} onNavigate={onNavigate} />
+
       <div
         style={{
           padding: '0.85rem 1rem',
@@ -133,30 +159,54 @@ const Sidebar: React.FC<{
   );
 };
 
-const StepFooter: React.FC<{ currentStep: number; onNavigate: (step: number) => void; totalSteps: number }> = ({
-  currentStep,
+const StepFooter: React.FC<{
+  steps: Step[];
+  currentStepId: string;
+  onNavigate: (stepIndex: number) => void;
+}> = ({
+  steps,
+  currentStepId,
   onNavigate,
-  totalSteps,
 }) => {
+  const visibleIndex = Math.max(0, steps.findIndex((s) => s.id === currentStepId));
+  const isFirst = visibleIndex <= 0;
+  const isLast = visibleIndex >= steps.length - 1;
+
+  const handlePrev = () => {
+    if (!isFirst) {
+      const prevStepId = steps[visibleIndex - 1].id;
+      const prevGlobalIndex = STEPS.findIndex((s) => s.id === prevStepId);
+      onNavigate(prevGlobalIndex);
+    }
+  };
+
+  const handleNext = () => {
+    if (!isLast) {
+      const nextStepId = steps[visibleIndex + 1].id;
+      const nextGlobalIndex = STEPS.findIndex((s) => s.id === nextStepId);
+      onNavigate(nextGlobalIndex);
+    }
+  };
+
   return (
     <div className="step-footer">
       <button
         className="btn btn-secondary"
         id="btn-prev"
-        disabled={currentStep === 0}
-        onClick={() => currentStep > 0 && onNavigate(currentStep - 1)}
+        disabled={isFirst}
+        onClick={handlePrev}
       >
         ← Back
       </button>
       <div className="step-counter" id="step-counter">
-        Step {currentStep + 1} of {totalSteps}
+        Step {visibleIndex + 1} of {steps.length}
       </div>
       <button
         className="btn btn-primary"
         id="btn-next"
-        onClick={() => currentStep < totalSteps - 1 && onNavigate(currentStep + 1)}
+        onClick={handleNext}
       >
-        {currentStep === totalSteps - 1 ? 'Finish ✓' : 'Next →'}
+        {isLast ? 'Finish ✓' : 'Next →'}
       </button>
     </div>
   );
@@ -171,9 +221,17 @@ export const Layout: React.FC<LayoutProps> = ({
   isCloud = false,
   onRetrySave,
   autoOpenLevelUp,
+  showAllSteps = false,
+  onToggleShowAllSteps,
 }) => {
+  const { state } = useCharacter();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [isAboutOpen, setIsAboutOpen] = React.useState(false);
+
+  const characterLevel = state.identity?.level ?? state.level ?? 1;
+  const visibleSteps = getStepsForLevel(characterLevel, showAllSteps);
+  const currentStepDef = STEPS[currentStep] ?? STEPS[0];
+  const currentStepId = currentStepDef.id;
 
   return (
     <>
@@ -193,11 +251,14 @@ export const Layout: React.FC<LayoutProps> = ({
           onChange={(e) => onNavigate(Number(e.target.value))}
           aria-label="Select Step"
         >
-          {STEPS.map((step, idx) => (
-            <option key={step.id} value={idx}>
-              Step {idx + 1}: {step.title}
-            </option>
-          ))}
+          {visibleSteps.map((step) => {
+            const globalIdx = STEPS.findIndex((s) => s.id === step.id);
+            return (
+              <option key={step.id} value={globalIdx}>
+                {step.title}
+              </option>
+            );
+          })}
         </select>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}>
           <button
@@ -248,10 +309,14 @@ export const Layout: React.FC<LayoutProps> = ({
 
       <div className="app-layout">
         <Sidebar
-          currentStep={currentStep}
+          steps={visibleSteps}
+          currentStepId={currentStepId}
           onNavigate={onNavigate}
           onNavigateHome={onNavigateHome}
           onOpenAbout={() => setIsAboutOpen(true)}
+          level={characterLevel}
+          showAllSteps={showAllSteps}
+          onToggleShowAllSteps={onToggleShowAllSteps}
         />
 
         <main className="main-content">
@@ -270,7 +335,7 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
 
           <div className="step-container">{children}</div>
-          <StepFooter currentStep={currentStep} onNavigate={onNavigate} totalSteps={STEPS.length} />
+          <StepFooter steps={visibleSteps} currentStepId={currentStepId} onNavigate={onNavigate} />
         </main>
 
         <CharacterSummaryPanel

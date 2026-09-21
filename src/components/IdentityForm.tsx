@@ -100,16 +100,20 @@ export default function IdentityForm({ initialState = {} }: IdentityFormProps) {
           </select>
         </div>
         <div className="form-group">
-          <label htmlFor="char-level">Starting Level</label>
+          <label htmlFor="char-level">Character Level / Starting Level</label>
           <input
             id="char-level"
             type="number"
             className="input"
+            aria-label="Starting Level"
             min="1"
             max="20"
             value={state.level}
             onChange={handleNumberChange('level')}
           />
+          <span style={{ fontSize: '0.78rem', color: '#a0a5c0', marginTop: '0.25rem', display: 'block' }}>
+            Level 1 grants all creation tabs. Higher levels unlock level-by-level progression.
+          </span>
         </div>
       </div>
 

@@ -42,7 +42,7 @@ describe('ProficienciesSelector', () => {
   it('allows toggling armor proficiencies', () => {
     renderWithProvider();
 
-    const lightArmorInput = screen.getByLabelText('Light');
+    const lightArmorInput = screen.getByLabelText(/Light Armor/);
     fireEvent.click(lightArmorInput);
 
     expect(lightArmorInput).toBeChecked();

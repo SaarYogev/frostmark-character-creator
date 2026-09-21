@@ -229,4 +229,124 @@ describe('AOSelector', () => {
     expect(firstScoreSelect).toHaveValue('Brawn');
     expect(secondScoreSelect).toHaveValue('Vitality');
   });
+
+  it('shows only level-3 abilities in the Lv3 tab (no cross-level mixing)', () => {
+    renderWithProvider(undefined, 3);
+
+    // Select Tactics to populate ability lists
+    const tacticsCard = screen.getByRole('button', { name: /^Tactics/ });
+    fireEvent.click(tacticsCard);
+
+    // Click the Lv 3 tab filter button
+    const lv3Button = screen.getByRole('button', { name: 'Lvl 3' });
+    fireEvent.click(lv3Button);
+
+    // Lv3 primary for Tactics = Martial Archetypes — must be present
+    expect(screen.getAllByText(/Martial Archetype/)[0]).toBeInTheDocument();
+
+    // Lv1 and Lv2 abilities must NOT appear in primary (Action Surge is Lv1 Primary, Fighting style is Lv2 Primary)
+    expect(screen.queryByText('Action Surge')).not.toBeInTheDocument();
+    expect(screen.queryByText('Fighting style (Archery)')).not.toBeInTheDocument();
+  });
+
+  it('locks level 2 primary when selected before level up, but allows selecting remaining level 2 abilities as level 3 primary', () => {
+    const TestComponent: React.FC = () => {
+      const { state, dispatch } = useCharacter();
+      return (
+        <div>
+          <button
+            type="button"
+            data-testid="level-up-btn"
+            onClick={() => dispatch({ type: 'LEVEL_UP' })}
+          >
+            Level Up
+          </button>
+          <AOSelector />
+        </div>
+      );
+    };
+
+    const initialLevel1State: any = {
+      level: 1,
+      identity: { level: 1, characterName: 'Drew' },
+      ao: {
+        selectedAOs: ['Tactics'],
+        primaryAO: 'Tactics',
+        levelSelections: {
+          1: {
+            primaryAO: 'Tactics',
+            primaryAbility: 'tactics-1-primary-action-surge',
+            secondaryAbility: '',
+          },
+        },
+      },
+    };
+
+    render(
+      <CharacterProvider initialState={initialLevel1State}>
+        <TestComponent />
+      </CharacterProvider>
+    );
+
+    // 1. Level up to 2
+    fireEvent.click(screen.getByTestId('level-up-btn'));
+
+    // Switch to Level 2 tab
+    const lvl2Tab = screen.getByRole('button', { name: 'Lvl 2' });
+    fireEvent.click(lvl2Tab);
+
+    // 2. Pick a level 2 ability: Fighting style (Archery)
+    const archeryCard = screen.getByText('Fighting style (Archery)').closest('.ability-card')!;
+    fireEvent.click(archeryCard);
+    expect(archeryCard).toHaveClass('selected');
+
+    // 3. Level up to 3
+    fireEvent.click(screen.getByTestId('level-up-btn'));
+
+    // Switch to Level 2 tab again
+    fireEvent.click(screen.getByRole('button', { name: 'Lvl 2' }));
+
+    // 4. Archery was selected before level up to 3, so it MUST be locked
+    expect(archeryCard).toHaveTextContent(/🔒 Locked/);
+    // Clicking locked Archery does not unselect it
+    fireEvent.click(archeryCard);
+    expect(archeryCard).toHaveTextContent(/🔒 Locked/);
+
+    // 5. The rest of the level 2 abilities must NOT be disabled; they can be selected as Level 3 Primary
+    const defenseCard = screen.getByText('Fighting style (Defense)').closest('.ability-card')!;
+    expect(defenseCard).not.toHaveClass('disabled');
+
+    // Click Defense -> selects it as Level 3 Primary
+    fireEvent.click(defenseCard);
+    expect(defenseCard).toHaveClass('selected');
+
+    // Archery remains locked at Level 2
+    expect(archeryCard).toHaveTextContent(/🔒 Locked/);
+
+    // 6. Switch to Level 3 tab: the chosen ability is reflected in Level 3
+    const lvl3Tab = screen.getByRole('button', { name: 'Lvl 3' });
+    fireEvent.click(lvl3Tab);
+    expect(screen.getAllByText('Fighting style (Defense)')[0]).toBeInTheDocument();
+
+    // 7. In Level 3 tab, selecting Martial Archetype (Champion) replaces Defense as Level 3 Primary (no extra ability)
+    const championCard = screen.getByText('Martial Archetype (Champion)').closest('.ability-card')!;
+    fireEvent.click(championCard);
+    expect(championCard).toHaveClass('selected');
+
+    // Verify Defense is no longer selected in Level 2 tab
+    fireEvent.click(lvl2Tab);
+    const updatedDefenseCard = screen.getByText('Fighting style (Defense)').closest('.ability-card')!;
+    expect(updatedDefenseCard).not.toHaveClass('selected');
+    // Archery remains permanently locked at Level 2
+    const updatedArcheryCard = screen.getByText('Fighting style (Archery)').closest('.ability-card')!;
+    expect(updatedArcheryCard).toHaveTextContent(/🔒 Locked/);
+
+    // 8. Clicking an unchosen earlier ability in Level 2 tab selects it as Level 3 Primary, replacing Champion
+    fireEvent.click(updatedDefenseCard);
+    expect(updatedDefenseCard).toHaveClass('selected');
+
+    fireEvent.click(lvl3Tab);
+    const updatedChampionCard = screen.getByText('Martial Archetype (Champion)').closest('.ability-card')!;
+    expect(updatedChampionCard).not.toHaveClass('selected');
+  });
 });

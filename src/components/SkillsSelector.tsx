@@ -15,7 +15,7 @@ import {
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const SkillsSelector: React.FC = () => {
-  const { state, dispatch } = useCharacter();
+  const { state, dispatch, editMode } = useCharacter();
 
   const [newAcademicName, setNewAcademicName] = useState('');
   const [newArtsName, setNewArtsName] = useState('');
@@ -24,6 +24,11 @@ const SkillsSelector: React.FC = () => {
   const profBonus = getProficiencyBonus(currentLevel);
   const finalStats = getFinalCharacteristics(state, RACES);
   const maxSkillRank = getMaxSkillRank(currentLevel);
+
+  const locked = state.lockedChoices ?? {};
+  const lockedSkillRanks = locked.skillRanks ?? {};
+  const lockedAcademics = locked.academicsEntries ?? [];
+  const lockedArts = locked.artsCraftEntries ?? [];
 
   const { apLimit: totalAPLimit, apRemaining, sanitizedState: integratedState } = getGlobalAPSummary(state);
 
@@ -65,8 +70,9 @@ const SkillsSelector: React.FC = () => {
   const handleAdjustSkill = (skillName: string, delta: number) => {
     const startingRank = builtInRanks[skillName] ?? 0;
     const currentRank = skillRanks[skillName] ?? startingRank;
+    const lockedRank = (!editMode && lockedSkillRanks[skillName] !== undefined) ? lockedSkillRanks[skillName] : 0;
+    const minRank = manualSkills ? 0 : Math.max(startingRank, lockedRank);
     const nextRank = currentRank + delta;
-    const minRank = manualSkills ? 0 : startingRank;
 
     if (nextRank < minRank) return;
     if (!manualSkills && nextRank > 5) return;
@@ -96,6 +102,11 @@ const SkillsSelector: React.FC = () => {
   };
 
   const handleRemoveAcademic = (index: number) => {
+    const entry = academicsEntries[index];
+    if (!entry) return;
+    const isLockedEntry = !editMode && lockedAcademics.some((la) => la.name.toLowerCase() === entry.name.toLowerCase());
+    if (isLockedEntry) return;
+
     const nextEntries = academicsEntries.filter((_, idx) => idx !== index);
     dispatch({
       type: 'SET_SKILLS',
@@ -107,7 +118,10 @@ const SkillsSelector: React.FC = () => {
     const entry = academicsEntries[index];
     if (!entry) return;
     const builtIn = builtInAcademics[entry.name] ?? 0;
-    const minRank = manualSkills ? 0 : (index === 0 ? Math.max(1, builtIn) : 1);
+    const matchedLocked = !editMode ? lockedAcademics.find((la) => la.name.toLowerCase() === entry.name.toLowerCase()) : null;
+    const lockedRank = matchedLocked ? (matchedLocked.rank ?? 1) : 0;
+    const baseMin = index === 0 ? Math.max(1, builtIn) : 1;
+    const minRank = manualSkills ? 0 : Math.max(baseMin, lockedRank);
     const currentRank = entry.rank ?? 1;
     const nextRank = currentRank + delta;
 
@@ -140,6 +154,11 @@ const SkillsSelector: React.FC = () => {
   };
 
   const handleRemoveArts = (index: number) => {
+    const entry = artsCraftEntries[index];
+    if (!entry) return;
+    const isLockedEntry = !editMode && lockedArts.some((la) => la.name.toLowerCase() === entry.name.toLowerCase());
+    if (isLockedEntry) return;
+
     const nextEntries = artsCraftEntries.filter((_, idx) => idx !== index);
     dispatch({
       type: 'SET_SKILLS',
@@ -151,7 +170,10 @@ const SkillsSelector: React.FC = () => {
     const entry = artsCraftEntries[index];
     if (!entry) return;
     const builtIn = builtInRanks['Arts & Craft'] ?? 0;
-    const minRank = manualSkills ? 0 : (index === 0 ? Math.max(1, builtIn) : 1);
+    const matchedLocked = !editMode ? lockedArts.find((la) => la.name.toLowerCase() === entry.name.toLowerCase()) : null;
+    const lockedRank = matchedLocked ? (matchedLocked.rank ?? 1) : 0;
+    const baseMin = index === 0 ? Math.max(1, builtIn) : 1;
+    const minRank = manualSkills ? 0 : Math.max(baseMin, lockedRank);
     const currentRank = entry.rank ?? 1;
     const nextRank = currentRank + delta;
 
@@ -397,13 +419,22 @@ const SkillsSelector: React.FC = () => {
 
                   <div className="rank-controls" style={{ flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <button
-                        className="rank-btn minus"
-                        disabled={manualSkills ? rank <= 0 : rank <= builtInRank}
-                        onClick={() => handleAdjustSkill(skill.name, -1)}
-                      >
-                        −
-                      </button>
+                      {(() => {
+                        const lockedRank = (!editMode && lockedSkillRanks[skill.name] !== undefined) ? lockedSkillRanks[skill.name] : 0;
+                        const effectiveMin = manualSkills ? 0 : Math.max(builtInRank, lockedRank);
+                        const isMinusDisabled = rank <= effectiveMin;
+
+                        return (
+                          <button
+                            className="rank-btn minus"
+                            disabled={isMinusDisabled}
+                            title={!editMode && rank <= lockedRank && lockedRank > builtInRank ? 'Skill rank is locked from previous level. Enable Edit Mode to lower.' : ''}
+                            onClick={() => handleAdjustSkill(skill.name, -1)}
+                          >
+                            −
+                          </button>
+                        );
+                      })()}
                       <div className="rank-pips">
                         {[1, 2, 3, 4, 5].map((n) => (
                           <div key={n} className={`pip ${n <= rank ? 'filled' : ''}`} />

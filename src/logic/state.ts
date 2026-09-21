@@ -722,7 +722,9 @@ export function exportCharacterJSON(state: any, raceData?: any[]): string {
 }
 
 export function calculatePotentialGained(state: any, originsData: OriginData[]): number {
-  if (state.isImported && typeof state.potentialGained === 'number' && state.potentialGained > 0) {
+  const level = state.identity?.level ?? state.level ?? 1;
+  const importedAtLevel = state.importedMetadata?.level;
+  if (state.isImported && typeof importedAtLevel === 'number' && typeof state.potentialGained === 'number' && state.potentialGained > 0 && importedAtLevel === level) {
     return state.potentialGained;
   }
 
@@ -750,7 +752,6 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
     return origin?.spellcasting ?? 'Minor';
   };
 
-  const level = state.identity?.level ?? state.level ?? 1;
   let total = 0;
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
   const hasLevelSelections = levelSelections && Object.keys(levelSelections).length > 0;
@@ -764,16 +765,29 @@ export function calculatePotentialGained(state: any, originsData: OriginData[]):
       } else if (sel.secondaryAO) {
         chosenAO = sel.secondaryAO;
       } else if (sel.primaryAbility || sel.secondaryAbility) {
-        const abilityId = sel.primaryAbility || sel.secondaryAbility;
-        const abOrigin = String(abilityId).split('-')[0];
-        const matched = originsData.find((o) => o.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === abOrigin);
-        if (matched) chosenAO = matched.name;
+        const abilityId = String(sel.primaryAbility || sel.secondaryAbility).toLowerCase();
+        const matched = originsData.find((o) => {
+          const slug = o.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          return abilityId.startsWith(`${slug}-`);
+        });
+        if (matched) {
+          chosenAO = matched.name;
+        } else if (state.ao?.customAOs || state.customAOs) {
+          const customList = state.ao?.customAOs ?? state.customAOs ?? [];
+          const customMatched = customList.find((o: any) => {
+            const slug = o.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            return abilityId.startsWith(`custom-${slug}-`) || abilityId.startsWith(`${slug}-`);
+          });
+          if (customMatched) chosenAO = customMatched.name;
+        }
       }
     }
 
     if (!chosenAO) {
-      const fallbackPrimary = state.ao?.primaryAO ?? state.primaryAO;
-      const fallbackSecondary = state.ao?.secondaryAO ?? state.secondaryAO;
+      // Prioritize primary AO configured on level 1 or character root before arbitrary pool origins
+      const lvl1Primary = hasLevelSelections && levelSelections[1]?.primaryAO;
+      const fallbackPrimary = lvl1Primary || state.ao?.primaryAO || state.primaryAO;
+      const fallbackSecondary = (hasLevelSelections && levelSelections[1]?.secondaryAO) || state.ao?.secondaryAO || state.secondaryAO;
       const poolAOs = state.ao?.selectedAOs ?? state.selectedAOs ?? [];
 
       const candidateOrigins: string[] = [];

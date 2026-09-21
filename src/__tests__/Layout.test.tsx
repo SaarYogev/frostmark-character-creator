@@ -32,9 +32,9 @@ describe('Layout', () => {
   it('highlights the current step', () => {
     renderLayout(1);
 
-    // Step 1 (Race & Subrace) should be active
-    const raceStep = screen.getByText('Race & Subrace');
-    expect(raceStep.parentElement).toHaveClass('active');
+    const sidebar = document.getElementById('step-nav')!;
+    const raceStep = sidebar.querySelector('#nav-race')!;
+    expect(raceStep).toHaveClass('active');
   });
 
   it('renders main content area', () => {
@@ -82,8 +82,8 @@ describe('Layout', () => {
   it('calls onNavigate when clicking step navigation', () => {
     const mockNavigate = vi.fn();
     renderLayout(0, mockNavigate);
-
-    const raceStep = screen.getByText('Race & Subrace');
+    const sidebar = document.getElementById('step-nav')!;
+    const raceStep = sidebar.querySelector('#nav-race')!;
     fireEvent.click(raceStep);
 
     expect(mockNavigate).toHaveBeenCalledWith(1);
@@ -126,6 +126,46 @@ describe('Layout', () => {
     const mobileLogo = screen.getByAltText('Frostmark Mobile');
     fireEvent.click(mobileLogo);
     expect(mockNavigateHome).toHaveBeenCalledTimes(2);
+  });
+
+  it('filters out one-time creation steps when character level is greater than 1', () => {
+    render(
+      <CharacterProvider initialState={{ identity: { characterName: 'Test', playerName: '', campaignPowerLevel: 'Heroic', level: 2, personalityBackstory: '', appearance: {} } }}>
+        <Layout currentStep={0} onNavigate={() => {}}>
+          <div>Level 2 Content</div>
+        </Layout>
+      </CharacterProvider>
+    );
+
+    const sidebar = document.getElementById('step-nav')!;
+
+    expect(sidebar.querySelector('#nav-equipment')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-race')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-background')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-abilities')).not.toBeInTheDocument();
+
+    expect(sidebar.querySelector('#nav-identity')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-ability-origins')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-skills')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-proficiencies')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-spellslots')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-spellcasting')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-finishing')).toBeInTheDocument();
+  });
+
+  it('shows all steps when showAllSteps is true even at level > 1', () => {
+    render(
+      <CharacterProvider initialState={{ identity: { characterName: 'Test', playerName: '', campaignPowerLevel: 'Heroic', level: 3, personalityBackstory: '', appearance: {} } }}>
+        <Layout currentStep={0} onNavigate={() => {}} showAllSteps={true}>
+          <div>Level 3 Edit Content</div>
+        </Layout>
+      </CharacterProvider>
+    );
+
+    const sidebar = document.getElementById('step-nav')!;
+    STEPS.forEach((step) => {
+      expect(sidebar.querySelector(`#nav-${step.id}`)).toBeInTheDocument();
+    });
   });
 });
 

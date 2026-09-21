@@ -12,6 +12,26 @@ import { AOState, DEFAULT_AO_STATE } from './AO';
 import { SkillsState, DEFAULT_SKILLS_STATE } from './Skills';
 import { deduplicateEquipmentList } from '../logic/equipmentUtils';
 
+export interface LockedChoices {
+  skillRanks?: Record<string, number>;
+  academicsEntries?: { name: string; rank: number }[];
+  artsCraftEntries?: { name: string; rank: number }[];
+  cantrips?: string[];
+  spells?: { name: string; level: number }[];
+  spellSlots?: Record<number, number>;
+  savingThrowsProficient?: Record<string, boolean>;
+  armorProficiencies?: Record<string, boolean>;
+  weaponProficiencies?: string[];
+  poolAOs?: string[];
+  levelSelections?: Record<number | string, {
+    primaryAbility?: string;
+    secondaryAbility?: string;
+    primaryAO?: string;
+    secondaryAO?: string;
+    upgradeChoices?: Record<string, string>;
+  }>;
+}
+
 export interface CharacterState {
   campaignPowerLevel: 'Mundane' | 'Heroic' | 'Champion';
   identity: IdentityState;
@@ -42,6 +62,7 @@ export interface CharacterState {
   potentialGained?: number;
   combat?: Record<string, any>;
   customFeatures?: any[];
+  lockedChoices?: LockedChoices;
   importedPdfBytes?: Uint8Array | ArrayBuffer | string;
   importedMetadata?: {
     version?: number;
@@ -306,6 +327,17 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         manualAbilityScores: p.manualAbilityScores ?? state.manualAbilityScores ?? false,
         manualHP: p.manualHP ?? state.manualHP ?? false,
         customFeatures: p.customFeatures ?? state.customFeatures ?? [],
+        lockedChoices: {
+          ...(p.lockedChoices ?? state.lockedChoices ?? {}),
+          levelSelections: {
+            ...((p.lockedChoices ?? state.lockedChoices)?.levelSelections ?? {}),
+            ...Object.fromEntries(
+              Object.entries(levelSelections).filter(
+                ([lvlStr]) => parseInt(lvlStr, 10) < (p.identity?.level ?? p.level ?? 1)
+              )
+            ),
+          },
+        },
         importedPdfBytes: p.importedPdfBytes ?? state.importedPdfBytes,
         importedMetadata: p.importedMetadata ?? state.importedMetadata,
         accomplishmentPointsRemaining: p.accomplishmentPointsRemaining ?? p.importedMetadata?.accomplishmentPointsRemaining ?? state.accomplishmentPointsRemaining,
@@ -329,6 +361,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...state,
         characterName: nextIdentity.characterName ?? '',
         playerName: nextIdentity.playerName ?? '',
+        level: nextIdentity.level ?? state.level ?? 1,
+        campaignPowerLevel: nextIdentity.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
         identity: nextIdentity,
       };
     }

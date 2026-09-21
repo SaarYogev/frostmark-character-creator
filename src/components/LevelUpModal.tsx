@@ -119,7 +119,12 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, onL
               style={{ flex: 1, fontSize: '0.88rem', padding: '0.5rem' }}
               onClick={() => setHpChoice('average')}
             >
-              Average ({Math.ceil(preview.hd / 2)} + {preview.vitMod >= 0 ? `+${preview.vitMod}` : preview.vitMod})
+              Average ({Math.ceil(preview.hd / 2)} {(() => {
+                const modNum = typeof preview.vitMod === 'number'
+                  ? preview.vitMod
+                  : parseInt(String(preview.vitMod).replace(/^\+/, ''), 10) || 0;
+                return `${modNum >= 0 ? '+' : '-'} ${Math.abs(modNum)}`;
+              })()})
             </button>
             <button
               type="button"
@@ -224,6 +229,25 @@ export const LevelUpModal: React.FC<LevelUpModalProps> = ({ isOpen, onClose, onL
             </li>
             <li>New Ability Origin selection unlocked for Level {preview.targetLevel}.</li>
           </ul>
+        </div>
+
+        <div
+          className="level-up-lockout-warning"
+          style={{
+            background: 'rgba(239, 68, 68, 0.12)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            borderRadius: '10px',
+            padding: '0.85rem 1.15rem',
+            marginBottom: '1.5rem',
+            fontSize: '0.86rem',
+            lineHeight: 1.5,
+            color: '#fca5a5',
+          }}
+        >
+          <strong style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.25rem' }}>
+            ⚠️ Permanent Choice Lockout Warning
+          </strong>
+          Leveling up locks in your currently acquired skill ranks, spells, proficiencies, equipment, and previous Ability Origin choices. Frostmark rules do not allow resetting or replacing acquired abilities during standard adventure progression (though full adjustments remain available anytime via <strong>Edit Mode</strong>).
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>

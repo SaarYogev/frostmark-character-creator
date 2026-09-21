@@ -4,9 +4,14 @@ import { CHARACTERISTICS, WEAPON_PROFICIENCY_COSTS, SAVE_PROFICIENCY_COSTS } fro
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const ProficienciesSelector: React.FC = () => {
-  const { state, dispatch } = useCharacter();
+  const { state, dispatch, editMode } = useCharacter();
 
   const { apLimit, apRemaining } = getGlobalAPSummary(state);
+
+  const locked = state.lockedChoices ?? {};
+  const lockedSaves = locked.savingThrowsProficient ?? {};
+  const lockedArmor = locked.armorProficiencies ?? {};
+  const lockedWeapons = locked.weaponProficiencies ?? [];
 
   const savingThrowsProficient = state.proficiencies?.savingThrowsProficient ?? (state as any).savingThrowsProficient ?? {};
   const armorProficiencies = state.proficiencies?.armorProficiencies ?? (state as any).armorProficiencies ?? {};
@@ -164,11 +169,14 @@ const ProficienciesSelector: React.FC = () => {
           <div className="proficiency-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '0.75rem' }}>
             {CHARACTERISTICS.map((c) => {
               const isChecked = !!savingThrowsProficient[c.key];
+              const isLocked = !editMode && !manualProficiencies && !!lockedSaves[c.key];
               const incrementalCost = (SAVE_PROFICIENCY_COSTS as any)[c.key] || 1;
               const canAfford = isChecked || apRemaining >= incrementalCost;
               const limitReached = !isChecked && currentSavesCount >= 3 && !manualProficiencies;
-              const isDisabled = (!isChecked && !canAfford && !manualProficiencies) || limitReached;
-              const tooltip = limitReached
+              const isDisabled = isLocked || (!isChecked && !canAfford && !manualProficiencies) || limitReached;
+              const tooltip = isLocked
+                ? 'Proficiency acquired at a previous level is locked. Enable Full Edit Mode to remove.'
+                : limitReached
                 ? 'Maximum 3 saving throw proficiencies allowed.'
                 : isDisabled
                 ? `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`
@@ -211,47 +219,145 @@ const ProficienciesSelector: React.FC = () => {
         <div className="section-block" style={{ marginBottom: '2rem' }}>
           <h3 className="section-title">Armor Proficiencies</h3>
           <p className="form-hint" style={{ marginBottom: '0.75rem', color: '#a0a5c0', fontSize: '0.85rem' }}>
-            Light=1 AP, Medium=2 AP, Heavy=3 AP, Shields=1 AP
+            Armor proficiency is a tiered progression (Light = 1 AP, Medium = 2 AP, Heavy = 3 AP). Higher tiers include all lower tiers. Shields cost 1 AP independently.
           </p>
-          <div className="proficiency-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.75rem' }}>
-            {['Light', 'Medium', 'Heavy', 'Shields'].map((a) => {
-              const isChecked = !!armorProficiencies[a];
-              const currentCost = getArmorCost(armorProficiencies);
-              const nextCost = getArmorCost({ ...armorProficiencies, [a]: true });
-              const incrementalCost = Math.max(0, nextCost - currentCost);
-              const canAfford = isChecked || apRemaining >= incrementalCost;
-              const isDisabled = !isChecked && !canAfford && !manualProficiencies;
-              const tooltip = isDisabled ? `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.` : '';
+          {(() => {
+            const currentTier: 'None' | 'Light' | 'Medium' | 'Heavy' = armorProficiencies.Heavy
+              ? 'Heavy'
+              : armorProficiencies.Medium
+              ? 'Medium'
+              : armorProficiencies.Light
+              ? 'Light'
+              : 'None';
 
-              return (
-                <label
-                  key={a}
-                  className={`prof-toggle ${isChecked ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
-                  id={`armor-toggle-${a}`}
-                  title={tooltip}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.6rem 0.85rem',
-                    background: isChecked ? 'rgba(74, 144, 226, 0.2)' : 'var(--bg-elevated, rgba(255,255,255,0.04))',
-                    border: `1px solid ${isChecked ? 'var(--accent-color, #4a90e2)' : 'var(--border-color, rgba(255,255,255,0.1))'}`,
-                    borderRadius: '6px',
-                    cursor: isDisabled ? 'not-allowed' : 'pointer',
-                    opacity: isDisabled ? 0.4 : 1,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isChecked}
-                    disabled={isDisabled}
-                    onChange={(e) => handleToggleArmor(a, e.target.checked)}
-                  />
-                  <span>{a}</span>
-                </label>
-              );
-            })}
-          </div>
+            const lockedTier: 'None' | 'Light' | 'Medium' | 'Heavy' = lockedArmor.Heavy
+              ? 'Heavy'
+              : lockedArmor.Medium
+              ? 'Medium'
+              : lockedArmor.Light
+              ? 'Light'
+              : 'None';
+
+            const tierOrder = { None: 0, Light: 1, Medium: 2, Heavy: 3 };
+            const currentTierCost = tierOrder[currentTier];
+
+            const handleSetTier = (tier: 'None' | 'Light' | 'Medium' | 'Heavy') => {
+              const targetCost = tierOrder[tier];
+              const nextArmor = {
+                ...armorProficiencies,
+                Light: targetCost >= 1,
+                Medium: targetCost >= 2,
+                Heavy: targetCost >= 3,
+              };
+              dispatch({
+                type: 'SET_PROFICIENCIES',
+                payload: { armorProficiencies: nextArmor },
+              });
+              dispatch({
+                type: 'SET_STATE',
+                payload: { armorProficiencies: nextArmor },
+              } as any);
+            };
+
+            const tiers: { id: 'None' | 'Light' | 'Medium' | 'Heavy'; label: string; desc: string; cost: number }[] = [
+              { id: 'None', label: 'No Armor', desc: '0 AP', cost: 0 },
+              { id: 'Light', label: 'Light Armor', desc: '1 AP', cost: 1 },
+              { id: 'Medium', label: 'Medium Armor', desc: '2 AP (includes Light)', cost: 2 },
+              { id: 'Heavy', label: 'Heavy Armor', desc: '3 AP (includes Light & Med)', cost: 3 },
+            ];
+
+            const isShieldChecked = !!armorProficiencies.Shields;
+            const isShieldLocked = !editMode && !manualProficiencies && !!lockedArmor.Shields;
+            const canAffordShield = isShieldChecked || apRemaining >= 1;
+            const isShieldDisabled = isShieldLocked || (!isShieldChecked && !canAffordShield && !manualProficiencies);
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                  {tiers.map((t) => {
+                    const isSelected = currentTier === t.id;
+                    const isLocked = !editMode && !manualProficiencies && tierOrder[t.id] < tierOrder[lockedTier];
+                    const incrementalCost = Math.max(0, t.cost - currentTierCost);
+                    const canAfford = isSelected || apRemaining >= incrementalCost;
+                    const isDisabled = isLocked || (!isSelected && !canAfford && !manualProficiencies);
+
+                    let tooltip = '';
+                    if (isLocked) {
+                      tooltip = `Armor tier was locked at ${lockedTier} at a previous level. Enable Full Edit Mode to downgrade.`;
+                    } else if (!canAfford && !manualProficiencies) {
+                      tooltip = `Requires ${incrementalCost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`;
+                    }
+
+                    return (
+                      <label
+                        key={t.id}
+                        className={`prof-toggle ${isSelected ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                        id={`armor-tier-${t.id.toLowerCase()}`}
+                        title={tooltip}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.65rem',
+                          padding: '0.75rem 0.9rem',
+                          background: isSelected ? 'rgba(74, 144, 226, 0.2)' : 'var(--bg-elevated, rgba(255,255,255,0.04))',
+                          border: `1px solid ${isSelected ? 'var(--accent-color, #4a90e2)' : 'var(--border-color, rgba(255,255,255,0.1))'}`,
+                          borderRadius: '6px',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          opacity: isDisabled ? 0.4 : 1,
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="armor-tier"
+                          aria-label={t.label}
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={() => handleSetTier(t.id)}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>
+                            <span>{t.label}</span>
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: '#a0a5c0' }}>{t.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Independent Shields Toggle */}
+                <div style={{ maxWidth: '280px' }}>
+                  <label
+                    className={`prof-toggle ${isShieldChecked ? 'active' : ''} ${isShieldDisabled ? 'disabled' : ''}`}
+                    id="armor-toggle-Shields"
+                    title={isShieldLocked ? 'Shield proficiency acquired at a previous level is locked. Enable Full Edit Mode to remove.' : isShieldDisabled ? 'Requires 1 AP.' : ''}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      padding: '0.75rem 0.9rem',
+                      background: isShieldChecked ? 'rgba(74, 144, 226, 0.2)' : 'var(--bg-elevated, rgba(255,255,255,0.04))',
+                      border: `1px solid ${isShieldChecked ? 'var(--accent-color, #4a90e2)' : 'var(--border-color, rgba(255,255,255,0.1))'}`,
+                      borderRadius: '6px',
+                      cursor: isShieldDisabled ? 'not-allowed' : 'pointer',
+                      opacity: isShieldDisabled ? 0.4 : 1,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isShieldChecked}
+                      disabled={isShieldDisabled}
+                      onChange={(e) => handleToggleArmor('Shields', e.target.checked)}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#fff' }}>Shields</div>
+                      <div style={{ fontSize: '0.75rem', color: '#a0a5c0' }}>+1 AP</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Weapon Proficiencies */}
@@ -263,9 +369,14 @@ const ProficienciesSelector: React.FC = () => {
           <div className="proficiency-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
             {allWeaponGroups.map((wg) => {
               const isChecked = (Array.isArray(weaponProficiencies) ? weaponProficiencies : []).includes(wg.name);
+              const isLocked = !editMode && !manualProficiencies && lockedWeapons.includes(wg.name);
               const canAfford = isChecked || apRemaining >= wg.cost;
-              const isDisabled = !isChecked && !canAfford && !manualProficiencies;
-              const tooltip = isDisabled ? `Requires ${wg.cost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.` : '';
+              const isDisabled = isLocked || (!isChecked && !canAfford && !manualProficiencies);
+              const tooltip = isLocked
+                ? 'Weapon proficiency acquired at a previous level is locked. Enable Full Edit Mode to remove.'
+                : isDisabled
+                ? `Requires ${wg.cost} AP, but you only have ${apRemaining} remaining. Set to manual to bypass.`
+                : '';
               const sanitizeId = wg.name.replace(/\s+/g, '-');
 
               return (

@@ -33,7 +33,7 @@ function BuilderContent({
   setActiveMeta: (meta: SavedCharacterMeta | null) => void;
   autoOpenLevelUp?: boolean;
 }) {
-  const { state } = useCharacter();
+  const { state, editMode, setEditMode } = useCharacter();
   const [saveStatus, setSaveStatus] = useState<StorageStatus>('idle');
   const [isCloud, setIsCloud] = useState<boolean>(isGoogleSignedIn());
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -133,6 +133,8 @@ function BuilderContent({
       isCloud={isCloud}
       onRetrySave={() => triggerSave(state)}
       autoOpenLevelUp={autoOpenLevelUp}
+      showAllSteps={editMode}
+      onToggleShowAllSteps={() => setEditMode((prev) => !prev)}
     >
       {renderStep()}
     </Layout>
