@@ -329,6 +329,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         ...state,
         characterName: nextIdentity.characterName ?? '',
         playerName: nextIdentity.playerName ?? '',
+        level: nextIdentity.level ?? state.level ?? 1,
+        campaignPowerLevel: nextIdentity.campaignPowerLevel ?? state.campaignPowerLevel ?? 'Heroic',
         identity: nextIdentity,
       };
     }

@@ -19,3 +19,25 @@ export const STEPS: Step[] = [
 ];
 
 export type StepId = Step['id'];
+
+/**
+ * Returns the visible builder steps depending on the character level and edit mode.
+ * Level 1 displays all steps for full character creation.
+ * Level 2+ focuses on progression steps (Identity, AO, Skills, Proficiencies, Spell Slots, Spell Selection, Finishing)
+ * while hiding one-time creation steps (Race, Background, Base Ability Scores, Equipment) unless showAllSteps is enabled.
+ */
+export function getStepsForLevel(level: number = 1, showAllSteps: boolean = false): Step[] {
+  if (showAllSteps || level <= 1) {
+    return STEPS;
+  }
+  const levelUpStepIds: StepId[] = [
+    'identity',
+    'ability-origins',
+    'skills',
+    'proficiencies',
+    'spellslots',
+    'spellcasting',
+    'finishing',
+  ];
+  return STEPS.filter((step) => levelUpStepIds.includes(step.id));
+}

@@ -127,6 +127,43 @@ describe('Layout', () => {
     fireEvent.click(mobileLogo);
     expect(mockNavigateHome).toHaveBeenCalledTimes(2);
   });
+
+  it('filters out one-time creation steps when character level is greater than 1', () => {
+    render(
+      <CharacterProvider initialState={{ identity: { characterName: 'Test', playerName: '', campaignPowerLevel: 'Heroic', level: 2, personalityBackstory: '', appearance: {} } }}>
+        <Layout currentStep={0} onNavigate={() => {}}>
+          <div>Level 2 Content</div>
+        </Layout>
+      </CharacterProvider>
+    );
+
+    expect(screen.queryByText('Equipment')).not.toBeInTheDocument();
+    expect(screen.queryByText('Race & Subrace')).not.toBeInTheDocument();
+    expect(screen.queryByText('Background')).not.toBeInTheDocument();
+    expect(screen.queryByText('Ability Scores')).not.toBeInTheDocument();
+
+    expect(screen.getAllByText('Identity')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Ability Origins')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Skills')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Proficiencies & AP')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Spell Slots')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Spell Selection')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Finishing Touches')[0]).toBeInTheDocument();
+  });
+
+  it('shows all steps when showAllSteps is true even at level > 1', () => {
+    render(
+      <CharacterProvider initialState={{ identity: { characterName: 'Test', playerName: '', campaignPowerLevel: 'Heroic', level: 3, personalityBackstory: '', appearance: {} } }}>
+        <Layout currentStep={0} onNavigate={() => {}} showAllSteps={true}>
+          <div>Level 3 Edit Content</div>
+        </Layout>
+      </CharacterProvider>
+    );
+
+    STEPS.forEach((step) => {
+      expect(screen.getAllByText(step.title)[0]).toBeInTheDocument();
+    });
+  });
 });
 
 

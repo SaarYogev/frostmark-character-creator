@@ -36,6 +36,7 @@ function BuilderContent({
   const { state } = useCharacter();
   const [saveStatus, setSaveStatus] = useState<StorageStatus>('idle');
   const [isCloud, setIsCloud] = useState<boolean>(isGoogleSignedIn());
+  const [showAllSteps, setShowAllSteps] = useState<boolean>(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Keep ref to activeMeta to prevent auto-save from unmounting context tree
@@ -133,6 +134,8 @@ function BuilderContent({
       isCloud={isCloud}
       onRetrySave={() => triggerSave(state)}
       autoOpenLevelUp={autoOpenLevelUp}
+      showAllSteps={showAllSteps}
+      onToggleShowAllSteps={() => setShowAllSteps((prev) => !prev)}
     >
       {renderStep()}
     </Layout>

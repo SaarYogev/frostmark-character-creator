@@ -27,6 +27,7 @@ const AOSelector: React.FC = () => {
   const [customAbilityFullDesc, setCustomAbilityFullDesc] = useState('');
 
   const currentLevel = state.identity?.level ?? 1;
+  const [activeLevelFilter, setActiveLevelFilter] = useState<number | 'all'>(currentLevel > 1 ? currentLevel : 'all');
   const selectedAOs = state.ao?.selectedAOs ?? [];
   const customAOs = state.ao?.customAOs ?? [];
   const customAbilities = (state.ao as any)?.customAbilities ?? [];
@@ -674,10 +675,37 @@ const AOSelector: React.FC = () => {
             <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${detailsWidth}`, gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* Left: Level Selections */}
             <div className="ao-levels-column" style={{ flex: 1 }}>
-              <h3 className="section-title">2. Level Selections (Levels 1 to {currentLevel})</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                <h3 className="section-title" style={{ margin: 0 }}>2. Level Selections</h3>
+                {currentLevel > 1 && (
+                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${activeLevelFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                      onClick={() => setActiveLevelFilter('all')}
+                    >
+                      All (1–{currentLevel})
+                    </button>
+                    {Array.from({ length: currentLevel }, (_, idx) => idx + 1).map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        className={`btn btn-sm ${activeLevelFilter === lvl ? 'btn-primary' : 'btn-secondary'}`}
+                        style={{ fontSize: '0.75rem', padding: '0.2rem 0.55rem' }}
+                        onClick={() => setActiveLevelFilter(lvl)}
+                      >
+                        Lvl {lvl}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="ao-levels-accordion">
-                {Array.from({ length: currentLevel }, (_, idx) => idx + 1).map((lvl) => {
+                {Array.from({ length: currentLevel }, (_, idx) => idx + 1)
+                  .filter((lvl) => activeLevelFilter === 'all' || activeLevelFilter === lvl)
+                  .map((lvl) => {
                   const levelSelections = state.ao?.levelSelections ?? {};
                   const sel = levelSelections[lvl] ?? {
                     primaryAO: '',
