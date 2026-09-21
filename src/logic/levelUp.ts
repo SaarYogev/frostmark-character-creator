@@ -209,6 +209,41 @@ export function levelUp(
     }
   }
 
+  const prevLocked = state.lockedChoices ?? {};
+  const currentSkills = state.skills?.skillRanks ?? (state as any).skillRanks ?? {};
+  const currentAcademics = state.skills?.academicsEntries ?? (state as any).academicsEntries ?? [];
+  const currentArts = state.skills?.artsCraftEntries ?? (state as any).artsCraftEntries ?? [];
+  const currentCantrips = (state as any).spellcasting?.cantrips ?? [];
+  const currentSpells = (state as any).spellcasting?.spells ?? [];
+  const currentSlots = (state as any).spellcasting?.slots ?? {};
+  const currentSaves = (state as any).proficiencies?.savingThrowsProficient ?? (state as any).savingThrowsProficient ?? {};
+  const currentArmor = (state as any).proficiencies?.armorProficiencies ?? (state as any).armorProficiencies ?? {};
+  const currentWeapons = (state as any).proficiencies?.weaponProficiencies ?? (state as any).weaponProficiencies ?? [];
+  const currentPoolAOs = state.ao?.selectedAOs ?? (state as any).selectedAOs ?? [];
+
+  const nextLockedChoices = {
+    ...prevLocked,
+    skillRanks: { ...(prevLocked.skillRanks ?? {}), ...currentSkills },
+    academicsEntries: [...(prevLocked.academicsEntries ?? currentAcademics)],
+    artsCraftEntries: [...(prevLocked.artsCraftEntries ?? currentArts)],
+    cantrips: Array.from(new Set([...(prevLocked.cantrips ?? []), ...currentCantrips])),
+    spells: (() => {
+      const existing = prevLocked.spells ?? [];
+      const map = new Map(existing.map((s: any) => [s.name, s]));
+      currentSpells.forEach((s: any) => map.set(s.name, s));
+      return Array.from(map.values());
+    })(),
+    spellSlots: { ...(prevLocked.spellSlots ?? {}), ...currentSlots },
+    savingThrowsProficient: { ...(prevLocked.savingThrowsProficient ?? {}), ...currentSaves },
+    armorProficiencies: { ...(prevLocked.armorProficiencies ?? {}), ...currentArmor },
+    weaponProficiencies: Array.from(new Set([...(prevLocked.weaponProficiencies ?? []), ...currentWeapons])),
+    poolAOs: Array.from(new Set([...(prevLocked.poolAOs ?? []), ...currentPoolAOs])),
+    levelSelections: {
+      ...(prevLocked.levelSelections ?? {}),
+      ...(prevLevelSelections ?? {}),
+    },
+  };
+
   return {
     ...state,
     level: newLevel,
@@ -226,6 +261,7 @@ export function levelUp(
       ...(state.identity ?? {}),
       level: newLevel,
     },
+    lockedChoices: nextLockedChoices,
     ...(nextSpellcasting ? { spellcasting: nextSpellcasting } : {}),
   };
 }
@@ -235,10 +271,20 @@ function rollHitDie(hd: number): number {
 }
 
 function getPotentialGain(state: any, level: number, originsData: OriginData[]): number {
-  const levelPrimaryAO = state.levelSelections?.[level]?.primaryAO || state.primaryAO;
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections ?? {};
+  const levelPrimaryAO =
+    levelSelections[level]?.primaryAO ||
+    levelSelections[1]?.primaryAO ||
+    state.ao?.primaryAO ||
+    state.primaryAO ||
+    state.ao?.selectedAOs?.[0] ||
+    state.selectedAOs?.[0] ||
+    '';
   const origin = levelPrimaryAO === 'Custom'
-    ? state.customPrimaryAO
-    : (originsData.find(o => o.name === levelPrimaryAO) ?? state.customAOs?.find((o: any) => o.name === levelPrimaryAO));
+    ? (state.ao?.customPrimaryAO ?? state.customPrimaryAO)
+    : (originsData.find(o => o.name === levelPrimaryAO) ??
+       state.ao?.customAOs?.find((o: any) => o.name === levelPrimaryAO) ??
+       state.customAOs?.find((o: any) => o.name === levelPrimaryAO));
 
   const tag: 'Minor' | 'Moderate' | 'Major' = origin?.spellcasting ?? 'Minor';
 

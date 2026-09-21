@@ -100,11 +100,12 @@ export default function IdentityForm({ initialState = {} }: IdentityFormProps) {
           </select>
         </div>
         <div className="form-group">
-          <label htmlFor="char-level">Character Level</label>
+          <label htmlFor="char-level">Character Level / Starting Level</label>
           <input
             id="char-level"
             type="number"
             className="input"
+            aria-label="Starting Level"
             min="1"
             max="20"
             value={state.level}

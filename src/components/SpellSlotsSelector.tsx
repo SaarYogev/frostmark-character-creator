@@ -6,9 +6,11 @@ import { getSpellSlotsForLevel } from '../logic/pdf';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const SpellSlotsSelector: React.FC = () => {
-  const { state, dispatch } = useCharacter();
+  const { state, dispatch, editMode } = useCharacter();
 
   const { sanitizedState } = getGlobalAPSummary(state);
+
+  const lockedSlots: Record<number, number> = state.lockedChoices?.spellSlots ?? {};
 
   const spellcasting = (state as any).spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
@@ -28,7 +30,8 @@ const SpellSlotsSelector: React.FC = () => {
   const handleSlotChange = (lvl: number, delta: number) => {
     const current = slots[lvl] ?? 0;
     const limit = getSpellSlotsForLevel(lvl);
-    const next = Math.max(0, Math.min(current + delta, manualSpells ? 999 : limit));
+    const minAllowed = (!editMode && !manualSpells && lockedSlots[lvl] !== undefined) ? lockedSlots[lvl] : 0;
+    const next = Math.max(minAllowed, Math.min(current + delta, manualSpells ? 999 : limit));
     updateSpellcasting({ slots: { ...slots, [lvl]: next } });
   };
 
@@ -89,12 +92,17 @@ const SpellSlotsSelector: React.FC = () => {
               const limit = getSpellSlotsForLevel(lvl);
               const current = slots[lvl] ?? 0;
               const cost = 10 * lvl;
+              const lockedMin = (!editMode && !manualSpells && lockedSlots[lvl] !== undefined) ? lockedSlots[lvl] : 0;
               const plusDisabled = current >= limit && !manualSpells || (potentialRemaining < cost && !manualSpells);
-              const minusDisabled = current <= 0;
+              const minusDisabled = current <= lockedMin;
 
               let tooltip = '';
               if (current >= limit && !manualSpells) tooltip = `Max slots (${limit}) reached.`;
               else if (potentialRemaining < cost && !manualSpells) tooltip = `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
+
+              const minusTooltip = !editMode && current <= lockedMin && lockedMin > 0
+                ? `Spell slots (${lockedMin}) are locked from a previous level. Enable Full Edit Mode to reduce.`
+                : '';
 
               return (
                 <div key={lvl} className="slot-buy-row" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '0.5rem 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -103,7 +111,7 @@ const SpellSlotsSelector: React.FC = () => {
                     <span style={{ fontSize: '0.75rem', color: '#a0a5c0' }}>Cost: {cost} Pot</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <button className="rank-btn" disabled={minusDisabled} onClick={() => handleSlotChange(lvl, -1)}>−</button>
+                    <button className="rank-btn" disabled={minusDisabled} title={minusTooltip} onClick={() => handleSlotChange(lvl, -1)}>−</button>
                     <span style={{ fontWeight: 'bold', fontSize: '1rem', minWidth: '2.5rem', textAlign: 'center' }}>{current} / {limit}</span>
                     <button className="rank-btn" disabled={plusDisabled} title={tooltip} onClick={() => handleSlotChange(lvl, 1)}>+</button>
                   </div>

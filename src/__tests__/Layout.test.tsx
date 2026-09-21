@@ -32,9 +32,9 @@ describe('Layout', () => {
   it('highlights the current step', () => {
     renderLayout(1);
 
-    // Step 1 (Race & Subrace) should be active
-    const raceStep = screen.getByText('Race & Subrace');
-    expect(raceStep.parentElement).toHaveClass('active');
+    const sidebar = document.getElementById('step-nav')!;
+    const raceStep = sidebar.querySelector('#nav-race')!;
+    expect(raceStep).toHaveClass('active');
   });
 
   it('renders main content area', () => {
@@ -82,8 +82,8 @@ describe('Layout', () => {
   it('calls onNavigate when clicking step navigation', () => {
     const mockNavigate = vi.fn();
     renderLayout(0, mockNavigate);
-
-    const raceStep = screen.getByText('Race & Subrace');
+    const sidebar = document.getElementById('step-nav')!;
+    const raceStep = sidebar.querySelector('#nav-race')!;
     fireEvent.click(raceStep);
 
     expect(mockNavigate).toHaveBeenCalledWith(1);
@@ -137,18 +137,20 @@ describe('Layout', () => {
       </CharacterProvider>
     );
 
-    expect(screen.queryByText('Equipment')).not.toBeInTheDocument();
-    expect(screen.queryByText('Race & Subrace')).not.toBeInTheDocument();
-    expect(screen.queryByText('Background')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ability Scores')).not.toBeInTheDocument();
+    const sidebar = document.getElementById('step-nav')!;
 
-    expect(screen.getAllByText('Identity')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Ability Origins')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Skills')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Proficiencies & AP')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Spell Slots')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Spell Selection')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('Finishing Touches')[0]).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-equipment')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-race')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-background')).not.toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-abilities')).not.toBeInTheDocument();
+
+    expect(sidebar.querySelector('#nav-identity')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-ability-origins')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-skills')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-proficiencies')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-spellslots')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-spellcasting')).toBeInTheDocument();
+    expect(sidebar.querySelector('#nav-finishing')).toBeInTheDocument();
   });
 
   it('shows all steps when showAllSteps is true even at level > 1', () => {
@@ -160,8 +162,9 @@ describe('Layout', () => {
       </CharacterProvider>
     );
 
+    const sidebar = document.getElementById('step-nav')!;
     STEPS.forEach((step) => {
-      expect(screen.getAllByText(step.title)[0]).toBeInTheDocument();
+      expect(sidebar.querySelector(`#nav-${step.id}`)).toBeInTheDocument();
     });
   });
 });

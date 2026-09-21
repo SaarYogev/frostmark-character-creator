@@ -86,17 +86,18 @@ const Sidebar: React.FC<{
           <button
             type="button"
             className="btn btn-secondary"
+            id="btn-toggle-edit-mode"
             onClick={onToggleShowAllSteps}
             style={{
               width: '100%',
               fontSize: '0.78rem',
-              padding: '0.35rem 0.6rem',
+              padding: '0.4rem 0.6rem',
               borderRadius: '6px',
               border: showAllSteps ? '1px solid var(--accent-gold, #f59e0b)' : '1px solid var(--border-subtle)',
               color: showAllSteps ? 'var(--accent-gold, #f59e0b)' : '#a0a5c0',
             }}
           >
-            {showAllSteps ? '🔒 Focus Level Up Tabs' : '🔓 Show All Tabs (Edit Mode)'}
+            {showAllSteps ? '🔒 Standard Progression Mode' : '🔓 Full Edit Mode (Unlock All)'}
           </button>
         </div>
       )}

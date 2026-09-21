@@ -42,9 +42,13 @@ const CASTING_TIMES = ['Action','Bonus Action','Reaction','Minute+'];
 const DAMAGE_TYPES = ['Acid','Cold','Fire','Force','Lightning','Necrotic','Poison','Psychic','Radiant','Thunder','Bludgeoning','Piercing','Slashing'];
 
 const SpellsSelector: React.FC = () => {
-  const { state, dispatch } = useCharacter();
+  const { state, dispatch, editMode } = useCharacter();
 
   const { sanitizedState } = getGlobalAPSummary(state);
+
+  const lockedChoices = state.lockedChoices ?? {};
+  const lockedCantrips: string[] = lockedChoices.cantrips ?? [];
+  const lockedSpells: { name: string; level: number }[] = lockedChoices.spells ?? [];
 
   const spellcasting = (state as any).spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
@@ -206,9 +210,20 @@ const SpellsSelector: React.FC = () => {
     return Math.max(0, simSpent - potentialSpent);
   };
 
+  const isSpellLocked = (spell: SpellEntry): boolean => {
+    if (editMode) return false;
+    if (spell.level === 0) {
+      return lockedCantrips.includes(spell.name);
+    }
+    return lockedSpells.some((s) => s.name === spell.name);
+  };
+
   const getSpellDisabled = (spell: SpellEntry) => {
+    const isSelected = getSpellIsSelected(spell);
+    if (isSelected) {
+      return isSpellLocked(spell);
+    }
     if (manualSpells) return false;
-    if (getSpellIsSelected(spell)) return false;
     const isCantrip = spell.level === 0;
     const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
     if (isFreeCantrip) return false;
@@ -218,7 +233,13 @@ const SpellsSelector: React.FC = () => {
   };
 
   const getSpellTooltip = (spell: SpellEntry) => {
-    if (getSpellIsSelected(spell)) return '';
+    const isSelected = getSpellIsSelected(spell);
+    if (isSelected) {
+      if (isSpellLocked(spell)) {
+        return 'Spell was acquired at a previous level and is locked. Enable Full Edit Mode to remove.';
+      }
+      return '';
+    }
     const isCantrip = spell.level === 0;
     const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
     if (isFreeCantrip) return '';
@@ -626,21 +647,36 @@ const SpellsSelector: React.FC = () => {
                             📖
                           </button>
                         )}
-                        <button
-                          onClick={() => {
-                            if (s.isCantrip) {
-                              updateSpellcasting({ cantrips: cantrips.filter((c) => c !== s.name) });
-                            } else {
-                              updateSpellcasting({
-                                spells: selectedSpells.filter((sp) => sp.name !== s.name),
-                                spellbookSpells: spellbookSpells.filter((n) => n !== s.name),
-                              });
-                            }
-                          }}
-                          style={{ background: 'transparent', border: 'none', color: '#a0a5c0', cursor: 'pointer', fontSize: '0.75rem', padding: '0 2px' }}
-                        >
-                          ✕
-                        </button>
+                        {(() => {
+                          const isLocked = !editMode && (s.isCantrip ? lockedCantrips.includes(s.name) : lockedSpells.some((ls) => ls.name === s.name));
+                          return (
+                            <button
+                              disabled={isLocked}
+                              onClick={() => {
+                                if (isLocked) return;
+                                if (s.isCantrip) {
+                                  updateSpellcasting({ cantrips: cantrips.filter((c) => c !== s.name) });
+                                } else {
+                                  updateSpellcasting({
+                                    spells: selectedSpells.filter((sp) => sp.name !== s.name),
+                                    spellbookSpells: spellbookSpells.filter((n) => n !== s.name),
+                                  });
+                                }
+                              }}
+                              title={isLocked ? 'Spell is locked from previous level. Enable Full Edit Mode to remove.' : 'Remove spell'}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: isLocked ? 'rgba(160, 165, 192, 0.4)' : '#a0a5c0',
+                                cursor: isLocked ? 'not-allowed' : 'pointer',
+                                fontSize: '0.75rem',
+                                padding: '0 2px',
+                              }}
+                            >
+                              ✕
+                            </button>
+                          );
+                        })()}
                       </div>
                     );
                   })}
