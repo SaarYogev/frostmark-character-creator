@@ -5,6 +5,7 @@ import { BACKGROUNDS } from '../data/backgrounds';
 import { RACES } from '../data/races';
 import { ORIGINS } from '../data/origins';
 import { getRacialStatBonuses } from '../logic/state';
+import { getRacialSkillBenefits } from '../logic/racialAbilities';
 import { levelUp } from '../logic/levelUp';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
 import { AOState, DEFAULT_AO_STATE } from './AO';
@@ -210,6 +211,7 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           customRace: p.customRace ?? p.race?.customRace ?? state.race?.customRace,
           manualRaces: p.manualRaces ?? p.race?.manualRaces ?? state.race?.manualRaces ?? false,
           racialStatOverrides: p.racialStatOverrides ?? p.race?.racialStatOverrides ?? state.race?.racialStatOverrides ?? {},
+          racialSkillOverrides: p.racialSkillOverrides ?? p.race?.racialSkillOverrides ?? state.race?.racialSkillOverrides ?? {},
         },
         background: (typeof p.background === 'object' && p.background?.freeSkillPoints !== undefined && p.background?.name)
           ? p.background
@@ -345,6 +347,40 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           nextRace.subrace = '';
         }
       }
+      // Racial skill ranks must already be present in skillRanks so the character receives their innate starting proficiencies immediately
+      const oldRacial = getRacialSkillBenefits(state, RACES);
+      const nextRacial = getRacialSkillBenefits({
+        ...state,
+        race: nextRace,
+        subrace: subraceName,
+        manualRaces: nextRace.manualRaces ?? state.manualRaces,
+        racialSkillOverrides: nextRace.racialSkillOverrides ?? state.race?.racialSkillOverrides,
+      }, RACES);
+
+      const currentSkillRanks = { ...(state.skills?.skillRanks ?? state.skillRanks ?? {}) };
+
+      for (const oldSk in oldRacial.builtInRanks) {
+        const oldRank = oldRacial.builtInRanks[oldSk] ?? 0;
+        const newRank = nextRacial.builtInRanks[oldSk] ?? 0;
+        if (oldRank > newRank) {
+          if (currentSkillRanks[oldSk] === oldRank) {
+            delete currentSkillRanks[oldSk];
+          } else if (currentSkillRanks[oldSk] > oldRank) {
+            currentSkillRanks[oldSk] -= (oldRank - newRank);
+          }
+        }
+      }
+
+      for (const newSk in nextRacial.builtInRanks) {
+        const newRank = nextRacial.builtInRanks[newSk] ?? 0;
+        currentSkillRanks[newSk] = Math.max(currentSkillRanks[newSk] ?? 0, newRank);
+      }
+
+      const nextSkills = {
+        ...state.skills,
+        skillRanks: currentSkillRanks,
+      };
+
       return {
         ...state,
         race: nextRace,
@@ -354,6 +390,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           subrace: subraceName,
         },
         manualRaces: nextRace.manualRaces ?? state.manualRaces,
+        skills: nextSkills,
+        skillRanks: currentSkillRanks,
       };
     }
     case 'SET_BACKGROUND':

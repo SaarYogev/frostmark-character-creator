@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { CANTRIPS, SPELLS } from '../data/spells';
 import { ORIGINS } from '../data/origins';
+import { RACES } from '../data/races';
 import {
   calculatePotentialGained,
   calculatePotentialSpent,
@@ -9,6 +10,7 @@ import {
   hasSpellbookAbility,
   getSpellbookStartingFreeSpells,
 } from '../logic/state';
+import { getRacialSpells, hasRacialFreeCantrip } from '../logic/racialAbilities';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 interface SpellEntry {
@@ -53,6 +55,9 @@ const SpellsSelector: React.FC = () => {
 
   const hasSpellbook = hasSpellbookAbility(sanitizedState);
   const characterLevel = Number(sanitizedState.level ?? 1);
+  const racialSpells = useMemo(() => getRacialSpells(state, RACES), [state]);
+  const hasFreeCantrip = useMemo(() => hasRacialFreeCantrip(state, RACES), [state]);
+  const freeCantripCount = hasFreeCantrip ? 1 : 0;
 
   const freeSpellbookSpells = useMemo(() => {
     if (!hasSpellbook) return new Set<string>();
@@ -68,10 +73,9 @@ const SpellsSelector: React.FC = () => {
   }, [hasSpellbook, characterLevel, spellcasting.freeSpells, spellcasting.startingFreeSpells, selectedSpells, spellbookSpells]);
 
   const potentialLimit = calculatePotentialGained(sanitizedState, ORIGINS);
-  const potentialSpent = useMemo(() => calculatePotentialSpent(sanitizedState), [sanitizedState]);
+  const potentialSpent = useMemo(() => calculatePotentialSpent(sanitizedState, RACES), [sanitizedState]);
   const potentialRemaining = potentialLimit - potentialSpent;
 
-  // Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'level' | 'range'>('name');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -206,6 +210,8 @@ const SpellsSelector: React.FC = () => {
     if (manualSpells) return false;
     if (getSpellIsSelected(spell)) return false;
     const isCantrip = spell.level === 0;
+    const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
+    if (isFreeCantrip) return false;
     if (isCantrip && cantrips.length >= 5) return true;
     const cost = getCostForNewSpell(spell);
     return potentialRemaining < cost;
@@ -214,6 +220,8 @@ const SpellsSelector: React.FC = () => {
   const getSpellTooltip = (spell: SpellEntry) => {
     if (getSpellIsSelected(spell)) return '';
     const isCantrip = spell.level === 0;
+    const isFreeCantrip = isCantrip && hasFreeCantrip && cantrips.length < freeCantripCount;
+    if (isFreeCantrip) return '';
     if (isCantrip && cantrips.length >= 5 && !manualSpells) return 'Maximum 5 cantrips allowed by the character sheet.';
     const cost = getCostForNewSpell(spell);
     if (potentialRemaining < cost && !manualSpells) return `Requires ${cost} Potential, but you only have ${potentialRemaining} remaining. Set to manual to bypass.`;
@@ -459,6 +467,49 @@ const SpellsSelector: React.FC = () => {
                 Active Free Spells ({freeSpellbookSpells.size}): {Array.from(freeSpellbookSpells).join(', ') || 'None selected yet'}
               </div>
             )}
+          </div>
+        )}
+
+        {hasFreeCantrip && (
+          <div className="racial-free-cantrip-banner" style={{ marginBottom: '1.5rem', padding: '0.75rem 1rem', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '6px', fontSize: '0.85rem', color: '#93c5fd' }}>
+            🌿 <strong>Garden Elf Feature:</strong> You receive 1 free cantrip choice from the spell list (10 Potential discount applied).
+          </div>
+        )}
+
+        {racialSpells.length > 0 && (
+          <div className="racial-spells-section" style={{ marginBottom: '1.5rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem 1.25rem' }}>
+            <h3 className="section-title" style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>✨</span> Innate Racial Spells & Cantrips
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '0.75rem' }}>
+              {racialSpells.map((sp) => (
+                <div
+                  key={`${sp.name}-${sp.source}`}
+                  style={{
+                    padding: '0.6rem 0.8rem',
+                    background: sp.available ? 'rgba(255, 255, 255, 0.04)' : 'rgba(255, 255, 255, 0.01)',
+                    border: `1px solid ${sp.available ? 'rgba(99, 102, 241, 0.4)' : 'rgba(255, 255, 255, 0.08)'}`,
+                    borderRadius: '6px',
+                    opacity: sp.available ? 1 : 0.6,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <strong style={{ fontSize: '0.9rem', color: sp.available ? '#fff' : '#9ca3af' }}>{sp.name}</strong>
+                    <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: '4px', background: sp.isCantrip ? 'rgba(16, 185, 129, 0.2)' : 'rgba(139, 92, 246, 0.2)', color: sp.isCantrip ? '#6ee7b7' : '#c4b5fd' }}>
+                      {sp.isCantrip ? 'Cantrip' : `Level ${sp.level}`}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                    Source: {sp.source}
+                  </div>
+                  {!sp.available && sp.minLevel && (
+                    <div className="racial-spell-unlock-badge" style={{ fontSize: '0.7rem', color: '#f59e0b', marginTop: '0.25rem' }}>
+                      🔒 Unlocks at Level {sp.minLevel}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

@@ -1,6 +1,8 @@
 import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants';
 import { ORIGINS, OriginData } from '../data/origins';
+import { RACES } from '../data/races';
 import { deduplicateEquipmentList } from './equipmentUtils';
+import { getRacialSkillBenefits, hasRacialFreeCantrip } from './racialAbilities';
 
 export function getInitialState() {
   return {
@@ -221,7 +223,12 @@ export function getCharacteristicModifier(score: number): number {
   return Math.floor((score - 10) / 2);
 }
 
-export function computeFreeSkillPools(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
+export function computeFreeSkillPools(
+  state: any,
+  backgroundsData: any[],
+  originsData: OriginData[] = ORIGINS,
+  raceData: any[] = RACES
+) {
   let bgFree = 0;
   let builtInRanks: Record<string, number> = {};
   let builtInAcademics: Record<string, number> = {};
@@ -245,6 +252,19 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[], origin
       restrictSkills = bg.restrictSkills ?? (Array.isArray(bg.skills) && bg.skills.length > 0 ? bg.skills : null);
     }
   }
+
+  // Racial traits grant innate ranks and free points that stack additively with background options.
+  const racial = getRacialSkillBenefits(state, raceData);
+  const mergedBuiltInRanks: Record<string, number> = { ...builtInRanks };
+  for (const sk in racial.builtInRanks) {
+    mergedBuiltInRanks[sk] = Math.max(mergedBuiltInRanks[sk] ?? 0, racial.builtInRanks[sk]);
+  }
+  const mergedBuiltInAcademics: Record<string, number> = { ...builtInAcademics };
+  for (const aca in racial.builtInAcademics) {
+    mergedBuiltInAcademics[aca] = Math.max(mergedBuiltInAcademics[aca] ?? 0, racial.builtInAcademics[aca]);
+  }
+  const racialFree = racial.racialFree;
+  const racialRestrictSkills = racial.racialRestrictSkills;
 
   let aoFree = 0;
   const levelSelections = state.ao?.levelSelections ?? state.levelSelections;
@@ -284,39 +304,76 @@ export function computeFreeSkillPools(state: any, backgroundsData: any[], origin
   return {
     bgFree,
     aoFree,
-    builtInRanks,
-    builtInAcademics,
-    restrictSkills
+    racialFree,
+    builtInRanks: mergedBuiltInRanks,
+    builtInAcademics: mergedBuiltInAcademics,
+    restrictSkills,
+    racialRestrictSkills,
   };
 }
 
-export function computeSkillPointsSummary(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
-  const { bgFree, aoFree, builtInRanks, builtInAcademics, restrictSkills } = computeFreeSkillPools(state, backgroundsData, originsData);
+export function computeSkillPointsSummary(
+  state: any,
+  backgroundsData: any[],
+  originsData: OriginData[] = ORIGINS,
+  raceData: any[] = RACES
+) {
+  const {
+    bgFree,
+    aoFree,
+    racialFree = 0,
+    builtInRanks,
+    builtInAcademics,
+    restrictSkills,
+    racialRestrictSkills,
+  } = computeFreeSkillPools(state, backgroundsData, originsData, raceData);
 
-  let restrictedSpent = 0;
+  let bgRestrictedSpent = 0;
+  let racialRestrictedSpent = 0;
+  let sharedRestrictedSpent = 0;
   let unrestrictedSpent = 0;
+
+  const isAcaBgRestricted = Boolean(restrictSkills && restrictSkills.includes('Academics'));
+  const isAcaRacialRestricted = Boolean(racialRestrictSkills && racialRestrictSkills.includes('Academics'));
 
   const skillRanks = state.skills?.skillRanks ?? state.skillRanks ?? {};
   for (const sk in skillRanks) {
     const rank = skillRanks[sk] ?? 0;
     const builtIn = builtInRanks[sk] ?? 0;
     const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    if (restrictSkills && restrictSkills.includes(sk)) {
-      restrictedSpent += cost;
+    if (cost <= 0) continue;
+
+    const matchesBg = Boolean(restrictSkills && restrictSkills.includes(sk));
+    const matchesRacial = Boolean(racialRestrictSkills && racialRestrictSkills.includes(sk));
+
+    if (matchesBg && matchesRacial) {
+      sharedRestrictedSpent += cost;
+    } else if (matchesBg) {
+      bgRestrictedSpent += cost;
+    } else if (matchesRacial) {
+      racialRestrictedSpent += cost;
     } else {
       unrestrictedSpent += cost;
     }
   }
 
-  const isAcaRestricted = restrictSkills && restrictSkills.includes('Academics');
   const acaEntries = state.skills?.academicsEntries ?? state.academicsEntries;
   if (acaEntries && Array.isArray(acaEntries) && acaEntries.length > 0) {
     for (const entry of acaEntries) {
       const rank = entry.rank ?? 0;
       const builtIn = builtInAcademics[entry.name] ?? 0;
       const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(entry.name))) {
-        restrictedSpent += cost;
+      if (cost <= 0) continue;
+
+      const matchesBg = Boolean(isAcaBgRestricted || (restrictSkills && restrictSkills.includes(entry.name)));
+      const matchesRacial = Boolean(isAcaRacialRestricted || (racialRestrictSkills && racialRestrictSkills.includes(entry.name)));
+
+      if (matchesBg && matchesRacial) {
+        sharedRestrictedSpent += cost;
+      } else if (matchesBg) {
+        bgRestrictedSpent += cost;
+      } else if (matchesRacial) {
+        racialRestrictedSpent += cost;
       } else {
         unrestrictedSpent += cost;
       }
@@ -327,8 +384,17 @@ export function computeSkillPointsSummary(state: any, backgroundsData: any[], or
       const rank = academicsRanks[field] ?? 0;
       const builtIn = builtInAcademics[field] ?? 0;
       const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-      if (isAcaRestricted || (restrictSkills && restrictSkills.includes(field))) {
-        restrictedSpent += cost;
+      if (cost <= 0) continue;
+
+      const matchesBg = Boolean(isAcaBgRestricted || (restrictSkills && restrictSkills.includes(field)));
+      const matchesRacial = Boolean(isAcaRacialRestricted || (racialRestrictSkills && racialRestrictSkills.includes(field)));
+
+      if (matchesBg && matchesRacial) {
+        sharedRestrictedSpent += cost;
+      } else if (matchesBg) {
+        bgRestrictedSpent += cost;
+      } else if (matchesRacial) {
+        racialRestrictedSpent += cost;
       } else {
         unrestrictedSpent += cost;
       }
@@ -336,56 +402,91 @@ export function computeSkillPointsSummary(state: any, backgroundsData: any[], or
   }
 
   const artsEntries = state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [];
+  let artsBuiltInRemaining = builtInRanks['Arts & Craft'] ?? 0;
   for (const entry of artsEntries) {
     const rank = entry.rank ?? 0;
-    const builtIn = builtInRanks['Arts & Craft'] ?? 0;
-    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[builtIn] ?? 0));
-    if (restrictSkills && restrictSkills.includes('Arts & Craft')) {
-      restrictedSpent += cost;
+    // Dwarf Crafty grants built-in rank 2 for a single craft of choice, not unlimited crafts
+    const appliedBuiltIn = Math.min(rank, artsBuiltInRemaining);
+    artsBuiltInRemaining -= appliedBuiltIn;
+    const cost = Math.max(0, (SKILL_RANK_CUMULATIVE_COSTS[rank] ?? 0) - (SKILL_RANK_CUMULATIVE_COSTS[appliedBuiltIn] ?? 0));
+    if (cost <= 0) continue;
+
+    const matchesBg = Boolean(restrictSkills && restrictSkills.includes('Arts & Craft'));
+    const matchesRacial = Boolean(racialRestrictSkills && racialRestrictSkills.includes('Arts & Craft'));
+
+    if (matchesBg && matchesRacial) {
+      sharedRestrictedSpent += cost;
+    } else if (matchesBg) {
+      bgRestrictedSpent += cost;
+    } else if (matchesRacial) {
+      racialRestrictedSpent += cost;
     } else {
       unrestrictedSpent += cost;
     }
   }
 
   let bgSpent = 0;
+  let racialSpent = 0;
   let aoSpent = 0;
 
   if (restrictSkills) {
-    bgSpent = Math.min(bgFree, restrictedSpent);
-    const excessRestricted = restrictedSpent - bgSpent;
-    const totalUnrestricted = excessRestricted + unrestrictedSpent;
-    aoSpent = Math.min(aoFree, totalUnrestricted);
-  } else {
-    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    bgSpent = Math.min(bgFree, totalSpentPoints);
-    aoSpent = Math.min(aoFree, Math.max(0, totalSpentPoints - bgSpent));
+    bgSpent = Math.min(bgFree, bgRestrictedSpent);
   }
+  if (racialRestrictSkills) {
+    racialSpent = Math.min(racialFree, racialRestrictedSpent);
+  }
+
+  // Shared restricted spending draws from whichever eligible restricted pool has surplus points
+  if (sharedRestrictedSpent > 0) {
+    if (restrictSkills) {
+      const bgAvailable = Math.max(0, bgFree - bgSpent);
+      const bgUsedForShared = Math.min(bgAvailable, sharedRestrictedSpent);
+      bgSpent += bgUsedForShared;
+      sharedRestrictedSpent -= bgUsedForShared;
+    }
+    if (racialRestrictSkills && sharedRestrictedSpent > 0) {
+      const racialAvailable = Math.max(0, racialFree - racialSpent);
+      const racialUsedForShared = Math.min(racialAvailable, sharedRestrictedSpent);
+      racialSpent += racialUsedForShared;
+      sharedRestrictedSpent -= racialUsedForShared;
+    }
+  }
+
+  const excessBgRestricted = restrictSkills ? Math.max(0, bgRestrictedSpent - bgSpent) : bgRestrictedSpent;
+  const excessRacialRestricted = racialRestrictSkills ? Math.max(0, racialRestrictedSpent - racialSpent) : racialRestrictedSpent;
+  let totalUnrestricted = unrestrictedSpent + sharedRestrictedSpent + excessBgRestricted + excessRacialRestricted;
+
+  if (!restrictSkills) {
+    bgSpent = Math.min(bgFree, totalUnrestricted);
+    totalUnrestricted -= bgSpent;
+  }
+  if (!racialRestrictSkills) {
+    racialSpent = Math.min(racialFree, totalUnrestricted);
+    totalUnrestricted -= racialSpent;
+  }
+
+  aoSpent = Math.min(aoFree, totalUnrestricted);
+  const skillsSpent = Math.max(0, totalUnrestricted - aoSpent);
 
   const bgFreeRemaining = Math.max(0, bgFree - bgSpent);
+  const racialFreeRemaining = Math.max(0, racialFree - racialSpent);
   const aoFreeRemaining = Math.max(0, aoFree - aoSpent);
-  const freeSkillPointsRemaining = bgFreeRemaining + aoFreeRemaining;
-
-  let skillsSpent = 0;
-  if (restrictSkills) {
-    const restrictedDiscount = Math.min(bgFree, restrictedSpent);
-    const excessRestricted = restrictedSpent - restrictedDiscount;
-    const totalUnrestricted = excessRestricted + unrestrictedSpent;
-    skillsSpent = Math.max(0, totalUnrestricted - aoFree);
-  } else {
-    const totalSpentPoints = restrictedSpent + unrestrictedSpent;
-    const totalFreePoints = bgFree + aoFree;
-    skillsSpent = Math.max(0, totalSpentPoints - totalFreePoints);
-  }
+  const freeSkillPointsRemaining = bgFreeRemaining + racialFreeRemaining + aoFreeRemaining;
 
   return {
     bgFree,
     aoFree,
+    racialFree,
     bgSpent,
     aoSpent,
+    racialSpent,
     bgFreeRemaining,
     aoFreeRemaining,
+    racialFreeRemaining,
     freeSkillPointsRemaining,
-    restrictedSpent,
+    restrictedSpent: bgRestrictedSpent,
+    bgRestrictedSpent,
+    racialRestrictedSpent,
     unrestrictedSpent,
     skillsSpent,
   };
@@ -710,14 +811,16 @@ export function calculateSpellCost(
   return Math.max(0, 10 * spell.level - 10);
 }
 
-export function calculatePotentialSpent(state: any): number {
+export function calculatePotentialSpent(state: any, raceData: any[] = RACES): number {
   const spellcasting = state.spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
   const spells: { name: string; level: number }[] = spellcasting.spells ?? [];
   const slots: Record<number, number> = spellcasting.slots ?? {};
   const spellbookSpells: string[] = spellcasting.spellbookSpells ?? [];
 
-  let spent = cantrips.length * 10;
+  const freeCantrips = hasRacialFreeCantrip(state, raceData) ? 1 : 0;
+  const paidCantrips = Math.max(0, cantrips.length - freeCantrips);
+  let spent = paidCantrips * 10;
 
   const charLevel = Number(state.identity?.level ?? state.level ?? 1);
   const isSpellbookUser = hasSpellbookAbility(state);
@@ -768,7 +871,11 @@ export function calculatePotentialSpent(state: any): number {
   return spent;
 }
 
-export function calculatePotentialRemaining(state: any, originsData: OriginData[]): number {
+export function calculatePotentialRemaining(
+  state: any,
+  originsData: OriginData[],
+  raceData: any[] = RACES
+): number {
   if (state.isImported && typeof state.potentialRemaining === 'number') {
     return state.potentialRemaining;
   }
@@ -776,7 +883,7 @@ export function calculatePotentialRemaining(state: any, originsData: OriginData[
     return state.importedMetadata.potentialRemaining;
   }
   const total = calculatePotentialGained(state, originsData);
-  const spent = calculatePotentialSpent(state);
+  const spent = calculatePotentialSpent(state, raceData);
   return total - spent;
 }
 
