@@ -1,4 +1,4 @@
-import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS } from '../data/constants';
+import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS, CHARACTERISTICS } from '../data/constants';
 import { ORIGINS, OriginData } from '../data/origins';
 import { RACES } from '../data/races';
 import { deduplicateEquipmentList } from './equipmentUtils';
@@ -213,18 +213,74 @@ export function getRacialStatBonuses(state: any, raceData: any[]): Record<string
   return bonuses;
 }
 
+export function getASIStatBonuses(state: any): Record<string, number> {
+  const bonuses: Record<string, number> = {};
+  const levelSelections = state?.ao?.levelSelections ?? state?.levelSelections ?? {};
+  const currentLevel = state?.identity?.level ?? state?.level ?? 1;
+
+  for (let l = 1; l <= currentLevel; l++) {
+    const sel = levelSelections[l];
+    if (!sel?.upgradeChoices) continue;
+
+    for (const choiceStr of Object.values(sel.upgradeChoices)) {
+      if (typeof choiceStr !== 'string') continue;
+      const trimmed = choiceStr.trim();
+
+      const plusTwoMatch = trimmed.match(/^\+2\s+([A-Za-z]+)$/i);
+      if (plusTwoMatch) {
+        const charName = CHARACTERISTICS.find(
+          c => c.key.toLowerCase() === plusTwoMatch[1].toLowerCase()
+        )?.key;
+        if (charName) {
+          bonuses[charName] = (bonuses[charName] ?? 0) + 2;
+          continue;
+        }
+      }
+
+      /* Handle both structured choices and legacy/freeform delimited formats entered by users */
+      if (trimmed.includes('+1 to Two Ability Scores') || (trimmed.includes('+1') && (trimmed.includes('&') || trimmed.includes(',')))) {
+        const cleaned = trimmed.replace(/^\+1 to Two Ability Scores(?::\s*)?/i, '');
+        const parts = cleaned.split(/[,&]+/).map(p => p.trim()).filter(Boolean);
+
+        for (const part of parts) {
+          const match = part.match(/(?:\+1\s+)?([A-Za-z]+)/i);
+          if (match) {
+            const charName = CHARACTERISTICS.find(
+              c => c.key.toLowerCase() === match[1].toLowerCase()
+            )?.key;
+            if (charName) {
+              bonuses[charName] = (bonuses[charName] ?? 0) + 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return bonuses;
+}
+
 export function getFinalCharacteristics(state: any, raceData: any[]): Record<string, number> {
   const baseChars = state?.baseCharacteristics ?? {
     Brawn: 10, Dexterity: 10, Vitality: 10, Intelligence: 10,
     Cunning: 10, Resolve: 10, Presence: 10, Manipulation: 10, Composure: 10
   };
   const bonuses = getRacialStatBonuses(state, raceData);
+  const asiBonuses = getASIStatBonuses(state);
   const final: Record<string, number> = { ...baseChars };
+
   for (const stat in bonuses) {
     if (final[stat] !== undefined) {
       final[stat] += bonuses[stat];
     }
   }
+
+  for (const stat in asiBonuses) {
+    if (final[stat] !== undefined) {
+      final[stat] += asiBonuses[stat];
+    }
+  }
+
   return final;
 }
 

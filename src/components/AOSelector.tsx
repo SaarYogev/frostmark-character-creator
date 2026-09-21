@@ -4,6 +4,7 @@ import { ORIGINS } from '../data/origins';
 import { getAbilitiesForLevel, getAbilityById, ABILITIES } from '../data/abilities';
 import { CustomOrigin, AbilityItem } from '../types/AO';
 import { getAOChoiceDefinition } from '../data/aoChoices';
+import { CHARACTERISTICS } from '../data/constants';
 
 const AOSelector: React.FC = () => {
   const { state, dispatch } = useCharacter();
@@ -347,60 +348,130 @@ const AOSelector: React.FC = () => {
         </div>
 
         {/* 1. Structured Choice (Single Select Dropdown) */}
-        {choiceDef && choiceDef.type === 'single' && (
-          <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
-              {choiceDef.label}:
-            </label>
-            <select
-              className="select"
-              style={{ marginTop: '0.35rem', width: '100%' }}
-              value={choiceDef.options.includes(choiceValue) ? choiceValue : (choiceValue ? 'Other' : '')}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'Other') {
-                  handleUpgradeChoiceChange('Other: ');
-                } else {
-                  handleUpgradeChoiceChange(val);
-                }
-              }}
-            >
-              <option value="">-- Select Option --</option>
-              {choiceDef.options.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-              <option value="Other">Other / Specific Details...</option>
-            </select>
-            {(choiceValue.startsWith('Other:') ||
-              choiceValue === '+1 to Two Ability Scores' ||
-              choiceValue === 'Feat' ||
-              (!choiceDef.options.includes(choiceValue) && choiceValue !== '')) && (
-              <input
-                type="text"
-                className="input"
-                style={{ marginTop: '0.5rem', width: '100%' }}
-                placeholder={
-                  choiceValue === '+1 to Two Ability Scores'
-                    ? 'e.g. +1 Brawn & +1 Vitality'
-                    : choiceValue === 'Feat'
-                    ? 'Enter Feat Name...'
-                    : 'Enter custom choice details...'
-                }
-                value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
-                onChange={(e) => {
-                  if (choiceValue === '+1 to Two Ability Scores' || choiceValue === 'Feat') {
-                    // Store detailed text
-                    handleUpgradeChoiceChange(e.target.value);
-                  } else {
-                    handleUpgradeChoiceChange(`Other: ${e.target.value}`);
-                  }
-                }}
-              />
-            )}
-          </div>
-        )}
+        {choiceDef && choiceDef.type === 'single' && (() => {
+          const isSplitASI = choiceValue.startsWith('+1 to Two Ability Scores');
+            let splitFirst = '';
+            let splitSecond = '';
+            if (isSplitASI) {
+              const cleaned = choiceValue.replace(/^\+1 to Two Ability Scores(?::\s*)?/i, '');
+              const parts = cleaned.split(/[,&]+/).map(p => p.trim().replace(/^\+1\s+/, '')).filter(Boolean);
+              splitFirst = parts[0] || '';
+              splitSecond = parts[1] || '';
+            }
+
+            const isKnownOption = choiceDef.options.includes(choiceValue) || isSplitASI;
+            const mainSelectValue = isSplitASI
+              ? '+1 to Two Ability Scores'
+              : choiceDef.options.includes(choiceValue)
+              ? choiceValue
+              : (choiceValue ? 'Other' : '');
+
+            return (
+              <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
+                  {choiceDef.label}:
+                </label>
+                <select
+                  className="select"
+                  style={{ marginTop: '0.35rem', width: '100%' }}
+                  value={mainSelectValue}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'Other') {
+                      handleUpgradeChoiceChange('Other: ');
+                    } else if (val === '+1 to Two Ability Scores') {
+                      handleUpgradeChoiceChange('+1 to Two Ability Scores: Brawn, Dexterity');
+                    } else {
+                      handleUpgradeChoiceChange(val);
+                    }
+                  }}
+                >
+                  <option value="">-- Select Option --</option>
+                  {choiceDef.options.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                  <option value="Other">Other / Specific Details...</option>
+                </select>
+
+                {isSplitASI && (
+                  <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label htmlFor={`asi-split-1-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                        First Ability Score (+1):
+                      </label>
+                      <select
+                        id={`asi-split-1-${abilityTarget.id}`}
+                        className="select"
+                        style={{ width: '100%' }}
+                        value={splitFirst}
+                        onChange={(e) => {
+                          const newFirst = e.target.value;
+                          const newSecond = splitSecond || (newFirst === 'Brawn' ? 'Dexterity' : 'Brawn');
+                          handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
+                        }}
+                      >
+                        <option value="">-- Select Stat --</option>
+                        {CHARACTERISTICS.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.key}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor={`asi-split-2-${abilityTarget.id}`} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.25rem' }}>
+                        Second Ability Score (+1):
+                      </label>
+                      <select
+                        id={`asi-split-2-${abilityTarget.id}`}
+                        className="select"
+                        style={{ width: '100%' }}
+                        value={splitSecond}
+                        onChange={(e) => {
+                          const newSecond = e.target.value;
+                          const newFirst = splitFirst || (newSecond === 'Brawn' ? 'Dexterity' : 'Brawn');
+                          handleUpgradeChoiceChange(`+1 to Two Ability Scores: ${newFirst}, ${newSecond}`);
+                        }}
+                      >
+                        <option value="">-- Select Stat --</option>
+                        {CHARACTERISTICS.map((c) => (
+                          <option key={c.key} value={c.key}>
+                            {c.key}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {!isSplitASI && (choiceValue.startsWith('Other:') ||
+                  choiceValue === 'Feat' ||
+                  (!isKnownOption && choiceValue !== '')) && (
+                  <input
+                    type="text"
+                    className="input"
+                    style={{ marginTop: '0.5rem', width: '100%' }}
+                    placeholder={
+                      choiceValue === 'Feat'
+                        ? 'Enter Feat Name...'
+                        : 'Enter custom choice details...'
+                    }
+                    value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
+                    onChange={(e) => {
+                      if (choiceValue === 'Feat') {
+                        handleUpgradeChoiceChange(e.target.value);
+                      } else {
+                        handleUpgradeChoiceChange(`Other: ${e.target.value}`);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })()}
 
         {/* 2. Structured Choice (Multi-Select Pills / Checkboxes) */}
         {choiceDef && choiceDef.type === 'multi' && (
