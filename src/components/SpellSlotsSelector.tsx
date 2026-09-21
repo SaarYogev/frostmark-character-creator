@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useCharacter } from '../contexts/CharacterContext';
 import { ORIGINS } from '../data/origins';
-import { calculatePotentialGained } from '../logic/state';
+import { calculatePotentialGained, calculatePotentialSpent } from '../logic/state';
 import { getSpellSlotsForLevel } from '../logic/pdf';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
@@ -12,19 +12,11 @@ const SpellSlotsSelector: React.FC = () => {
 
   const spellcasting = (state as any).spellcasting ?? {};
   const cantrips: string[] = spellcasting.cantrips ?? [];
-  const selectedSpells: { name: string; level: number }[] = spellcasting.spells ?? [];
   const slots: Record<number, number> = spellcasting.slots ?? {};
   const manualSpells: boolean = spellcasting.manualSpells ?? false;
 
   const potentialLimit = calculatePotentialGained(sanitizedState, ORIGINS);
-  const potentialSpent = useMemo(() => {
-    let spent = cantrips.length * 10;
-    selectedSpells.forEach((s) => { spent += 10 * (s.level ?? 1); });
-    for (let lvl = 1; lvl <= 9; lvl++) {
-      spent += (slots[lvl] ?? 0) * 10 * lvl;
-    }
-    return spent;
-  }, [cantrips, selectedSpells, slots]);
+  const potentialSpent = useMemo(() => calculatePotentialSpent(sanitizedState), [sanitizedState]);
   const potentialRemaining = potentialLimit - potentialSpent;
 
   const updateSpellcasting = (patch: Record<string, unknown>) => {

@@ -112,4 +112,78 @@ describe('SpellsSelector', () => {
     fireEvent.click(removeBtn);
     expect(document.querySelector('.filter-item strong')?.textContent).not.toBe('Ritual');
   });
+
+  describe('Occult Student Spellbook Ability UI', () => {
+    const spellbookStateLevel1 = {
+      identity: { level: 1, characterName: 'Mage', playerName: 'Player', campaignPowerLevel: 'Heroic' as const, personalityBackstory: '', appearance: { age: '', height: '', weight: '' } },
+      level: 1,
+      ao: {
+        pool: ['Occult Student'],
+        levelSelections: {
+          1: {
+            primaryAO: 'Occult Student',
+            secondaryAO: '',
+            primaryAbility: '',
+            secondaryAbility: 'occult-student-1-secondary-spellbook',
+          },
+        },
+      },
+      spellcasting: {
+        cantrips: [],
+        spells: [],
+        spellbookSpells: [],
+        slots: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 },
+      },
+    };
+
+    it('renders the spellbook banner when character has spellbook ability at level 1', () => {
+      render(
+        <CharacterProvider initialState={spellbookStateLevel1 as any}>
+          <SpellsSelector />
+        </CharacterProvider>
+      );
+
+      expect(screen.getByText(/Occult Student Spellbook/i)).toBeInTheDocument();
+      expect(screen.getByText(/Level 1 Starting Free Spells/i)).toBeInTheDocument();
+      expect(screen.getByText(/Active Free Spells/i)).toBeInTheDocument();
+    });
+
+    it('allows learning a level 1 spell for free and displays [Free] badge in selected list', () => {
+      render(
+        <CharacterProvider initialState={spellbookStateLevel1 as any}>
+          <SpellsSelector />
+        </CharacterProvider>
+      );
+
+      const shieldEntry = screen.getByText('Shield').closest('.spell-entry')!;
+      fireEvent.click(shieldEntry);
+
+      const learnBtns = screen.getAllByRole('button', { name: /Learn Spell/i });
+      fireEvent.click(learnBtns[0]);
+
+      expect(screen.getByText(/\[Free\]/i)).toBeInTheDocument();
+      expect(screen.getByText(/Active Free Spells \(1\): Shield/i)).toBeInTheDocument();
+    });
+
+    it('renders Level 2 discounts in banner and displays discounted cost in detail pane', () => {
+      const spellbookStateLevel2 = {
+        ...spellbookStateLevel1,
+        identity: { ...spellbookStateLevel1.identity, level: 2 },
+        level: 2,
+      };
+
+      render(
+        <CharacterProvider initialState={spellbookStateLevel2 as any}>
+          <SpellsSelector />
+        </CharacterProvider>
+      );
+
+      expect(screen.getByText(/Level 2 Discounts/i)).toBeInTheDocument();
+
+      const shieldEntry = screen.getByText('Shield').closest('.spell-entry')!;
+      fireEvent.click(shieldEntry);
+
+      expect(screen.getAllByText(/Discounted: 5 Potential/i).length).toBeGreaterThan(0);
+    });
+  });
 });
