@@ -1,6 +1,7 @@
 import { PDFDocument } from 'pdf-lib';
 import { SKILLS, CHARACTERISTICS } from '../data/constants';
 import { getAbilityById } from '../data/abilities';
+import { parseFeatChoice, getFeatByName } from '../data/feats';
 import { ORIGINS } from '../data/origins';
 import { WEAPONS, ARMOR, findArmorData } from '../data/equipment';
 import { base64ToUint8Array } from '../services/storage/pdfStorageService';
@@ -635,14 +636,42 @@ function fillMisc(form: any, state: any, racesData?: any[]) {
       if (sel.primaryAbility) {
         const ab = getAbilityById(sel.primaryAbility) ?? state.ao?.customAbilities?.find((a: any) => a.id === sel.primaryAbility);
         if (ab) {
-          const descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
+          let descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
+          const choiceStr = sel.upgradeChoices?.[sel.primaryAbility];
+          if (choiceStr) {
+            const featChoice = parseFeatChoice(choiceStr);
+            if (featChoice) {
+              const feat = getFeatByName(featChoice.featName);
+              if (feat) {
+                descText += `\n\n[Feat: ${feat.name}${featChoice.chosenStat ? ` (${featChoice.chosenStat})` : ''}]\n${feat.desc}`;
+              } else {
+                descText += `\n\n[Choice: ${choiceStr}]`;
+              }
+            } else {
+              descText += `\n\n[Choice: ${choiceStr}]`;
+            }
+          }
           selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
         }
       }
       if (sel.secondaryAbility) {
         const ab = getAbilityById(sel.secondaryAbility) ?? state.ao?.customAbilities?.find((a: any) => a.id === sel.secondaryAbility);
         if (ab) {
-          const descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
+          let descText = (ab.desc || ab.full_desc || ab.short_desc || '').trim();
+          const choiceStr = sel.upgradeChoices?.[sel.secondaryAbility];
+          if (choiceStr) {
+            const featChoice = parseFeatChoice(choiceStr);
+            if (featChoice) {
+              const feat = getFeatByName(featChoice.featName);
+              if (feat) {
+                descText += `\n\n[Feat: ${feat.name}${featChoice.chosenStat ? ` (${featChoice.chosenStat})` : ''}]\n${feat.desc}`;
+              } else {
+                descText += `\n\n[Choice: ${choiceStr}]`;
+              }
+            } else {
+              descText += `\n\n[Choice: ${choiceStr}]`;
+            }
+          }
           selectedAbilityFeatures.push(`=== ${ab.name} (${ab.origin} · Lv.${ab.level}) ===\n${descText}`);
         }
       }
