@@ -230,6 +230,35 @@ describe('AOSelector', () => {
     expect(secondScoreSelect).toHaveValue('Vitality');
   });
 
+  it('renders structured Feat dropdown and sub-options when "Feat" is chosen', () => {
+    renderWithProvider(<AOSelector />, 4);
+
+    // Select Artistry origin
+    const artistryCard = screen.getByRole('button', { name: /Artistry/ });
+    fireEvent.click(artistryCard);
+
+    // Find Ability Score Improvement or Feat card at level 4
+    const asiCards = screen.getAllByText('Ability Score Improvement or Feat');
+    expect(asiCards.length).toBeGreaterThan(0);
+    fireEvent.click(asiCards[0]);
+
+    const selects = screen.getAllByRole('combobox');
+    const asiSelect = selects[0];
+
+    // Change selection to 'Feat'
+    fireEvent.change(asiSelect, { target: { value: 'Feat' } });
+
+    // Expect a dedicated Feat Selector dropdown (NOT just a plain text input)
+    const featSelect = screen.getAllByLabelText(/Select Feat/i)[0];
+    expect(featSelect).toBeInTheDocument();
+
+    // Change feat selection to 'Actor'
+    fireEvent.change(featSelect, { target: { value: 'Actor' } });
+
+    // Feat description should now be displayed
+    expect(screen.getAllByText(/You gain advantage to Deception/i).length).toBeGreaterThan(0);
+  });
+
   it('shows only level-3 abilities in the Lv3 tab (no cross-level mixing)', () => {
     renderWithProvider(undefined, 3);
 

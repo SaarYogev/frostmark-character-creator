@@ -5,6 +5,8 @@ import { getAbilitiesForLevel, getAbilityById, ABILITIES } from '../data/abiliti
 import { CustomOrigin, AbilityItem } from '../types/AO';
 import { getAOChoiceDefinition } from '../data/aoChoices';
 import { CHARACTERISTICS } from '../data/constants';
+import FeatChoicePicker from './FeatChoicePicker';
+import { parseFeatChoice } from '../data/feats';
 
 const AOSelector: React.FC = () => {
   const { state, dispatch, editMode } = useCharacter();
@@ -417,21 +419,24 @@ const AOSelector: React.FC = () => {
             splitSecond = parts[1] || '';
           }
 
-          const isKnownOption = choiceDef.options.includes(choiceValue) || isSplitASI;
+          const isFeat = choiceValue === 'Feat' || choiceValue.startsWith('Feat:') || Boolean(parseFeatChoice(choiceValue));
+          const isKnownOption = choiceDef.options.includes(choiceValue) || isSplitASI || isFeat;
           const mainSelectValue = isSplitASI
             ? '+1 to Two Ability Scores'
+            : isFeat
+            ? 'Feat'
             : choiceDef.options.includes(choiceValue)
             ? choiceValue
             : (choiceValue ? 'Other' : '');
 
           return (
-            <div className="form-group" style={{ marginTop: '1rem', background: 'var(--bg-elevated)', padding: '0.75rem', borderRadius: '8px' }}>
-              <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
+            <div className="form-group" style={{ marginTop: '1.25rem', padding: '0.85rem', background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent-gold)' }}>
                 {choiceDef.label}:
               </label>
               <select
                 className="select"
-                style={{ marginTop: '0.35rem', width: '100%' }}
+                style={{ marginTop: '0.4rem', width: '100%' }}
                 disabled={isChoiceLocked}
                 title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
                 value={mainSelectValue}
@@ -455,6 +460,7 @@ const AOSelector: React.FC = () => {
                 <option value="Other">Other / Specific Details...</option>
               </select>
 
+              {/* Split ASI Selectors */}
               {isSplitASI && (
                 <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                   <div>
@@ -511,8 +517,18 @@ const AOSelector: React.FC = () => {
                 </div>
               )}
 
-              {!isSplitASI && (choiceValue.startsWith('Other:') ||
-                choiceValue === 'Feat' ||
+              {/* Structured Feat Picker */}
+              {isFeat && (
+                <FeatChoicePicker
+                  value={choiceValue}
+                  state={state}
+                  disabled={isChoiceLocked}
+                  onChange={handleUpgradeChoiceChange}
+                />
+              )}
+
+              {/* Custom / Other Text Input */}
+              {!isSplitASI && !isFeat && (choiceValue.startsWith('Other:') ||
                 (!isKnownOption && choiceValue !== '')) && (
                 <input
                   type="text"
@@ -520,18 +536,10 @@ const AOSelector: React.FC = () => {
                   style={{ marginTop: '0.5rem', width: '100%' }}
                   disabled={isChoiceLocked}
                   title={isChoiceLocked ? 'Choice is locked from a previous level. Enable Full Edit Mode to change.' : ''}
-                  placeholder={
-                    choiceValue === 'Feat'
-                      ? 'Enter Feat Name...'
-                      : 'Enter custom choice details...'
-                  }
+                  placeholder="Enter custom choice details..."
                   value={choiceValue.startsWith('Other: ') ? choiceValue.slice(7) : choiceValue}
                   onChange={(e) => {
-                    if (choiceValue === 'Feat') {
-                      handleUpgradeChoiceChange(e.target.value);
-                    } else {
-                      handleUpgradeChoiceChange(`Other: ${e.target.value}`);
-                    }
+                    handleUpgradeChoiceChange(`Other: ${e.target.value}`);
                   }}
                 />
               )}
@@ -744,14 +752,46 @@ const AOSelector: React.FC = () => {
             <p>⚠️ Please select at least one Ability Origin in your general pool above to configure level choices.</p>
           </div>
         ) : (() => {
+          // Check if inspecting a feat choice or an ability with feat selection available
+          let isInspectedFeat = false;
+          if (inspectedAbility) {
+            const inspectedChoiceDef = getAOChoiceDefinition(inspectedAbility.name, inspectedAbility.desc);
+            if (inspectedChoiceDef?.options?.includes('Feat')) {
+              isInspectedFeat = true;
+            } else {
+              for (const sel of Object.values(state.ao?.levelSelections ?? {})) {
+                const upgradeChoice = (sel as any)?.upgradeChoices?.[inspectedAbility.id];
+                if (upgradeChoice === 'Feat' || (typeof upgradeChoice === 'string' && (upgradeChoice.startsWith('Feat:') || parseFeatChoice(upgradeChoice)))) {
+                  isInspectedFeat = true;
+                  break;
+                }
+              }
+            }
+          }
+
           const isInspectedLarge = Boolean(
             inspectedAbility &&
             ((inspectedAbility.desc ?? '').length > 400 || (inspectedAbility.desc ?? '').includes(' | '))
           );
-          const detailsWidth = !inspectedAbility ? '300px' : isInspectedLarge ? 'minmax(420px, 480px)' : '340px';
+
+          // On wide screens (>= 1200px / ultrawide / 4k), if viewing a feat or detailed card,
+          // give the right column the prominent width it deserves (e.g. 580px-1100px or 60% of layout),
+          // since the left column has only a few level cards while feats has 66 cards.
+          let gridColumns = `minmax(0, 1fr) ${
+            !inspectedAbility
+              ? '320px'
+              : isInspectedLarge
+              ? 'minmax(460px, 540px)'
+              : '360px'
+          }`;
+
+          if (isInspectedFeat) {
+            // Allocate 35-40% to left level selections and 60-65% to right feat grid
+            gridColumns = 'minmax(280px, 3.5fr) minmax(580px, 6.5fr)';
+          }
 
           return (
-            <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: `minmax(0, 1fr) ${detailsWidth}`, gap: '1.5rem', marginTop: '1.5rem' }}>
+            <div className="ao-main-layout" style={{ display: 'grid', gridTemplateColumns: gridColumns, gap: '1.5rem', marginTop: '1.5rem' }}>
             {/* Left: Level Selections */}
             <div className="ao-levels-column" style={{ flex: 1 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>

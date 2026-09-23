@@ -3,6 +3,7 @@ import { ORIGINS, OriginData } from '../data/origins';
 import { RACES } from '../data/races';
 import { deduplicateEquipmentList } from './equipmentUtils';
 import { getRacialSkillBenefits, hasRacialFreeCantrip } from './racialAbilities';
+import { getSelectedFeats } from '../data/feats';
 
 export function getInitialState() {
   return {
@@ -277,7 +278,20 @@ export function getFinalCharacteristics(state: any, raceData: any[]): Record<str
 
   for (const stat in asiBonuses) {
     if (final[stat] !== undefined) {
-      final[stat] += asiBonuses[stat];
+      final[stat] = Math.min(20, final[stat] + asiBonuses[stat]);
+    }
+  }
+
+  // Feat ability score increases
+  const selectedFeats = getSelectedFeats(state);
+  for (const { feat, chosenStat } of selectedFeats) {
+    if (feat.ability_score_increase) {
+      const val = feat.ability_score_increase.value || 1;
+      const targetStat = chosenStat || feat.ability_score_increase.choices[0];
+      const matchedStat = Object.keys(final).find(s => s.toLowerCase() === targetStat?.toLowerCase());
+      if (matchedStat) {
+        final[matchedStat] = Math.min(20, (final[matchedStat] ?? 10) + val);
+      }
     }
   }
 
@@ -328,6 +342,23 @@ export function computeFreeSkillPools(
   for (const aca in racial.builtInAcademics) {
     mergedBuiltInAcademics[aca] = Math.max(mergedBuiltInAcademics[aca] ?? 0, racial.builtInAcademics[aca]);
   }
+
+  // Feat complete skill ranks
+  const selectedFeats = getSelectedFeats(state);
+  for (const { feat } of selectedFeats) {
+    if (feat.skill_ranks) {
+      for (const sr of feat.skill_ranks) {
+        const acaMatch = sr.skill.match(/^Academics:\s*(.+)$/i);
+        if (acaMatch) {
+          const field = acaMatch[1].trim();
+          mergedBuiltInAcademics[field] = Math.max(mergedBuiltInAcademics[field] ?? 0, sr.rank);
+        } else {
+          mergedBuiltInRanks[sr.skill] = Math.max(mergedBuiltInRanks[sr.skill] ?? 0, sr.rank);
+        }
+      }
+    }
+  }
+
   const racialFree = racial.racialFree;
   const racialRestrictSkills = racial.racialRestrictSkills;
 
@@ -569,21 +600,30 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
     }
   }
 
+  const selectedFeats = getSelectedFeats(state);
+  const featArmorProfs = new Set<string>();
+  const featWeaponProfs = new Set<string>();
+  for (const { feat } of selectedFeats) {
+    feat.armor_proficiencies?.forEach(p => featArmorProfs.add(p));
+    feat.weapon_proficiencies?.forEach(w => featWeaponProfs.add(w.toLowerCase()));
+  }
+
   const armorProfs = state.proficiencies?.armorProficiencies ?? state.armorProficiencies ?? {};
-  if (armorProfs.Heavy) {
+  if (armorProfs.Heavy && !featArmorProfs.has('Heavy')) {
     otherSpent += 3;
-  } else if (armorProfs.Medium) {
+  } else if (armorProfs.Medium && !featArmorProfs.has('Medium')) {
     otherSpent += 2;
-  } else if (armorProfs.Light) {
+  } else if (armorProfs.Light && !featArmorProfs.has('Light')) {
     otherSpent += 1;
   }
-  if (armorProfs.Shields) {
+  if (armorProfs.Shields && !featArmorProfs.has('Shields')) {
     otherSpent += 1;
   }
 
   const weaponProfs = state.proficiencies?.weaponProficiencies ?? state.weaponProficiencies;
   if (weaponProfs && Array.isArray(weaponProfs)) {
     for (const group of weaponProfs) {
+      if (featWeaponProfs.has(group.toLowerCase())) continue;
       if (WEAPON_PROFICIENCY_COSTS.Groups1pt.includes(group)) {
         otherSpent += 1;
       } else if (WEAPON_PROFICIENCY_COSTS.Groups2pt.includes(group)) {
