@@ -87,6 +87,16 @@ export const BACKGROUNDS: BackgroundData[] = [
     desc: 'You lived in seclusion for a formative period of your life.'
   },
   {
+    name: 'Hunter',
+    skills: ['Animal Handling', 'Arts & Craft', 'Athletics', 'Perception', 'Stealth', 'Survival'],
+    gold: 10,
+    equipment: "Leatherworker's Tools, woodcarver's tools, or Herbalism Kit, a trophy from your most glorious hunt (a piece of a tooth, antler or claw, etc.), 10 gp",
+    trait: 'Expert Survivalist',
+    desc: 'You are a hunter. You spent several years mastering your craft. Tracking, stealth, trapping, shooting or crafting, whatever your tactics are, you know your way around wilderness and its inhabitants. You might be a hunter for trade, using your skills to find food and earn coins. You could be employed by a noble house, tending to an area of wilderness for them and aiding them in their hunts. Or even a beast hunter in Beornhelm or Oldwood charged to remove threats to your community.',
+    freeSkillPoints: 4,
+    restrictSkills: ['Animal Handling', 'Arts & Craft', 'Athletics', 'Perception', 'Stealth', 'Survival']
+  },
+  {
     name: 'Knight / Order Member',
     skills: ['Athletics', 'Leadership', 'Persuasion', 'Academics'],
     gold: 10,
