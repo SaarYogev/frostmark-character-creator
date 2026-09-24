@@ -5,12 +5,20 @@ export interface Background {
   equipment: string; 
   trait: string; 
   desc: string; 
-  freeSkillPoints?: number; 
-  builtInRanks?: Record<string, number>; 
-  builtInAcademics?: Record<string, number>; 
-  originRestriction?: string; 
-  restrictSkills?: string[]; 
-  image?: string; 
+  category?: 'General' | 'Kingdom';
+  kingdom?: string;
+  origin?: string;
+  bond?: string;
+  wikiTrait?: string;
+  legacyTrait?: string;
+  traitDesc?: string;
+  freeSkillPoints?: number;
+  builtInRanks?: Record<string, number>;
+  builtInAcademics?: Record<string, number>;
+  originRestriction?: string;
+  restrictSkills?: string[];
+  image?: string;
+  isCustom?: boolean;
 }
 
 export const DEFAULT_BACKGROUND: Background = {

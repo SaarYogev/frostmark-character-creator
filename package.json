@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
-    "test": "npx vitest run"
+    "test": "npx vitest run",
+    "ingest:backgrounds": "node scripts/ingest_backgrounds.js"
   },
   "keywords": [],
   "author": "",
