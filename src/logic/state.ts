@@ -1,6 +1,8 @@
 import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS, CHARACTERISTICS } from '../data/constants';
 import { ORIGINS, OriginData } from '../data/origins';
 import { RACES } from '../data/races';
+import { findArmorData } from '../data/equipment';
+import { getAbilityById, getAbilityByName, ABILITIES } from '../data/abilities';
 import { deduplicateEquipmentList } from './equipmentUtils';
 import { getRacialSkillBenefits, hasRacialFreeCantrip } from './racialAbilities';
 import { getSelectedFeats } from '../data/feats';
@@ -1144,3 +1146,228 @@ export function getMaxSkillRank(level: number): number {
   if (level < 8) return 4;
   return 5;
 }
+
+interface ResolvedAbilityEntry {
+  id: string;
+  name: string;
+  origin: string;
+  desc: string;
+  level?: number;
+}
+
+function resolveCharacterAbilities(state: any, currentLevel: number): ResolvedAbilityEntry[] {
+  const resolved: ResolvedAbilityEntry[] = [];
+
+  const resolveEntry = (abilityRef: string, originHint: string = ''): ResolvedAbilityEntry => {
+    const raw = String(abilityRef).trim();
+    let ab = getAbilityById(raw);
+
+    if (!ab && originHint) {
+      ab = ABILITIES.find(
+        (a) => a.origin.toLowerCase() === originHint.toLowerCase() && a.name.toLowerCase() === raw.toLowerCase()
+      );
+    }
+
+    if (!ab) {
+      ab = getAbilityByName(raw) ?? state.ao?.customAbilities?.find((a: any) => a?.id === raw || a?.name === raw);
+    }
+
+    return {
+      id: raw,
+      name: ab?.name ?? raw,
+      origin: (originHint || ab?.origin) ?? '',
+      desc: ab?.desc ?? '',
+      level: ab?.level,
+    };
+  };
+
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections ?? {};
+  for (let l = 1; l <= currentLevel; l++) {
+    const sel = levelSelections[l];
+    if (!sel) continue;
+    if (sel.primaryAbility) {
+      resolved.push(resolveEntry(sel.primaryAbility, sel.primaryAO ?? ''));
+    }
+    if (sel.secondaryAbility) {
+      resolved.push(resolveEntry(sel.secondaryAbility, sel.secondaryAO ?? ''));
+    }
+  }
+
+  const directSelected = state.ao?.selectedAbilities ?? state.selectedAbilities;
+  if (Array.isArray(directSelected)) {
+    for (const item of directSelected) {
+      if (typeof item === 'string') {
+        resolved.push(resolveEntry(item));
+      } else if (item && typeof item === 'object') {
+        const idOrName = item.id || item.name;
+        if (idOrName) {
+          resolved.push(resolveEntry(idOrName, item.origin ?? ''));
+        }
+      }
+    }
+  }
+
+  return resolved;
+}
+
+function calculateUnarmoredDefenseCandidate(
+  entry: ResolvedAbilityEntry,
+  finalStats: Record<string, number>,
+  profBonus: number,
+  dexMod: number
+): number | null {
+  const lowerId = entry.id.toLowerCase();
+  const lowerOrigin = entry.origin.toLowerCase();
+  const lowerName = entry.name.toLowerCase();
+  const lowerDesc = entry.desc.toLowerCase();
+
+  if (
+    lowerId === 'artistry-1-secondary-unarmored-defense' ||
+    (lowerOrigin === 'artistry' && (lowerName.includes('unarmored defense') || lowerId.includes('unarmored-defense')))
+  ) {
+    const preMod = getCharacteristicModifier(finalStats?.Presence ?? 10);
+    const manMod = getCharacteristicModifier(finalStats?.Manipulation ?? 10);
+    const secondMod = Math.max(preMod, manMod);
+    return 10 + Math.min(profBonus, dexMod) + Math.min(profBonus, secondMod);
+  }
+
+  if (
+    (lowerId.startsWith('devotion-1-') && lowerId.includes('might')) ||
+    (lowerOrigin === 'devotion' && (entry.level === 1 || !entry.level) && (lowerName.includes('might') || lowerDesc.includes('unarmored defense')))
+  ) {
+    const vitMod = getCharacteristicModifier(finalStats?.Vitality ?? 10);
+    const preMod = getCharacteristicModifier(finalStats?.Presence ?? 10);
+    const resMod = getCharacteristicModifier(finalStats?.Resolve ?? 10);
+    const secondMod = Math.max(preMod, resMod);
+    return 10 + Math.min(profBonus, vitMod) + Math.min(profBonus, secondMod);
+  }
+
+  if (
+    lowerId === 'discipline-1-secondary-unarmored-defense' ||
+    (lowerOrigin === 'discipline' && (lowerName.includes('unarmored defense') || lowerId.includes('unarmored-defense')))
+  ) {
+    const comMod = getCharacteristicModifier(finalStats?.Composure ?? 10);
+    return 10 + Math.min(profBonus, dexMod) + Math.min(profBonus, comMod);
+  }
+
+  if (
+    lowerId === 'finesse-1-secondary-unarmored-defense' ||
+    (lowerOrigin === 'finesse' && (lowerName.includes('unarmored defense') || lowerId.includes('unarmored-defense')))
+  ) {
+    const cunMod = getCharacteristicModifier(finalStats?.Cunning ?? 10);
+    return 10 + Math.min(profBonus, dexMod) + Math.min(profBonus, cunMod);
+  }
+
+  if (
+    lowerId === 'power-1-secondary-unarmored-defense' ||
+    (lowerOrigin === 'power' && (lowerName.includes('unarmored defense') || lowerId.includes('unarmored-defense')))
+  ) {
+    const vitMod = getCharacteristicModifier(finalStats?.Vitality ?? 10);
+    const resMod = getCharacteristicModifier(finalStats?.Resolve ?? 10);
+    return 10 + Math.min(profBonus, vitMod) + Math.min(profBonus, resMod);
+  }
+
+  if (lowerName.includes('unarmored defense') || lowerDesc.includes('unarmored defense')) {
+    const match = entry.desc.match(/10\s*\+\s*your\s+(\w+)\s+modifier\s*\+\s*your\s+([\w/ ]+?)\s+modifier/i);
+    if (match) {
+      const stat1Name = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
+      const stat2Raw = match[2];
+      const stat2Candidates = stat2Raw.split(/[\/\s]+or\s+|\/|\s+/i).filter(Boolean);
+      const stat1Mod = getCharacteristicModifier(finalStats?.[stat1Name] ?? 10);
+      const stat2Mods = stat2Candidates.map((s) => {
+        const cap = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+        return getCharacteristicModifier(finalStats?.[cap] ?? 10);
+      });
+      const stat2MaxMod = stat2Mods.length > 0 ? Math.max(...stat2Mods) : 0;
+      return 10 + Math.min(profBonus, stat1Mod) + Math.min(profBonus, stat2MaxMod);
+    }
+    return 10 + Math.min(profBonus, dexMod);
+  }
+
+  return null;
+}
+
+function calculateEquipmentAV(
+  state: any,
+  dexMod: number,
+  hasFightingStyleDefense: boolean
+): { regularAV: number; hasBodyArmor: boolean; shieldBonus: number } {
+  const equipmentList = state.equipment?.equipmentList ?? state.equipmentList ?? [];
+  const armors = equipmentList.filter((i: any) => i && (i.isArmor || i.av != null || i.category));
+
+  let regularBaseAC = 10 + dexMod;
+  let hasBodyArmor = false;
+  let shieldBonus = 0;
+
+  for (const a of armors) {
+    const matchedArmorData = findArmorData(a.name ?? '');
+    const category = a.category ?? matchedArmorData?.category ?? a.type ?? '';
+    const isShield = a.name === 'Shield' || category === 'Shield' || (a.name ?? '').toLowerCase().includes('shield');
+
+    if (isShield) {
+      shieldBonus += Number(matchedArmorData?.av ?? a.av ?? a.baseAC ?? 2);
+    } else if (!hasBodyArmor && (matchedArmorData?.av != null || a.av != null || a.baseAC != null)) {
+      hasBodyArmor = true;
+      const baseAv = Number(matchedArmorData?.av ?? a.av ?? a.baseAC);
+      if (category === 'Heavy' || a.addsDexMod === false) {
+        regularBaseAC = baseAv;
+      } else if (category === 'Medium') {
+        regularBaseAC = baseAv + Math.min(2, Math.max(0, dexMod));
+      } else {
+        regularBaseAC = baseAv + dexMod;
+      }
+    }
+  }
+
+  if (hasBodyArmor && hasFightingStyleDefense) {
+    regularBaseAC += 1;
+  }
+
+  return {
+    regularAV: regularBaseAC + shieldBonus,
+    hasBodyArmor,
+    shieldBonus,
+  };
+}
+
+export function calculateAV(
+  state: any,
+  finalStats?: Record<string, number>,
+  profBonus?: number,
+  raceData: any[] = RACES
+): number {
+  if (!state) return 10;
+
+  const resolvedFinalStats = finalStats ?? getFinalCharacteristics(state, raceData);
+  const currentLevel = state.identity?.level ?? state.level ?? 1;
+  const resolvedProfBonus = profBonus ?? getProficiencyBonus(currentLevel);
+  const dexMod = getCharacteristicModifier(resolvedFinalStats?.Dexterity ?? 10);
+
+  const resolvedAbilities = resolveCharacterAbilities(state, currentLevel);
+
+  const hasFightingStyleDefense = resolvedAbilities.some(({ id, name }) => {
+    const lowerId = id.toLowerCase();
+    const lowerName = name.toLowerCase();
+    return lowerId.includes('fighting-style-defense') || lowerName.includes('fighting style (defense)');
+  });
+
+  let unarmoredDefenseAV: number | null = null;
+  for (const entry of resolvedAbilities) {
+    const candidate = calculateUnarmoredDefenseCandidate(entry, resolvedFinalStats, resolvedProfBonus, dexMod);
+    if (candidate != null) {
+      unarmoredDefenseAV = Math.max(unarmoredDefenseAV ?? candidate, candidate);
+    }
+  }
+
+  const { regularAV, hasBodyArmor, shieldBonus } = calculateEquipmentAV(state, dexMod, hasFightingStyleDefense);
+
+  if (unarmoredDefenseAV != null) {
+    if (!hasBodyArmor && shieldBonus === 0) {
+      return unarmoredDefenseAV;
+    }
+    return Math.max(unarmoredDefenseAV, regularAV);
+  }
+
+  return regularAV;
+}
+

@@ -16,6 +16,7 @@ import {
   calculatePotentialGained,
   calculatePotentialRemaining,
   computeSkillPointsSummary,
+  calculateAV,
 } from './state';
 import { getCharacterSpeed, getRacialSpells } from './racialAbilities';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
@@ -469,31 +470,7 @@ function fillWeaponsAndDefenses(form: any, state: any, finalStats: Record<string
     safeSetText(form, `Defense ${n} Type`, a.category ?? a.type ?? '');
   });
 
-  let calculatedAC = 10 + dexMod;
-  let hasBodyArmor = false;
-  let shieldBonus = 0;
-
-  armors.forEach((a: any) => {
-    const matchedArmorData = findArmorData(a.name ?? '');
-    const category = a.category ?? matchedArmorData?.category ?? a.type ?? '';
-    const isShield = a.name === 'Shield' || category === 'Shield' || (a.name ?? '').toLowerCase().includes('shield');
-
-    if (isShield) {
-      shieldBonus += Number(matchedArmorData?.av ?? a.av ?? a.baseAC ?? 2);
-    } else if (!hasBodyArmor && (matchedArmorData?.av != null || a.av != null || a.baseAC != null)) {
-      hasBodyArmor = true;
-      const av = Number(matchedArmorData?.av ?? a.av ?? a.baseAC);
-      if (category === 'Heavy' || a.addsDexMod === false) {
-        calculatedAC = av;
-      } else if (category === 'Medium') {
-        calculatedAC = av + Math.min(2, Math.max(0, dexMod));
-      } else {
-        calculatedAC = av + dexMod;
-      }
-    }
-  });
-
-  const finalAC = calculatedAC + shieldBonus;
+  const finalAC = calculateAV(state, finalStats, profBonus);
   safeSetText(form, 'Armor Class', String(finalAC));
 }
 

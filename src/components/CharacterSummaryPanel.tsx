@@ -10,6 +10,7 @@ import {
   getCharacteristicModifier,
   calculateTotalHP,
   getHitDiceBreakdown,
+  calculateAV,
 } from '../logic/state';
 import { handleExportJSON, handleExportPDF } from '../utils/exportHelpers';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
@@ -74,6 +75,7 @@ export const CharacterSummaryPanel: React.FC<{
   const finalStats = getFinalCharacteristics(state, RACES);
   const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
   const totalHD = getHitDiceBreakdown(state, ORIGINS);
+  const totalAV = calculateAV(state, finalStats, profBonus, RACES);
 
   const charName = state.identity?.characterName || '—';
 
@@ -172,6 +174,10 @@ export const CharacterSummaryPanel: React.FC<{
         <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
           <span className="summary-label" style={{ color: '#a0a5c0' }}>Hit Points (HP)</span>
           <span className="summary-val" style={{ fontWeight: 'bold', color: 'var(--accent-color, #4a90e2)' }}>{totalHP} Max</span>
+        </div>
+        <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+          <span className="summary-label" style={{ color: '#a0a5c0' }}>Armor Value (AV)</span>
+          <span className="summary-val" style={{ fontWeight: 'bold' }}>{totalAV}</span>
         </div>
         <div className="summary-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <span className="summary-label" style={{ color: '#a0a5c0' }}>Hit Dice</span>

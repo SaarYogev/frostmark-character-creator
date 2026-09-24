@@ -8,6 +8,7 @@ import {
   getFinalCharacteristics,
   calculateTotalHP,
   getHitDiceBreakdown,
+  calculateAV,
 } from '../logic/state';
 
 const FinishingTouches: React.FC = () => {
@@ -17,6 +18,7 @@ const FinishingTouches: React.FC = () => {
   const finalStats = getFinalCharacteristics(state, RACES);
   const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
   const totalHD = getHitDiceBreakdown(state, ORIGINS);
+  const totalAV = calculateAV(state, finalStats, undefined, RACES);
 
   const onSaveJSON = () => handleExportJSON(state);
   const onSavePDF = () => handleExportPDF(state);
@@ -89,6 +91,10 @@ const FinishingTouches: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Hit Points (HP)</span>
               <strong style={{ color: 'var(--accent-color, #4a90e2)' }}>{totalHP} Max</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
+              <span style={{ color: '#a0a5c0' }}>Armor Value (AV)</span>
+              <strong style={{ color: '#fff' }}>{totalAV}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Hit Dice</span>
