@@ -49,8 +49,24 @@ const AOSelector: React.FC = () => {
       nextAOs.push(aoName);
     }
 
-    const primaryAO = state.ao?.primaryAO || nextAOs[0] || '';
-    const secondaryAO = state.ao?.secondaryAO || '';
+    const primaryAO = nextAOs[0] || '';
+    const secondaryAO = nextAOs[1] || '';
+
+    const currentSelections = state.ao?.levelSelections ?? {};
+    const lvl1Sel = currentSelections[1] ?? {
+      primaryAO,
+      secondaryAO,
+      primaryAbility: '',
+      secondaryAbility: '',
+    };
+    const nextLevelSelections = {
+      ...currentSelections,
+      1: {
+        ...lvl1Sel,
+        primaryAO: lvl1Sel.primaryAO || primaryAO,
+        secondaryAO: lvl1Sel.secondaryAO || secondaryAO,
+      },
+    };
 
     dispatch({
       type: 'SET_AO',
@@ -58,6 +74,7 @@ const AOSelector: React.FC = () => {
         selectedAOs: nextAOs,
         primaryAO,
         secondaryAO,
+        levelSelections: nextLevelSelections,
       },
     });
   };

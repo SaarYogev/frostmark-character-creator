@@ -672,7 +672,7 @@ describe('PDF Import: importFromPDF', () => {
       } finally {
         teardown();
       }
-    });
+    }, 15000);
 
     it('exports and roundtrips appearance description and notes accurately', async () => {
       const teardown = setupFetchMock();

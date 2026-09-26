@@ -43,8 +43,10 @@ export interface LevelSelection {
 }
 
 export interface AOState {
-  primaryAO: string;
-  secondaryAO: string;
+  /** @deprecated Use levelSelections[1].primaryAO or levelSelections[level].primaryAO instead */
+  primaryAO?: string;
+  /** @deprecated Use levelSelections[1].secondaryAO or levelSelections[level].secondaryAO instead */
+  secondaryAO?: string;
   primaryAOHD: number;
   primaryAOSpellcasting: SpellcastingTier;
   selectedAOs: string[];
