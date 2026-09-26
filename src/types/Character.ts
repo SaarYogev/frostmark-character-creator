@@ -189,6 +189,16 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       const selectedAOs = p.selectedAOs ?? p.ao?.selectedAOs ?? state.ao?.selectedAOs ?? (primaryAO ? [primaryAO] : []);
       const levelSelections = p.levelSelections ?? p.ao?.levelSelections ?? state.ao?.levelSelections ?? {};
 
+      if (primaryAO && !levelSelections[1]?.primaryAO) {
+        levelSelections[1] = {
+          ...(levelSelections[1] ?? {}),
+          primaryAO,
+          secondaryAO: levelSelections[1]?.secondaryAO ?? secondaryAO ?? '',
+          primaryAbility: levelSelections[1]?.primaryAbility ?? '',
+          secondaryAbility: levelSelections[1]?.secondaryAbility ?? '',
+        };
+      }
+
       /*
        * Synchronize character and player names across both root-level convenience fields
        * and structured identity state, favoring identity updates while retaining backwards compatibility.
@@ -428,15 +438,19 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         skillRanks: currentSkillRanks,
       };
     }
-    case 'SET_BACKGROUND':
+    case 'SET_BACKGROUND': {
+      const bgName = action.payload?.name;
+      const matchedBg = bgName ? BACKGROUNDS.find((b) => b.name.toLowerCase() === bgName.toLowerCase()) : undefined;
       return {
         ...state,
         background: {
           ...DEFAULT_BACKGROUND,
+          ...(matchedBg ?? {}),
           ...action.payload,
-          freeSkillPoints: action.payload?.freeSkillPoints ?? DEFAULT_BACKGROUND.freeSkillPoints,
+          freeSkillPoints: action.payload?.freeSkillPoints ?? matchedBg?.freeSkillPoints ?? (action.payload?.name ? 4 : DEFAULT_BACKGROUND.freeSkillPoints),
         },
       };
+    }
     case 'SET_CUSTOM_BACKGROUND':
       return {
         ...state,
@@ -456,16 +470,31 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
           ...action.payload,
         },
       };
-    case 'SET_AO':
+    case 'SET_AO': {
+      const nextAO = {
+        ...state.ao,
+        ...action.payload,
+      };
+      if (action.payload?.primaryAO && !nextAO.levelSelections?.[1]?.primaryAO) {
+        nextAO.levelSelections = {
+          ...(nextAO.levelSelections ?? {}),
+          1: {
+            ...(nextAO.levelSelections?.[1] ?? {
+              primaryAbility: '',
+              secondaryAbility: '',
+              secondaryAO: action.payload.secondaryAO ?? '',
+            }),
+            primaryAO: action.payload.primaryAO,
+          },
+        };
+      }
       return {
         ...state,
         importedMetadata: undefined,
         accomplishmentPointsRemaining: undefined,
-        ao: {
-          ...state.ao,
-          ...action.payload,
-        },
+        ao: nextAO,
       };
+    }
     case 'SET_SKILLS': {
       const updatedSkills = {
         ...state.skills,

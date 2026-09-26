@@ -185,11 +185,11 @@ describe('Accomplishment Points (AP) TDD Suite', () => {
   });
 
   describe('3. DEFAULT_BACKGROUND and characterReducer SET_BACKGROUND defaults', () => {
-    it('DEFAULT_BACKGROUND has freeSkillPoints set to 4', () => {
-      expect(DEFAULT_BACKGROUND.freeSkillPoints).toBe(4);
+    it('DEFAULT_BACKGROUND has freeSkillPoints set to 0', () => {
+      expect(DEFAULT_BACKGROUND.freeSkillPoints).toBe(0);
     });
 
-    it('characterReducer SET_BACKGROUND defaults freeSkillPoints to 4 for background without explicit points', () => {
+    it('characterReducer SET_BACKGROUND ensures selected background gets assigned points and avoids 0 default', () => {
       const bgWithoutPoints = { ...BACKGROUNDS[0], freeSkillPoints: undefined };
 
       const nextState = characterReducer(DEFAULT_CHARACTER, {
@@ -197,7 +197,7 @@ describe('Accomplishment Points (AP) TDD Suite', () => {
         payload: bgWithoutPoints as any,
       });
 
-      expect(nextState.background.freeSkillPoints).toBe(4);
+      expect(nextState.background.freeSkillPoints).toBe(BACKGROUNDS[0].freeSkillPoints);
     });
 
     it('computeFreeSkillPools grants 4 free background skill points for Cultist', () => {
