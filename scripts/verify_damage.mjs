@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as smolToml from 'smol-toml';
-import { fetchSpellDetails } from './enrich_spells.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -119,14 +118,8 @@ async function main() {
   const rows = [];
   for (const name of names) {
     const stored = spells[name].damageTypes || [];
-    let desc = spells[name].desc || '';
-    let source = 'stored toml desc';
-    const fetched = await fetchSpellDetails(name);
-    if (fetched && fetched.desc) {
-      desc = fetched.desc;
-      source = 'fetched wiki desc';
-    }
-    await new Promise((r) => setTimeout(r, 50));
+    const desc = spells[name].desc || '';
+    const source = 'stored toml desc';
 
     const detected = detectUnion(desc, name);
     const same = stored.length === detected.length && stored.every((t) => detected.includes(t));
