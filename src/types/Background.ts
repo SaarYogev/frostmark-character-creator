@@ -28,7 +28,7 @@ export const DEFAULT_BACKGROUND: Background = {
   equipment: '',
   trait: '',
   desc: '',
-  freeSkillPoints: 0,
+  freeSkillPoints: 4,
   builtInRanks: {},
   builtInAcademics: {},
 };

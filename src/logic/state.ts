@@ -117,11 +117,78 @@ export function getBaseAccomplishmentPoints(powerLevel: string): number {
   return 16;
 }
 
+export function getBonusAccomplishmentPoints(state: any): number {
+  let bonus = 0;
+  const namedAbilitiesSeen = new Set<string>();
+
+  const evaluateAbility = (rawText: string) => {
+    if (!rawText || typeof rawText !== 'string') return;
+    const text = rawText.trim();
+
+    if (/street\s+smart/i.test(text)) {
+      if (!namedAbilitiesSeen.has('street_smart')) {
+        namedAbilitiesSeen.add('street_smart');
+        bonus += 4;
+      }
+    } else if (/bonus\s+accomplishment/i.test(text)) {
+      if (!namedAbilitiesSeen.has('bonus_accomplishment')) {
+        namedAbilitiesSeen.add('bonus_accomplishment');
+        bonus += 3;
+      }
+    } else if (/(two\s+points?\s+to\s+use\s+in\s+the\s+accomplishment\s+section|^accomplishment\s+points$)/i.test(text)) {
+      bonus += 2;
+    } else if (/one\s+point\s+to\s+use\s+in\s+the\s+accomplishment\s+section/i.test(text)) {
+      bonus += 1;
+    }
+  };
+
+  const currentLevel = state?.identity?.level ?? state?.level ?? 1;
+  const levelSelections = state?.ao?.levelSelections ?? state?.levelSelections ?? {};
+  for (const levelKey in levelSelections) {
+    const levelNumber = Number(levelKey);
+    if (isNaN(levelNumber) || levelNumber > currentLevel) {
+      continue;
+    }
+    const selection = levelSelections[levelKey];
+    if (!selection) continue;
+    if (selection.primaryAbility) evaluateAbility(selection.primaryAbility);
+    if (selection.secondaryAbility) evaluateAbility(selection.secondaryAbility);
+    if (selection.upgradeChoices && typeof selection.upgradeChoices === 'object') {
+      for (const choiceKey in selection.upgradeChoices) {
+        evaluateAbility(selection.upgradeChoices[choiceKey]);
+      }
+    }
+  }
+
+  const features = state?.features ?? state?.customFeatures ?? [];
+  if (Array.isArray(features)) {
+    for (const feature of features) {
+      const featureText = typeof feature === 'string'
+        ? feature
+        : `${feature?.name ?? ''} ${feature?.desc ?? ''}`.trim();
+      evaluateAbility(featureText);
+    }
+  }
+
+  const customAbilities = state?.ao?.customAbilities ?? state?.customAbilities ?? [];
+  if (Array.isArray(customAbilities)) {
+    for (const customAbility of customAbilities) {
+      const abilityText = typeof customAbility === 'string'
+        ? customAbility
+        : `${customAbility?.name ?? ''} ${customAbility?.desc ?? ''}`.trim();
+      evaluateAbility(abilityText);
+    }
+  }
+
+  return bonus;
+}
+
 export function getTotalAccomplishmentPointsLimit(state: any): number {
   const base = getBaseAccomplishmentPoints(state.campaignPowerLevel ?? state.identity?.campaignPowerLevel);
   const lvl = state.level ?? state.identity?.level ?? 1;
   const levelsOverThreshold = Math.floor((lvl - 1) / 4);
-  return base + (levelsOverThreshold * 2);
+  const bonusAP = getBonusAccomplishmentPoints(state);
+  return base + (levelsOverThreshold * 2) + bonusAP;
 }
 
 export function getAttributePointCost(score: number): number {
@@ -372,14 +439,15 @@ export function computeFreeSkillPools(
   if (hasLevelSelections) {
     let extraCount = 0;
     for (let i = 1; i <= currentLevel; i++) {
-      const selection = levelSelections[i];
-      if (selection && selection.primaryAO) {
-        let origin = originsData.find(o => o.name === selection.primaryAO);
-        if (!origin && selection.primaryAO === 'Custom') {
+      const selection = levelSelections[i] ?? levelSelections[String(i)];
+      const primaryAO = selection?.primaryAO || (i === 1 ? (state.ao?.primaryAO ?? state.primaryAO) : '');
+      if (primaryAO) {
+        let origin = originsData.find(o => o.name === primaryAO);
+        if (!origin && primaryAO === 'Custom') {
           origin = state.ao?.customPrimaryAO ?? state.customPrimaryAO;
         } else if (!origin && (state.ao?.customAOs || state.customAOs)) {
           const customList = state.ao?.customAOs ?? state.customAOs;
-          origin = customList.find((o: any) => o.name === selection.primaryAO);
+          origin = customList.find((o: any) => o.name === primaryAO);
         }
         if ((origin?.extraSkills ?? 0) > 0) {
           extraCount++;
@@ -626,7 +694,7 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
   if (weaponProfs && Array.isArray(weaponProfs)) {
     for (const group of weaponProfs) {
       if (featWeaponProfs.has(group.toLowerCase())) continue;
-      if (WEAPON_PROFICIENCY_COSTS.Groups1pt.includes(group)) {
+      if (group === 'Handpicked 2 Weapons' || group === 'Handpicked2' || WEAPON_PROFICIENCY_COSTS.Groups1pt.includes(group)) {
         otherSpent += 1;
       } else if (WEAPON_PROFICIENCY_COSTS.Groups2pt.includes(group)) {
         otherSpent += 2;

@@ -434,6 +434,7 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         background: {
           ...DEFAULT_BACKGROUND,
           ...action.payload,
+          freeSkillPoints: action.payload?.freeSkillPoints ?? DEFAULT_BACKGROUND.freeSkillPoints,
         },
       };
     case 'SET_CUSTOM_BACKGROUND':
