@@ -10,7 +10,11 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
     "test": "npx vitest run",
-    "ingest:backgrounds": "node scripts/ingest_backgrounds.js"
+    "ingest:abilities": "node scripts/ingest_abilities.js",
+    "ingest:backgrounds": "node scripts/ingest_backgrounds.js",
+    "ingest:feats": "node scripts/ingest_feats.js",
+    "ingest:spells": "node scripts/enrich_spells.js",
+    "ingest:all": "npm run ingest:abilities && npm run ingest:backgrounds && npm run ingest:feats && npm run ingest:spells"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +32,6 @@
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.1",
-    "cheerio": "^1.2.0",
     "gh-pages": "^6.3.0",
     "jsdom": "^24.1.3",
     "rollup-plugin-toml": "^1.0.0",

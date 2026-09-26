@@ -20,30 +20,32 @@ export interface BackgroundData {
   originRestriction?: string;
   restrictSkills?: string[];
   image?: string;
+  isLegacy?: boolean;
 }
 
-const rawBackgrounds = Array.isArray(tomlData) ? tomlData : ((tomlData as any).backgrounds ?? []);
+const rawBackgrounds = Array.isArray(tomlData) ? tomlData : ((tomlData as any)?.backgrounds ?? []);
 
 export const BACKGROUNDS: BackgroundData[] = (rawBackgrounds as any[]).map((bg) => ({
-  name: bg.name,
-  skills: Array.isArray(bg.skills) ? bg.skills : [],
-  gold: typeof bg.gold === 'number' ? bg.gold : 0,
-  equipment: bg.equipment ?? '',
-  trait: bg.trait ?? '',
-  wikiTrait: bg.wikiTrait,
-  legacyTrait: bg.legacyTrait,
-  traitDesc: bg.traitDesc,
-  desc: bg.desc ?? '',
-  category: bg.category,
-  kingdom: bg.kingdom,
-  origin: bg.origin,
-  bond: bg.bond,
-  freeSkillPoints: typeof bg.freeSkillPoints === 'number' ? bg.freeSkillPoints : 0,
-  builtInRanks: bg.builtInRanks ?? {},
-  builtInAcademics: bg.builtInAcademics ?? {},
-  originRestriction: bg.originRestriction,
-  restrictSkills: Array.isArray(bg.restrictSkills) ? bg.restrictSkills : undefined,
-  image: bg.image,
+  name: bg?.name ?? '',
+  skills: Array.isArray(bg?.skills) ? bg.skills : [],
+  gold: typeof bg?.gold === 'number' ? bg.gold : 0,
+  equipment: bg?.equipment ?? '',
+  trait: bg?.trait ?? '',
+  wikiTrait: bg?.wikiTrait,
+  legacyTrait: bg?.legacyTrait,
+  traitDesc: bg?.traitDesc,
+  desc: bg?.desc ?? '',
+  category: bg?.category,
+  kingdom: bg?.kingdom,
+  origin: bg?.origin,
+  bond: bg?.bond,
+  freeSkillPoints: typeof bg?.freeSkillPoints === 'number' ? bg.freeSkillPoints : 0,
+  builtInRanks: bg?.builtInRanks ?? {},
+  builtInAcademics: bg?.builtInAcademics ?? {},
+  originRestriction: bg?.originRestriction,
+  restrictSkills: Array.isArray(bg?.restrictSkills) ? bg.restrictSkills : undefined,
+  image: bg?.image,
+  isLegacy: bg?.isLegacy,
 }));
 
 export function getBackgroundByName(name: string): BackgroundData | undefined {

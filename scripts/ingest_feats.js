@@ -1,192 +1,128 @@
 import fs from 'fs';
 import path from 'path';
-import * as cheerio from 'cheerio';
-import { stringify } from 'smol-toml';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
+import { parse } from 'smol-toml';
 
-const FEAT_CATEGORIES = [
-  { category: 'General Feats', page: 'General_Feats' },
-  { category: 'Weapon Feats', page: 'Weapon_Feats' },
-  { category: 'Armor Feats', page: 'Armor_Feats' },
-  { category: 'Skill Feats', page: 'Skill_Feats' },
-  { category: 'Tool Feats', page: 'Tool_Feats' }
-];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, '..');
 
-const VALID_STATS = [
-  'Brawn', 'Dexterity', 'Vitality', 'Intelligence',
-  'Cunning', 'Resolve', 'Presence', 'Manipulation', 'Composure'
-];
+// The canonical rulebook PDF is the sole source of truth for Feats,
+// superseding legacy MediaWiki scraping which suffered from incomplete DOM parsing and text leakage.
+const PDF_PATH = path.join(REPO_ROOT, 'reference/Frostmark RPG - Playing Frostmark 0.3.7.pdf');
+const TOML_PATH = path.join(REPO_ROOT, 'src/data/toml/feats.toml');
+const INGEST_PY = path.join(__dirname, 'ingest_feats_pdf.py');
 
-async function fetchPageViaAPI(pageName) {
-  const apiUrl = `https://frostmark-rpg.fandom.com/api.php?action=parse&page=${encodeURIComponent(pageName)}&prop=text&format=json`;
-  const res = await fetch(apiUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-  });
-  if (!res.ok) throw new Error(`API Error: ${res.status} on ${apiUrl}`);
-  const data = await res.json();
-  if (data.error) throw new Error(`API Error: ${data.error.info || JSON.stringify(data.error)}`);
-  return data.parse?.text?.['*'] || '';
-}
-
-function normalizeSkillName(raw) {
-  let s = raw.trim().replace(/[.,]$/, '');
-  if (/academics\s*\(\s*history\s*\)/i.test(s)) return 'Academics: History';
-  if (/academics\s*:\s*alchemy/i.test(s)) return 'Academics: Alchemy';
-  if (/arts\s*&\s*craft\s*:\s*cooking/i.test(s)) return 'Arts & Craft: Cooking';
-  if (/crafts?\s*&\s*art\s*:\s*acting/i.test(s)) return 'Arts & Craft: Acting';
-  // Standard capitalization
-  const known = [
-    'Athletics', 'Acrobatics', 'Subterfuge', 'Stealth', 'Animal Handling',
-    'Persuasion', 'Deception', 'Intimidation', 'Empathy', 'Leadership',
-    'Insight', 'Perception', 'Survival', 'Medicine', 'Investigation',
-    'Nature', 'Religion', 'Occult'
-  ];
-  const found = known.find(k => k.toLowerCase() === s.toLowerCase());
-  return found || s;
-}
-
-function parseFeatBlock($, featName, category, $nodes) {
-  const rawHtml = $nodes.map((_, el) => $(el).html()).get().join('\n');
-  const text = $nodes.map((_, el) => $(el).text()).get().join(' ').replace(/\s+/g, ' ').trim();
-
-  // 1. Prerequisite
-  let prerequisite = '';
-  const prereqMatch = rawHtml.match(/<p>[^<]*<i>\s*Prerequisite\s*<\/i>\s*:\s*([^<]+)<\/p>/i)
-    || text.match(/Prerequisite\s*:\s*([^.]*?)(?=Ability score|Increase your|Gain a rank|You gain|$)/i);
-  if (prereqMatch) {
-    prerequisite = prereqMatch[1].replace(/<[^>]+>/g, '').trim();
-  }
-
-  // 2. Ability Score Increase
-  let abilityScoreIncrease;
-  const asiMatch = text.match(/Ability score\s*:\s*Increase your ([^.\n]+?)(?:score)? by \+?(\d+)/i);
-  if (asiMatch) {
-    const rawStats = asiMatch[1];
-    const value = parseInt(asiMatch[2], 10) || 1;
-    const matchedStats = VALID_STATS
-      .filter(stat => new RegExp(`\\b${stat}\\b`, 'i').test(rawStats))
-      .sort((a, b) => rawStats.toLowerCase().indexOf(a.toLowerCase()) - rawStats.toLowerCase().indexOf(b.toLowerCase()));
-    if (matchedStats.length > 0) {
-      abilityScoreIncrease = {
-        choices: matchedStats,
-        value
-      };
-    }
-  }
-
-  // 3. Complete Skill Ranks
-  const skillRanks = [];
-  const rankMatches = text.matchAll(/(?:Gain|gain) a rank in ([A-Za-z0-9:&() ]+?)(?:\.|$)/g);
-  for (const rm of rankMatches) {
-    const rawSkill = rm[1];
-    const normalized = normalizeSkillName(rawSkill);
-    const allowRank5 = /may gain rank 5 in (?:the|this) skill/i.test(text);
-    if (!skillRanks.some(sr => sr.skill === normalized)) {
-      skillRanks.push({
-        skill: normalized,
-        rank: 1,
-        ...(allowRank5 ? { allow_rank_5: true } : {})
-      });
-    }
-  }
-
-  // 4. Armor Proficiencies
-  const armorProficiencies = [];
-  if (/proficiency with light armor and shields/i.test(text)) {
-    armorProficiencies.push('Light', 'Shields');
-  } else if (/proficiency with medium armor and shields/i.test(text)) {
-    armorProficiencies.push('Medium', 'Shields');
-  } else if (/proficiency with heavy armor and shields/i.test(text)) {
-    armorProficiencies.push('Heavy', 'Shields');
-  } else if (/proficiency with shields/i.test(text)) {
-    armorProficiencies.push('Shields');
-  }
-
-  // 5. Weapon Proficiencies
-  const weaponProficiencies = [];
-  if (/proficient with improvised weapons/i.test(text)) {
-    weaponProficiencies.push('Improvised Weapons');
-  }
-  if (/proficiency with all simple and martial weapons/i.test(text)) {
-    weaponProficiencies.push('Simple Weapons', 'Martial Weapons');
-  }
-
-  // 6. AC & Saving Throw bonuses
-  let acBonus;
-  if (/Increase your AC by \+(\d+)/i.test(text)) {
-    acBonus = parseInt(text.match(/Increase your AC by \+(\d+)/i)[1], 10);
-  }
-
-  let savingThrows;
-  const stMatch = text.match(/your (Brawn|Dexterity|Vitality|Intelligence|Cunning|Resolve|Presence|Manipulation|Composure) saving throw score by \+(\d+)/i);
-  if (stMatch) {
-    savingThrows = [{
-      stat: stMatch[1],
-      bonus: parseInt(stMatch[2], 10)
-    }];
-  }
-
-  // Clean description
-  let cleanDesc = text
-    .replace(/^.*?\[\s*\]\s*/, '')
-    .replace(new RegExp(`^${featName}\\s*`, 'i'), '')
-    .replace(/\[\s*\]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const feat = {
-    name: featName,
-    category,
-    prerequisite,
-    desc: cleanDesc
-  };
-
-  if (abilityScoreIncrease) feat.ability_score_increase = abilityScoreIncrease;
-  if (skillRanks.length > 0) feat.skill_ranks = skillRanks;
-  if (armorProficiencies.length > 0) feat.armor_proficiencies = armorProficiencies;
-  if (weaponProficiencies.length > 0) feat.weapon_proficiencies = weaponProficiencies;
-  if (acBonus !== undefined) feat.ac_bonus = acBonus;
-  if (savingThrows) feat.saving_throws = savingThrows;
-
-  return feat;
-}
+const EXPECTED_CATEGORIES = {
+  'General Feats': 31,
+  'Weapon Feats': 9,
+  'Armor Feats': 6,
+  'Skill Feats': 17,
+  'Tool Feats': 3
+};
 
 export async function ingestFeats() {
-  const allFeats = [];
-
-  for (const { category, page } of FEAT_CATEGORIES) {
-    console.log(`Ingesting ${category} from ${page}...`);
-    const html = await fetchPageViaAPI(page);
-    const $ = cheerio.load(html);
-    const root = $('.mw-parser-output');
-
-    const headings = root.find('h2, h3, h4, h5').filter((_, el) => {
-      const txt = $(el).text().replace(/\[\s*\]/g, '').trim();
-      return txt.length > 0 && !['Contents', 'Navigation'].includes(txt);
-    });
-
-    headings.each((_, hEl) => {
-      const featName = $(hEl).text().replace(/\[\s*\]/g, '').trim();
-      let cur = $(hEl).next();
-      const nodes = [];
-      while (cur.length && !cur.is('h2, h3, h4, h5')) {
-        nodes.push(cur[0]);
-        cur = cur.next();
-      }
-      const feat = parseFeatBlock($, featName, category, $(nodes));
-      allFeats.push(feat);
-    });
+  if (!fs.existsSync(PDF_PATH)) {
+    throw new Error(
+      `Canonical rulebook PDF not found at ${PDF_PATH}. ` +
+      `Ensure the reference PDF is located in reference/ before running ingestion.`
+    );
   }
 
-  console.log(`Total feats parsed: ${allFeats.length}`);
-  const tomlObj = { feats: allFeats };
-  const header = '# AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY!\n# Generated by scripts/ingest_feats.js\n\n';
-  const tomlStr = header + stringify(tomlObj);
-  const outPath = path.resolve('src/data/toml/feats.toml');
-  fs.writeFileSync(outPath, tomlStr, 'utf-8');
-  console.log(`Successfully written to ${outPath}`);
-  return allFeats;
+  console.log(`Ingesting Feats from canonical PDF: ${PDF_PATH}`);
+  try {
+    execSync(`python3 "${INGEST_PY}"`, { stdio: 'inherit' });
+  } catch (err) {
+    console.error('Failed to execute PDF feats ingestion script:', err.message);
+    throw err;
+  }
+
+  if (!fs.existsSync(TOML_PATH)) {
+    throw new Error(`Ingestion completed but output file not found at ${TOML_PATH}`);
+  }
+
+  const tomlContent = fs.readFileSync(TOML_PATH, 'utf-8');
+  if (!tomlContent.startsWith('# AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY!')) {
+    throw new Error('Missing required auto-generated warning header in feats.toml');
+  }
+
+  const parsed = parse(tomlContent);
+  const feats = Array.isArray(parsed?.feats) ? parsed.feats : [];
+
+  validateFeats(feats);
+  logFeatMetrics(feats);
+
+  return feats;
+}
+
+function validateFeats(feats) {
+  if (!Array.isArray(feats) || feats.length !== 66) {
+    throw new Error(`Feat count mismatch: expected 66 canonical feats, found ${feats?.length}`);
+  }
+
+  const categoryCounts = {};
+  for (const feat of feats) {
+    if (!feat?.name || typeof feat.name !== 'string' || !feat.name.trim()) {
+      throw new Error(`Feat entry missing valid name: ${JSON.stringify(feat)}`);
+    }
+    if (!feat?.category || typeof feat.category !== 'string') {
+      throw new Error(`Feat ${feat?.name} missing category`);
+    }
+    if (typeof feat?.desc !== 'string' || !feat.desc.trim()) {
+      throw new Error(`Feat ${feat?.name} missing description text`);
+    }
+    if (typeof feat?.prerequisite !== 'string') {
+      throw new Error(`Feat ${feat?.name} missing prerequisite string`);
+    }
+
+    categoryCounts[feat.category] = (categoryCounts[feat.category] || 0) + 1;
+  }
+
+  for (const [cat, expectedCount] of Object.entries(EXPECTED_CATEGORIES)) {
+    const actualCount = categoryCounts[cat] || 0;
+    if (actualCount !== expectedCount) {
+      throw new Error(`Category count mismatch for '${cat}': expected ${expectedCount}, got ${actualCount}`);
+    }
+  }
+}
+
+function logFeatMetrics(feats) {
+  const metrics = {
+    total: feats.length,
+    byCategory: {},
+    withASI: 0,
+    withSkillRanks: 0,
+    withArmorProfs: 0,
+    withWeaponProfs: 0,
+    withSavingThrows: 0,
+    withACBonus: 0
+  };
+
+  for (const f of feats) {
+    metrics.byCategory[f.category] = (metrics.byCategory[f.category] || 0) + 1;
+    if (f.ability_score_increase) metrics.withASI += 1;
+    if (f.skill_ranks && f.skill_ranks.length > 0) metrics.withSkillRanks += 1;
+    if (f.armor_proficiencies && f.armor_proficiencies.length > 0) metrics.withArmorProfs += 1;
+    if (f.weapon_proficiencies && f.weapon_proficiencies.length > 0) metrics.withWeaponProfs += 1;
+    if (f.saving_throws && f.saving_throws.length > 0) metrics.withSavingThrows += 1;
+    if (f.ac_bonus != null) metrics.withACBonus += 1;
+  }
+
+  console.log('\n--- Feats Ingestion Validation & Metrics ---');
+  console.log(`Total feats ingested: ${metrics.total}`);
+  console.log('Feats per category:');
+  for (const [cat, count] of Object.entries(metrics.byCategory)) {
+    console.log(`  - ${cat}: ${count}`);
+  }
+  console.log('Feature breakdown:');
+  console.log(`  - Ability score increases: ${metrics.withASI}`);
+  console.log(`  - Skill ranks granted:     ${metrics.withSkillRanks}`);
+  console.log(`  - Armor proficiencies:     ${metrics.withArmorProfs}`);
+  console.log(`  - Weapon proficiencies:    ${metrics.withWeaponProfs}`);
+  console.log(`  - Saving throw bonuses:    ${metrics.withSavingThrows}`);
+  console.log(`  - AC bonuses:              ${metrics.withACBonus}`);
+  console.log('-------------------------------------------\n');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('ingest_feats.js')) {
