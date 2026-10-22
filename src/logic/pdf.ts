@@ -17,6 +17,7 @@ import {
   calculatePotentialRemaining,
   computeSkillPointsSummary,
   calculateAV,
+  calculateInitiativeBonus,
 } from './state';
 import { getCharacterSpeed, getRacialSpells } from './racialAbilities';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
@@ -328,8 +329,9 @@ function fillCombat(form: any, state: any, finalStats: Record<string, number>, r
   const vitMod = getCharacteristicModifier(finalStats.Vitality ?? 10);
   const currentLevel = state.identity?.level ?? state.level ?? 1;
 
-  safeSetText(form, 'Initiative', formatModifier(dexMod));
-  safeSetText(form, 'Initiative Mod', formatModifier(dexMod));
+  const initiativeBonus = calculateInitiativeBonus(state, finalStats, profBonus, racesData);
+  safeSetText(form, 'Initiative', formatModifier(initiativeBonus));
+  safeSetText(form, 'Initiative Mod', formatModifier(initiativeBonus));
 
   const speed = getCharacterSpeed(state, racesData);
   safeSetText(form, 'Speed', String(speed));

@@ -1,4 +1,4 @@
-import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS, CHARACTERISTICS } from '../data/constants';
+import { POINT_BUY_COSTS, SAVE_PROFICIENCY_COSTS, ARMOR_PROFICIENCY_COSTS, WEAPON_PROFICIENCY_COSTS, SKILL_RANK_CUMULATIVE_COSTS, CHARACTERISTICS, SKILLS } from '../data/constants';
 import { ORIGINS, OriginData } from '../data/origins';
 import { RACES } from '../data/races';
 import { findArmorData } from '../data/equipment';
@@ -465,6 +465,13 @@ export function computeFreeSkillPools(
     if (primaryExtra > 0) {
       aoFree = 4;
     }
+  }
+
+  /*
+   * Master of Some grants 5 free skill points to the character's Ability Origin pool.
+   */
+  if (hasMasterOfSome(state)) {
+    aoFree += 5;
   }
 
   return {
@@ -1209,7 +1216,13 @@ export function getHitDiceBreakdown(state: any, originsData: OriginData[]): stri
     .join(', ');
 }
 
-export function getMaxSkillRank(level: number): number {
+export function getMaxSkillRank(level: number, state?: any): number {
+  /*
+   * Master of Some ability restricts all skill ranks to a maximum of rank 2 regardless of character level.
+   */
+  if (state && hasMasterOfSome(state)) {
+    return 2;
+  }
   if (level < 4) return 3;
   if (level < 8) return 4;
   return 5;
@@ -1437,5 +1450,219 @@ export function calculateAV(
   }
 
   return regularAV;
+}
+
+export function formatModifier(mod: number): string {
+  return mod >= 0 ? `+${mod}` : `${mod}`;
+}
+
+export function hasMasterOfSome(state: any): boolean {
+  if (!state) return false;
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections ?? {};
+  const hasInLevels = Object.values(levelSelections).some((sel: any) => {
+    if (!sel) return false;
+    const p = String(sel.primaryAbility ?? '').toLowerCase();
+    const s = String(sel.secondaryAbility ?? '').toLowerCase();
+    return (
+      p.includes('master-of-some') ||
+      s.includes('master-of-some') ||
+      p.includes('master of some') ||
+      s.includes('master of some')
+    );
+  });
+  if (hasInLevels) return true;
+
+  const direct = state.ao?.selectedAbilities ?? state.selectedAbilities ?? [];
+  return Array.isArray(direct) && direct.some((item: any) => {
+    const str = typeof item === 'string' ? item : (item?.id || item?.name || '');
+    const lower = str.toLowerCase();
+    return lower.includes('master-of-some') || lower.includes('master of some');
+  });
+}
+
+export function hasJackOfAllTrades(state: any): boolean {
+  if (!state) return false;
+  const levelSelections = state.ao?.levelSelections ?? state.levelSelections ?? {};
+  const hasInLevels = Object.values(levelSelections).some((sel: any) => {
+    if (!sel) return false;
+    const p = String(sel.primaryAbility ?? '').toLowerCase();
+    const s = String(sel.secondaryAbility ?? '').toLowerCase();
+    return (
+      p.includes('jack-of-all-trades') ||
+      s.includes('jack-of-all-trades') ||
+      p.includes('jack of all trades') ||
+      s.includes('jack of all trades')
+    );
+  });
+  if (hasInLevels) return true;
+
+  const direct = state.ao?.selectedAbilities ?? state.selectedAbilities ?? [];
+  return Array.isArray(direct) && direct.some((item: any) => {
+    const str = typeof item === 'string' ? item : (item?.id || item?.name || '');
+    const lower = str.toLowerCase();
+    return lower.includes('jack-of-all-trades') || lower.includes('jack of all trades');
+  });
+}
+
+export function hasInitiativeHalfProficiencyBonus(state: any): boolean {
+  return hasMasterOfSome(state) || hasJackOfAllTrades(state);
+}
+
+export function calculateInitiativeBonus(
+  state: any,
+  finalStats?: Record<string, number>,
+  profBonus?: number,
+  raceData: any[] = RACES
+): number {
+  if (!state) return 0;
+  const resolvedFinalStats = finalStats ?? getFinalCharacteristics(state, raceData);
+  const currentLevel = state.identity?.level ?? state.level ?? 1;
+  const resolvedProfBonus = profBonus ?? getProficiencyBonus(currentLevel);
+  const dexMod = getCharacteristicModifier(resolvedFinalStats?.Dexterity ?? 10);
+
+  let bonus = dexMod;
+  if (hasInitiativeHalfProficiencyBonus(state)) {
+    /*
+     * Master of Some and Jack Of All Trades add half proficiency bonus rounded up
+     * to all initiative checks.
+     */
+    bonus += Math.ceil(resolvedProfBonus / 2);
+  }
+  return bonus;
+}
+
+export interface MasterOfSomeValidation {
+  isActive: boolean;
+  hasAcademics: boolean;
+  hasArtsCraft: boolean;
+  uniqueSkillsCount: number;
+  hasAtLeast4Skills: boolean;
+  maxRankValid: boolean;
+  isValid: boolean;
+  details: {
+    academicsRank: number;
+    artsCraftRank: number;
+    exceededSkills: string[];
+  };
+}
+
+export function validateMasterOfSome(state: any): MasterOfSomeValidation {
+  const isActive = hasMasterOfSome(state);
+  if (!isActive) {
+    return {
+      isActive: false,
+      hasAcademics: true,
+      hasArtsCraft: true,
+      uniqueSkillsCount: 0,
+      hasAtLeast4Skills: true,
+      maxRankValid: true,
+      isValid: true,
+      details: {
+        academicsRank: 0,
+        artsCraftRank: 0,
+        exceededSkills: [],
+      },
+    };
+  }
+
+  const skillRanks = state.skills?.skillRanks ?? state.skillRanks ?? {};
+  const academicsEntries: Array<{ name: string; rank?: number }> =
+    state.skills?.academicsEntries ?? state.academicsEntries ?? [];
+  const academicsRanks: Record<string, number> =
+    state.skills?.academicsRanks ?? state.academicsRanks ?? {};
+  const artsCraftEntries: Array<{ name: string; rank?: number }> =
+    state.skills?.artsCraftEntries ?? state.artsCraftEntries ?? [];
+
+  let academicsRank = 0;
+  for (const entry of academicsEntries) {
+    academicsRank += entry.rank ?? 0;
+  }
+  for (const field in academicsRanks) {
+    academicsRank += academicsRanks[field] ?? 0;
+  }
+  if (skillRanks['Academics']) {
+    academicsRank += skillRanks['Academics'];
+  }
+  const hasAcademics = academicsRank >= 1;
+
+  let artsCraftRank = 0;
+  for (const entry of artsCraftEntries) {
+    artsCraftRank += entry.rank ?? 0;
+  }
+  if (skillRanks['Arts & Craft']) {
+    artsCraftRank += skillRanks['Arts & Craft'];
+  }
+  const hasArtsCraft = artsCraftRank >= 1;
+
+  const distinctSkillsSet = new Set<string>();
+  for (const sk of SKILLS) {
+    if ((skillRanks[sk.name] ?? 0) >= 1) {
+      distinctSkillsSet.add(sk.name);
+    }
+  }
+  for (const entry of academicsEntries) {
+    if ((entry.rank ?? 0) >= 1 && entry.name) {
+      distinctSkillsSet.add(`Academics:${entry.name}`);
+    }
+  }
+  for (const field in academicsRanks) {
+    if ((academicsRanks[field] ?? 0) >= 1) {
+      distinctSkillsSet.add(`Academics:${field}`);
+    }
+  }
+  for (const entry of artsCraftEntries) {
+    if ((entry.rank ?? 0) >= 1 && entry.name) {
+      distinctSkillsSet.add(`Arts & Craft:${entry.name}`);
+    }
+  }
+  if ((skillRanks['Arts & Craft'] ?? 0) >= 1 && artsCraftEntries.length === 0) {
+    distinctSkillsSet.add('Arts & Craft');
+  }
+  if ((skillRanks['Academics'] ?? 0) >= 1 && academicsEntries.length === 0 && Object.keys(academicsRanks).length === 0) {
+    distinctSkillsSet.add('Academics');
+  }
+
+  const uniqueSkillsCount = distinctSkillsSet.size;
+  const hasAtLeast4Skills = uniqueSkillsCount >= 4;
+
+  const exceededSkills: string[] = [];
+  for (const [sk, rank] of Object.entries(skillRanks)) {
+    if (typeof rank === 'number' && rank > 2) {
+      exceededSkills.push(sk);
+    }
+  }
+  for (const entry of academicsEntries) {
+    if ((entry.rank ?? 0) > 2) {
+      exceededSkills.push(`Academics (${entry.name})`);
+    }
+  }
+  for (const [field, rank] of Object.entries(academicsRanks)) {
+    if (typeof rank === 'number' && rank > 2) {
+      exceededSkills.push(`Academics (${field})`);
+    }
+  }
+  for (const entry of artsCraftEntries) {
+    if ((entry.rank ?? 0) > 2) {
+      exceededSkills.push(`Arts & Craft (${entry.name})`);
+    }
+  }
+
+  const maxRankValid = exceededSkills.length === 0;
+  const isValid = hasAcademics && hasArtsCraft && hasAtLeast4Skills && maxRankValid;
+
+  return {
+    isActive: true,
+    hasAcademics,
+    hasArtsCraft,
+    uniqueSkillsCount,
+    hasAtLeast4Skills,
+    maxRankValid,
+    isValid,
+    details: {
+      academicsRank,
+      artsCraftRank,
+      exceededSkills,
+    },
+  };
 }
 
