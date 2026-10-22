@@ -9,6 +9,8 @@ import {
   calculateTotalHP,
   getHitDiceBreakdown,
   calculateAV,
+  calculateInitiativeBonus,
+  formatModifier,
 } from '../logic/state';
 
 const FinishingTouches: React.FC = () => {
@@ -19,6 +21,8 @@ const FinishingTouches: React.FC = () => {
   const totalHP = calculateTotalHP(state, ORIGINS, finalStats, RACES);
   const totalHD = getHitDiceBreakdown(state, ORIGINS);
   const totalAV = calculateAV(state, finalStats, undefined, RACES);
+  const profBonus = state.identity?.level ? Math.floor((state.identity.level - 1) / 4) + 2 : 2;
+  const initiativeBonus = calculateInitiativeBonus(state, finalStats, profBonus, RACES);
 
   const onSaveJSON = () => handleExportJSON(state);
   const onSavePDF = () => handleExportPDF(state);
@@ -95,6 +99,10 @@ const FinishingTouches: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Armor Value (AV)</span>
               <strong style={{ color: '#fff' }}>{totalAV}</strong>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.4rem' }}>
+              <span style={{ color: '#a0a5c0' }}>Initiative</span>
+              <strong style={{ color: '#fff' }}>{formatModifier(initiativeBonus)}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.4rem' }}>
               <span style={{ color: '#a0a5c0' }}>Hit Dice</span>

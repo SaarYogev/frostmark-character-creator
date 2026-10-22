@@ -11,6 +11,7 @@ import {
   getMaxSkillRank,
   computeFreeSkillPools,
   computeSkillPointsSummary,
+  validateMasterOfSome,
 } from '../logic/state';
 import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
@@ -23,14 +24,14 @@ const SkillsSelector: React.FC = () => {
   const currentLevel = state.identity?.level ?? 1;
   const profBonus = getProficiencyBonus(currentLevel);
   const finalStats = getFinalCharacteristics(state, RACES);
-  const maxSkillRank = getMaxSkillRank(currentLevel);
+  const { apLimit: totalAPLimit, apRemaining, sanitizedState: integratedState } = getGlobalAPSummary(state);
+  const maxSkillRank = getMaxSkillRank(currentLevel, integratedState);
+  const masterOfSomeValidation = validateMasterOfSome(integratedState);
 
   const locked = state.lockedChoices ?? {};
   const lockedSkillRanks = locked.skillRanks ?? {};
   const lockedAcademics = locked.academicsEntries ?? [];
   const lockedArts = locked.artsCraftEntries ?? [];
-
-  const { apLimit: totalAPLimit, apRemaining, sanitizedState: integratedState } = getGlobalAPSummary(state);
 
   const bgName = typeof integratedState.background === 'object' ? integratedState.background?.name : integratedState.background;
   const bgData = BACKGROUNDS.find((b) => b.name === bgName);
@@ -76,6 +77,7 @@ const SkillsSelector: React.FC = () => {
 
     if (nextRank < minRank) return;
     if (!manualSkills && nextRank > 5) return;
+    if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
 
     dispatch({
       type: 'SET_SKILLS',
@@ -128,6 +130,7 @@ const SkillsSelector: React.FC = () => {
     if (nextRank < minRank) return;
     if (!manualSkills && nextRank > 5) return;
     if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
+    if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
 
     const nextEntries = academicsEntries.map((e, idx) => {
       if (idx !== index) return e;
@@ -179,6 +182,7 @@ const SkillsSelector: React.FC = () => {
 
     if (nextRank < minRank) return;
     if (!manualSkills && nextRank > 5) return;
+    if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
     if (delta > 0 && nextRank > maxSkillRank && !manualSkills) return;
 
     const nextEntries = artsCraftEntries.map((e, idx) => {
@@ -249,6 +253,59 @@ const SkillsSelector: React.FC = () => {
             }}
           >
             <strong>🌍 Racial Skill Restriction:</strong> The {racialFree} free skill points from your race/subrace can only be spent on: <strong>{racialRestrictSkills.join(', ')}</strong>.
+          </div>
+        )}
+
+        {masterOfSomeValidation.isActive && (
+          <div
+            className="master-of-some-banner"
+            style={{
+              padding: '0.85rem 1.15rem',
+              background: 'rgba(52, 152, 219, 0.12)',
+              border: '1px solid rgba(52, 152, 219, 0.35)',
+              borderRadius: '8px',
+              marginBottom: '1.5rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '1.2rem' }}>🎭</span>
+              <strong style={{ color: '#60a5fa', fontSize: '1rem' }}>Master of Some Active</strong>
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  background: 'rgba(96, 165, 250, 0.2)',
+                  color: '#93c5fd',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                }}
+              >
+                +5 Free Skill Points Granted
+              </span>
+            </div>
+            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              With Master of Some, you gain 5 free skill points and half your proficiency bonus to initiative checks. All skill ranks are restricted to a maximum of rank 2.
+            </p>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+              }}
+            >
+              <div style={{ color: masterOfSomeValidation.hasAcademics ? '#4ade80' : '#f87171' }}>
+                {masterOfSomeValidation.hasAcademics ? '✓' : '⚠️'} 1+ Point in Academics {masterOfSomeValidation.hasAcademics ? '(Satisfied)' : '(Required)'}
+              </div>
+              <div style={{ color: masterOfSomeValidation.hasArtsCraft ? '#4ade80' : '#f87171' }}>
+                {masterOfSomeValidation.hasArtsCraft ? '✓' : '⚠️'} 1+ Point in Arts & Craft {masterOfSomeValidation.hasArtsCraft ? '(Satisfied)' : '(Required)'}
+              </div>
+              <div style={{ color: masterOfSomeValidation.hasAtLeast4Skills ? '#4ade80' : '#f87171' }}>
+                {masterOfSomeValidation.hasAtLeast4Skills ? '✓' : '⚠️'} At least 4 different skills ({masterOfSomeValidation.uniqueSkillsCount} / 4)
+              </div>
+              <div style={{ color: masterOfSomeValidation.maxRankValid ? '#4ade80' : '#f87171' }}>
+                {masterOfSomeValidation.maxRankValid ? '✓' : '⚠️'} Max skill rank ≤ 2 {masterOfSomeValidation.maxRankValid ? '(Enforced)' : '(Violation)'}
+              </div>
+            </div>
           </div>
         )}
 
@@ -329,7 +386,9 @@ const SkillsSelector: React.FC = () => {
               } else if (rank >= 5) {
                 plusTooltip = 'Max rank 5 reached';
               } else if (isLevelRestricted) {
-                if (maxSkillRank === 3) {
+                if (maxSkillRank === 2) {
+                  plusTooltip = 'Master of Some restricts all skill ranks to a maximum of 2.';
+                } else if (maxSkillRank === 3) {
                   plusTooltip = 'Requires level 4 to advance to rank 4.';
                 } else if (maxSkillRank === 4) {
                   plusTooltip = 'Requires level 8 and a relevant feat/ability to advance to rank 5.';

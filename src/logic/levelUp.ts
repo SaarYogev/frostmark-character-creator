@@ -74,7 +74,7 @@ export function computeLevelUpPreview(
 
   const apGain = profBonusIncreased(targetLevel) ? 2 : 0;
   const potentialGain = getPotentialGain(state, targetLevel, originsData);
-  const maxSkillRank = getMaxSkillRank(targetLevel);
+  const maxSkillRank = getMaxSkillRank(targetLevel, state);
   const profBonus = getProficiencyBonus(targetLevel);
 
   return {

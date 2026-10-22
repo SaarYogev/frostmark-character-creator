@@ -202,6 +202,40 @@ const AOSelector: React.FC = () => {
       if (isAlreadyPickedElsewhere) {
         return;
       }
+
+      /*
+       * Master of Some and Jack of all Trades are mutually exclusive by design rules.
+       */
+      const lowerTarget = abilityId.toLowerCase();
+      const isPickingMaster = lowerTarget.includes('master-of-some') || lowerTarget.includes('master of some');
+      const isPickingJack = lowerTarget.includes('jack-of-all-trades') || lowerTarget.includes('jack of all trades');
+
+      const isMasterAlreadyPicked = Object.entries(allLevelSelections).some(([lvlStr, s]) => {
+        const otherLvl = parseInt(lvlStr, 10);
+        const p = String(s?.primaryAbility ?? '').toLowerCase();
+        const sc = String(s?.secondaryAbility ?? '').toLowerCase();
+        if (otherLvl === targetLevel) {
+          return isPrimarySlot ? sc.includes('master-of-some') : p.includes('master-of-some');
+        }
+        return p.includes('master-of-some') || sc.includes('master-of-some');
+      });
+
+      const isJackAlreadyPicked = Object.entries(allLevelSelections).some(([lvlStr, s]) => {
+        const otherLvl = parseInt(lvlStr, 10);
+        const p = String(s?.primaryAbility ?? '').toLowerCase();
+        const sc = String(s?.secondaryAbility ?? '').toLowerCase();
+        if (otherLvl === targetLevel) {
+          return isPrimarySlot ? sc.includes('jack-of-all-trades') : p.includes('jack-of-all-trades');
+        }
+        return p.includes('jack-of-all-trades') || sc.includes('jack-of-all-trades');
+      });
+
+      if (isPickingMaster && isJackAlreadyPicked) {
+        return;
+      }
+      if (isPickingJack && isMasterAlreadyPicked) {
+        return;
+      }
     }
 
     let updatedPrimaryAO = levelSel.primaryAO;
@@ -1265,11 +1299,32 @@ const AOSelector: React.FC = () => {
                                     (pickedInfo.level !== lvl || pickedInfo.slot !== "Secondary") &&
                                     !isPickedForCurrentLevel
                                   );
+
+                                  const lowerAbId = String(ab.id || '').toLowerCase();
+                                  const lowerAbName = String(ab.name || '').toLowerCase();
+                                  const isJack = lowerAbId.includes('jack-of-all-trades') || lowerAbName.includes('jack of all trades');
+                                  const isMaster = lowerAbId.includes('master-of-some') || lowerAbName.includes('master of some');
+
+                                  const isMasterPicked = Array.from(allPickedAbilities.keys()).some((id) => id.includes('master-of-some'));
+                                  const isJackPicked = Array.from(allPickedAbilities.keys()).some((id) => id.includes('jack-of-all-trades'));
+
+                                  const isExclusiveConflict =
+                                    (isJack && isMasterPicked) ||
+                                    (isMaster && isJackPicked);
+
+                                  const conflictReason = isJack
+                                    ? 'Cannot pick Jack of all Trades: Master of Some is already selected.'
+                                    : isMaster
+                                    ? 'Cannot pick Master of Some: Jack of all Trades is already selected.'
+                                    : '';
+
                                   const isSelected = isPickedThisLevel || isPickedForCurrentLevel;
-                                  const isDisabled = isPickedElsewhere;
+                                  const isDisabled = isPickedElsewhere || isExclusiveConflict;
 
                                   const cardTitle = isLocked
                                     ? "Ability was locked at a previous level. Enable Full Edit Mode to change."
+                                    : isExclusiveConflict
+                                    ? conflictReason
                                     : isPickedElsewhere
                                     ? `Already selected at Level ${pickedInfo?.level} (${pickedInfo?.slot})`
                                     : "";
@@ -1297,6 +1352,11 @@ const AOSelector: React.FC = () => {
                                           {!isLocked && isPickedThisLevel && <span className="selected-badge"> ✓ Selected</span>}
                                           {isPickedForCurrentLevel && <span className="selected-badge"> ✓ Selected (Lvl {currentLevel})</span>}
                                           {isPickedElsewhere && <span className="selected-badge" style={{ color: "var(--text-secondary)" }}>Lvl {pickedInfo?.level}</span>}
+                                          {isExclusiveConflict && (
+                                            <span className="selected-badge" style={{ color: "#eb5e55", background: "rgba(235, 94, 85, 0.15)" }}>
+                                              ⚠️ Incompatible
+                                            </span>
+                                          )}
                                         </div>
                                         <h4 className="ability-card-title">{ab.name}</h4>
                                       </div>
