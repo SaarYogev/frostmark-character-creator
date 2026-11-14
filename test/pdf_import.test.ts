@@ -7,10 +7,12 @@ import '@testing-library/jest-dom';
 import { PDFDocument } from 'pdf-lib';
 import { importFromPDF } from '../src/logic/pdfImport';
 import { exportToPDF } from '../src/logic/pdf';
-import { getInitialState, getFinalCharacteristics, computeSkillPointsSummary, calculateSpentAccomplishmentPoints } from '../src/logic/state';
+import { getInitialState, getFinalCharacteristics, computeSkillPointsSummary, calculateSpentAccomplishmentPoints, calculatePotentialRemaining, calculatePotentialSpent, calculatePotentialGained } from '../src/logic/state';
+import { computeLevelUpPreview, levelUp } from '../src/logic/levelUp';
 import { getGlobalAPSummary } from '../src/utils/stateSanitizer';
 import { RACES } from '../src/data/races';
 import { BACKGROUNDS } from '../src/data/backgrounds';
+import { ORIGINS } from '../src/data/origins';
 import { CharacterProvider, useCharacter } from '../src/contexts/CharacterContext';
 import RaceSelector from '../src/components/RaceSelector';
 import BackgroundSelector from '../src/components/BackgroundSelector';
@@ -722,5 +724,44 @@ describe('PDF Import: importFromPDF', () => {
         teardown();
       }
     });
+
+    it('correctly imports Occult Student with multi-paragraph abilities, Spellbook, and calculates 0 potential before level up and +60 on level up to 3', async () => {
+      const pdfPath = '/home/saar/Downloads/Iramor (2).pdf';
+      if (!fs.existsSync(pdfPath)) return;
+
+      const pdfBytes = new Uint8Array(fs.readFileSync(pdfPath));
+      const imported = await importFromPDF(pdfBytes, RACES, BACKGROUNDS, ORIGINS);
+
+      expect(imported.level).toBe(2);
+      expect(imported.primaryAO).toBe('Occult Student');
+      expect(imported.levelSelections[1]?.primaryAbility).toBe('custom-arcane-tradition-scribes-');
+      expect(imported.levelSelections[1]?.secondaryAbility).toBe('occult-student-1-secondary-spellbook');
+      expect(imported.levelSelections[2]?.primaryAbility).toBe('occult-student-2-primary-arcane-recovery');
+      expect(imported.levelSelections[2]?.secondaryAbility).toBe('occult-student-1-secondary-arcane-tradition-war-magic-');
+      expect(imported.levelSelections[3]).toBeUndefined();
+
+      // Transcribed spells and starting free spells should be populated
+      expect(imported.spellcasting?.spellbookSpells?.length).toBeGreaterThan(0);
+      expect(imported.spellcasting?.freeSpells?.length).toBeGreaterThan(0);
+
+      // Potential at Level 2: 120 gained - 120 spent = 0 remaining
+      expect(calculatePotentialGained(imported, ORIGINS)).toBe(120);
+      expect(calculatePotentialSpent(imported, RACES)).toBe(120);
+      expect(calculatePotentialRemaining(imported, ORIGINS, RACES)).toBe(0);
+
+      // Level up preview to level 3 should predict +60 Potential for Occult Student
+      const preview = computeLevelUpPreview(imported, ORIGINS, { racesData: RACES });
+      expect(preview.targetLevel).toBe(3);
+      expect(preview.potentialGain).toBe(60);
+
+      // Level up to Level 3 should yield 180 total gained and 60 remaining (before new spell purchases)
+      const leveled = levelUp(imported, ORIGINS, { racesData: RACES });
+      expect(leveled.level).toBe(3);
+      expect(leveled.potentialGained).toBe(180);
+      expect(calculatePotentialGained(leveled, ORIGINS)).toBe(180);
+      expect(calculatePotentialSpent(leveled, RACES)).toBe(120);
+      expect(calculatePotentialRemaining(leveled, ORIGINS, RACES)).toBe(60);
+    });
   });
 });
+

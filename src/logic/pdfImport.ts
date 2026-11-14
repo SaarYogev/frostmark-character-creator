@@ -9,7 +9,7 @@ import { CharacterState, DEFAULT_CHARACTER, LockedChoices } from '../types/Chara
 import { AbilityItem } from '../types/AO';
 import { DEFAULT_RACE_STATE } from '../types/Race';
 import { DEFAULT_BACKGROUND } from '../types/Background';
-import { getRacialStatBonuses } from './state';
+import { getRacialStatBonuses, hasSpellbookAbility, getSpellbookStartingFreeSpells } from './state';
 import { deduplicateEquipmentList } from './equipmentUtils';
 
 function safeGetText(form: any, fieldName: string): string {
@@ -557,10 +557,12 @@ export async function importFromPDF(
 
   const parseAbilityText = (rawText: string, isEssential: boolean, defaultSlot?: 'Primary' | 'Secondary') => {
     if (!rawText) return;
-    const blocks = rawText.split(/\r?\n\r?\n/).map((b) => b.trim()).filter(Boolean);
+    const blocks = rawText.includes('===')
+      ? rawText.split(/(?=(?:^|\n)===\s)/).map((b) => b.trim()).filter(Boolean)
+      : rawText.split(/\r?\n\r?\n/).map((b) => b.trim()).filter(Boolean);
 
     for (const block of blocks) {
-      const headerMatch = block.match(/^===\s*(.+?)(?:\s*\((.*?)\s*·\s*Lv\.(\d+)\))?\s*===\s*\n?([\s\S]*)$/);
+      const headerMatch = block.match(/^===\s*(.+?)(?:\s*\(([^()]+?)\s*·\s*Lv\.(\d+)\))?\s*===\s*\n?([\s\S]*)$/);
       let candidateName = '';
       let originInHeader: string | undefined;
       let levelInHeader: number | undefined;
@@ -602,17 +604,34 @@ export async function importFromPDF(
         continue;
       }
 
-      const premade =
-        ABILITIES.find((a) => {
-          if (a.name.toLowerCase() !== nameLower) return false;
-          if (originInHeader && a.origin.toLowerCase() !== originInHeader.toLowerCase()) return false;
-          return true;
-        }) || ABILITIES.find((a) => a.name.toLowerCase() === nameLower);
+      const candidates = ABILITIES.filter((a) => {
+        if (a.name.toLowerCase() !== nameLower) return false;
+        if (originInHeader && a.origin.toLowerCase() !== originInHeader.toLowerCase()) return false;
+        return true;
+      });
+
+      let premade = null;
+      if (candidates.length === 1) {
+        premade = candidates[0];
+      } else if (candidates.length > 1) {
+        if (desc) {
+          const firstLineDesc = desc.split(/\r?\n/)[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+          premade = candidates.find((c) => {
+            const cDesc = c.desc.toLowerCase().replace(/[^a-z0-9]/g, "");
+            return firstLineDesc.length > 0 && cDesc.includes(firstLineDesc);
+          });
+        }
+        if (!premade && defaultSlot) {
+          premade = candidates.find((c) => c.selection === defaultSlot);
+        }
+        if (!premade) premade = candidates[0];
+      }
 
       if (premade) {
         const targetLvl = levelInHeader ?? premade.level ?? 1;
         const origin = premade.origin || originInHeader || primaryAO || 'Devotion';
-        assignAbilityToSlot(premade.id, origin, targetLvl, defaultSlot, true);
+        const preferredSlot = (premade.selection as 'Primary' | 'Secondary') || defaultSlot;
+        assignAbilityToSlot(premade.id, origin, targetLvl, preferredSlot, true);
         continue;
       }
 
@@ -713,6 +732,17 @@ export async function importFromPDF(
     });
   }
 
+  const isSpellbookUser = hasSpellbookAbility({
+    ao: { levelSelections },
+    levelSelections,
+  });
+  const spellbookSpells: string[] = isSpellbookUser
+    ? spells.map((s) => s.name)
+    : [];
+  const freeSpells: string[] = isSpellbookUser
+    ? Array.from(getSpellbookStartingFreeSpells(spells, spellbookSpells))
+    : [];
+
   const hasManualHP = Boolean(maxHPText);
   const hasOutOfRangeBaseStats = Object.values(baseCharacteristics).some(
     (score) => score < 6 || score > 17
@@ -767,6 +797,8 @@ export async function importFromPDF(
       spells,
       slots,
       souls,
+      spellbookSpells,
+      freeSpells,
     },
     customFeatures,
     customAbilities,
@@ -832,6 +864,8 @@ export async function importFromPDF(
       cantrips: [...cantrips],
       spells: [...spells],
       spellSlots: { ...slots },
+      spellbookSpells: [...spellbookSpells],
+      freeSpells: [...freeSpells],
       poolAOs: [...selectedAOs],
       levelSelections: { ...levelSelections },
       goldAmount: goldAmount,
