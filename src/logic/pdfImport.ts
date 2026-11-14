@@ -5,7 +5,7 @@ import { BACKGROUNDS } from '../data/backgrounds';
 import { ORIGINS } from '../data/origins';
 import { ARMOR, WEAPONS, findArmorData } from '../data/equipment';
 import { ABILITIES } from '../data/abilities';
-import { CharacterState, DEFAULT_CHARACTER } from '../types/Character';
+import { CharacterState, DEFAULT_CHARACTER, LockedChoices } from '../types/Character';
 import { AbilityItem } from '../types/AO';
 import { DEFAULT_RACE_STATE } from '../types/Race';
 import { DEFAULT_BACKGROUND } from '../types/Background';
@@ -821,6 +821,22 @@ export async function importFromPDF(
     equipment: {
       equipmentList: finalEquipmentList,
       manualEquipment: false,
+    },
+    lockedChoices: {
+      skillRanks: { ...skillRanks },
+      academicsEntries: [...academicsEntries],
+      artsCraftEntries: [],
+      savingThrowsProficient: { ...savingThrowsProficient },
+      armorProficiencies: { ...armorProficiencies },
+      weaponProficiencies: [...weaponProficiencies],
+      cantrips: [...cantrips],
+      spells: [...spells],
+      spellSlots: { ...slots },
+      poolAOs: [...selectedAOs],
+      levelSelections: { ...levelSelections },
+      goldAmount: goldAmount,
+      accomplishmentPointsRemaining: importedMetadata?.accomplishmentPointsRemaining,
+      accomplishmentPointsLimit: importedMetadata?.accomplishmentPointsLimit,
     },
     isImported: true,
     importedPdfBytes: pdfBytes instanceof Uint8Array ? new Uint8Array(pdfBytes) : new Uint8Array(pdfBytes),
