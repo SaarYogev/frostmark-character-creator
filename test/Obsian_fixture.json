@@ -1,0 +1,493 @@
+{
+  "campaignPowerLevel": "Heroic",
+  "identity": {
+    "characterName": "Obsian",
+    "playerName": "Yariv",
+    "campaignPowerLevel": "Heroic",
+    "level": 3,
+    "personalityBackstory": "",
+    "appearance": {
+      "age": "16",
+      "height": "",
+      "weight": "",
+      "description": "",
+      "notes": ""
+    }
+  },
+  "race": {
+    "race": "Minotaur",
+    "subrace": "",
+    "customRace": {
+      "name": "",
+      "stats": {},
+      "speed": 6,
+      "languages": [],
+      "traits": []
+    },
+    "manualRaces": false,
+    "racialStatOverrides": {},
+    "racialSkillOverrides": {},
+    "woodElfChoice": "",
+    "halfElfChoice1": "",
+    "halfElfChoice2": ""
+  },
+  "background": {
+    "name": "Hunter",
+    "skills": [
+      "Animal Handling",
+      "Arts & Craft",
+      "Athletics",
+      "Perception",
+      "Stealth",
+      "Survival"
+    ],
+    "gold": 10,
+    "equipment": "Leatherworker's Tools, woodcarver's tools, or Herbalism Kit. A trophy from your most glorious hunt (a piece of a tooth, antler or claw, etc.) and a small pouch containing 10 gp.",
+    "trait": "Expert Survivalist",
+    "legacyTrait": "Expert Survivalist",
+    "traitDesc": "* Expert Tracker: Your experience with naming tracks is so vast that you can by a simple glance determine its origin, granted the track is native to your region.\n* Feeder: Finding food has become second nature for you, and you are automatically able to provide enough food for one day to a number of people equal to your proficiency bonus, including yourself. Provided that the land offers berries, small game, water, and so forth.\n* Income: You can earn a poor lifestyle but you provide your food.",
+    "desc": "You are a hunter. You spent several years mastering your craft. Tracking, stealth, trapping, shooting or crafting, whatever your tactics are, you know your way around wilderness and its inhabitants. You might be a hunter for trade, using your skills to find food and earn coins. You could be employed by a noble house, tending to an area of wilderness for them and aiding them in their hunts. Or even a beast hunter in Beornhelm or Oldwood charged to remove threats to your community.",
+    "category": "General",
+    "origin": "Anywhere",
+    "freeSkillPoints": 4,
+    "builtInRanks": {},
+    "builtInAcademics": {},
+    "restrictSkills": [
+      "Animal Handling",
+      "Arts & Craft",
+      "Athletics",
+      "Perception",
+      "Stealth",
+      "Survival"
+    ]
+  },
+  "baseCharacteristics": {
+    "Brawn": 19,
+    "Dexterity": 16,
+    "Vitality": 16,
+    "Intelligence": 6,
+    "Cunning": 8,
+    "Resolve": 16,
+    "Presence": 18,
+    "Manipulation": 6,
+    "Composure": 10
+  },
+  "ao": {
+    "primaryAO": "Power",
+    "secondaryAO": "Divine Oath",
+    "primaryAOHD": 8,
+    "primaryAOSpellcasting": "Minor",
+    "selectedAOs": [
+      "Power",
+      "Divine Oath"
+    ],
+    "customAOs": [],
+    "customPrimaryAO": {
+      "name": "",
+      "hd": 8,
+      "extraSkills": 0,
+      "spellcasting": "Minor",
+      "desc": ""
+    },
+    "customSecondaryAO": {
+      "name": "",
+      "hd": 8,
+      "extraSkills": 0,
+      "spellcasting": "Minor",
+      "desc": ""
+    },
+    "levelSelections": {
+      "1": {
+        "primaryAbility": "power-1-primary-rage",
+        "primaryAO": "Power",
+        "secondaryAbility": "custom-",
+        "secondaryAO": "Power"
+      },
+      "2": {
+        "primaryAbility": "custom-damage-roll-that-increases-as-you-pick-levels-in-power-which-starts-at-2-",
+        "primaryAO": "Power",
+        "secondaryAbility": "custom-",
+        "secondaryAO": "Power"
+      },
+      "3": {
+        "primaryAbility": "power-3-primary-primal-path-natural-harbinger-",
+        "primaryAO": "Power",
+        "secondaryAO": "Divine Oath",
+        "secondaryAbility": "divine-oath-3-secondary-general-upgrade"
+      }
+    },
+    "customAbilities": [
+      {
+        "id": "custom-",
+        "name": "",
+        "origin": "Power",
+        "level": 1,
+        "selection": "Secondary",
+        "desc": "",
+        "short_desc": "",
+        "full_desc": ""
+      },
+      {
+        "id": "custom-damage-roll-that-increases-as-you-pick-levels-in-power-which-starts-at-2-",
+        "name": "damage roll that increases as you pick levels in [Power], which starts at +2,",
+        "origin": "Power",
+        "level": 2,
+        "selection": "Primary",
+        "desc": "increases to +3 at 9th and +4 at 16th.",
+        "short_desc": "increases to +3 at 9th and +4 at 16th.",
+        "full_desc": "increases to +3 at 9th and +4 at 16th."
+      },
+      {
+        "id": "custom-",
+        "name": "",
+        "origin": "Power",
+        "level": 2,
+        "selection": "Secondary",
+        "desc": "",
+        "short_desc": "",
+        "full_desc": ""
+      },
+      {
+        "id": "custom-",
+        "name": "",
+        "origin": "Power",
+        "level": 3,
+        "selection": "Primary",
+        "desc": "",
+        "short_desc": "",
+        "full_desc": ""
+      },
+      {
+        "id": "custom-your-rage-lasts-for-a-whole-combat-if-the-combat-does-not-have-any-distinct-pauses-in",
+        "name": "Your Rage lasts for a whole combat if the combat does not have any distinct pauses in",
+        "origin": "Power",
+        "level": 3,
+        "selection": "Primary",
+        "desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th.",
+        "short_desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th.",
+        "full_desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th."
+      },
+      {
+        "id": "custom-goring-rush",
+        "name": "Goring Rush",
+        "origin": "Power",
+        "level": 3,
+        "selection": "Primary",
+        "desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action.",
+        "short_desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action.",
+        "full_desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action."
+      },
+      {
+        "id": "custom-hammering-horns",
+        "name": "Hammering Horns",
+        "origin": "Power",
+        "level": 3,
+        "selection": "Primary",
+        "desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you.",
+        "short_desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you.",
+        "full_desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you."
+      }
+    ]
+  },
+  "skills": {
+    "skillRanks": {
+      "Animal Handling": 2,
+      "Perception": 3,
+      "Athletics": 3,
+      "Stealth": 2,
+      "Survival": 3,
+      "Leadership": 2
+    },
+    "academicsEntries": [],
+    "artsCraftEntries": [],
+    "manualSkills": false
+  },
+  "armorClass": 14,
+  "potentialGained": 60,
+  "academicsEntries": [],
+  "combat": {
+    "maxHP": 33,
+    "currentHP": 14,
+    "tempHP": 0,
+    "armorClass": 14,
+    "speed": 6,
+    "totalHD": "1d12, 1d10",
+    "hd": "1d12",
+    "initiativeBonus": 3
+  },
+  "spellcasting": {
+    "cantrips": [],
+    "spells": [
+      {
+        "name": "Elemental Armor",
+        "level": 1
+      }
+    ],
+    "slots": {
+      "1": 1,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0
+    },
+    "souls": {}
+  },
+  "customFeatures": [
+    "spell slots. You purchase them just like your normal spell slots with Potential, but",
+    "you must use Potential you gain from Divine Oath to buy them. Smite spell slots",
+    "must abide by the normal number of spell slot limitations but do so exclusively",
+    "from normal spell slots. For example, you may have seven normal spell slots of",
+    "level 1 and seven Smite spell slots of level 1 with Moderate Spellcasting at the",
+    "same time. Smite spell slots do not require a Soul Mark, Soul Power nor a Soul",
+    "Check when used. You regain all your spent Smite spell slots on a long rest.",
+    "After you attack a creature with a melee weapon attack, you may expend a Smite",
+    "spell slot to deal extra damage to that target, in addition to the weapon’s damage.",
+    "The type of the damage equals one of your Enneade’s favorite damage types.",
+    "When you gain this ability you choose which damage type your Smites will deal",
+    "with for the rest of the game. The extra damage is 10 for a first level spell slot,",
+    "plus 5 for each spell level higher than 1st, to a maximum of 25 extra damage. The",
+    "damage increases by 5 if the target is a favored enemy of your Enneade, to a",
+    "maximum of 30 damage. You cannot use Smite more than once per round.",
+    "Enneade Favorite Damage Type (Choose",
+    "one)",
+    "Favored Enemy",
+    "Riahn Fire or radiant Fiends and undead",
+    "Gera Acid or poison Constructs and undead",
+    "Teranis Lightning or necrotic Celestials and fiends",
+    "Lapuana Force or thunder One creature type of your",
+    "choice",
+    "Borias Bludgeoning or cold Celestials and fey",
+    "Suhlmis Fire or slashing Monstrosities and oozes",
+    "Vegomo Piercing or psychic Animals and beasts",
+    "[Choice: Lightning]",
+    "not gain this benefit if you are blinded, deafened, or incapacitated."
+  ],
+  "customAbilities": [
+    {
+      "id": "custom-",
+      "name": "",
+      "origin": "Power",
+      "level": 1,
+      "selection": "Secondary",
+      "desc": "",
+      "short_desc": "",
+      "full_desc": ""
+    },
+    {
+      "id": "custom-damage-roll-that-increases-as-you-pick-levels-in-power-which-starts-at-2-",
+      "name": "damage roll that increases as you pick levels in [Power], which starts at +2,",
+      "origin": "Power",
+      "level": 2,
+      "selection": "Primary",
+      "desc": "increases to +3 at 9th and +4 at 16th.",
+      "short_desc": "increases to +3 at 9th and +4 at 16th.",
+      "full_desc": "increases to +3 at 9th and +4 at 16th."
+    },
+    {
+      "id": "custom-",
+      "name": "",
+      "origin": "Power",
+      "level": 2,
+      "selection": "Secondary",
+      "desc": "",
+      "short_desc": "",
+      "full_desc": ""
+    },
+    {
+      "id": "custom-",
+      "name": "",
+      "origin": "Power",
+      "level": 3,
+      "selection": "Primary",
+      "desc": "",
+      "short_desc": "",
+      "full_desc": ""
+    },
+    {
+      "id": "custom-your-rage-lasts-for-a-whole-combat-if-the-combat-does-not-have-any-distinct-pauses-in",
+      "name": "Your Rage lasts for a whole combat if the combat does not have any distinct pauses in",
+      "origin": "Power",
+      "level": 3,
+      "selection": "Primary",
+      "desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th.",
+      "short_desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th.",
+      "full_desc": "the violence, this is up to the GM to decide. You can also end your Rage early by\nspending a bonus action. You can rage twice per long rest when you pick this ability, and\nthe number of times you can Rage increases as you gain total levels. At 3rd total level,\nyou can Rage thrice, four times at 6th, five times at 12th, six times at 17th, and unlimited\nat 20th."
+    },
+    {
+      "id": "custom-goring-rush",
+      "name": "Goring Rush",
+      "origin": "Power",
+      "level": 3,
+      "selection": "Primary",
+      "desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action.",
+      "short_desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action.",
+      "full_desc": "Immediately after you use the Dash action on your turn and move at least 4m, you can make one melee attack with your horns as a bonus action."
+    },
+    {
+      "id": "custom-hammering-horns",
+      "name": "Hammering Horns",
+      "origin": "Power",
+      "level": 3,
+      "selection": "Primary",
+      "desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you.",
+      "short_desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you.",
+      "full_desc": "Immediately after you hit a creature with a melee attack as part of the Attack action on your turn, you can use a bonus action to attempt to shove that target with your horns. The target must be no more than one size larger than you and within 1m of you. Unless it succeeds on a Brawn saving throw against a DV equal to 8 + your proficiency bonus + your Brawn modifier, you push it up to 2m away from you."
+    }
+  ],
+  "manualAbilityScores": true,
+  "proficiencies": {
+    "armorProficiencies": {
+      "Light": false,
+      "Medium": false,
+      "Heavy": false,
+      "Shields": false
+    },
+    "savingThrowsProficient": {
+      "Brawn": true,
+      "Dexterity": false,
+      "Vitality": false,
+      "Intelligence": false,
+      "Cunning": false,
+      "Resolve": false,
+      "Presence": true,
+      "Manipulation": false,
+      "Composure": false
+    },
+    "weaponProficiencies": [],
+    "manualProficiencies": false,
+    "goldAmount": 50,
+    "silverAmount": 0,
+    "copperAmount": 0
+  },
+  "equipment": {
+    "equipmentList": [
+      {
+        "name": "Horns",
+        "isWeapon": true,
+        "isCustom": true,
+        "hit": "D20+6",
+        "range": "1",
+        "damage": "1d6+4",
+        "properties": "1",
+        "equipped": true,
+        "quantity": 1
+      },
+      {
+        "name": "Unharmed attack",
+        "isWeapon": true,
+        "isCustom": true,
+        "hit": "D20+6",
+        "range": "1",
+        "damage": "1+4",
+        "properties": "1",
+        "equipped": true,
+        "quantity": 1
+      },
+      {
+        "name": "+2 rage damage",
+        "isWeapon": true,
+        "isCustom": true,
+        "hit": "+0",
+        "range": "",
+        "damage": "",
+        "properties": "",
+        "equipped": true,
+        "quantity": 1
+      }
+    ],
+    "manualEquipment": false
+  },
+  "isImported": true,
+  "bgFreeRemaining": 0,
+  "aoFreeRemaining": 0,
+  "freeSkillPointsRemaining": 0,
+  "hpBonus": 9,
+  "lockedChoices": {
+    "levelSelections": {
+      "1": {
+        "primaryAbility": "power-1-primary-rage",
+        "primaryAO": "Power",
+        "secondaryAbility": "custom-",
+        "secondaryAO": "Power"
+      },
+      "2": {
+        "primaryAbility": "custom-damage-roll-that-increases-as-you-pick-levels-in-power-which-starts-at-2-",
+        "primaryAO": "Power",
+        "secondaryAbility": "custom-",
+        "secondaryAO": "Power"
+      },
+      "3": {
+        "primaryAbility": "power-2-secondary-danger-sense",
+        "primaryAO": "Power",
+        "secondaryAO": "Divine Oath"
+      }
+    },
+    "skillRanks": {
+      "Animal Handling": 2,
+      "Perception": 3,
+      "Athletics": 3,
+      "Stealth": 2,
+      "Survival": 3,
+      "Leadership": 2
+    },
+    "academicsEntries": [],
+    "artsCraftEntries": [],
+    "cantrips": [],
+    "spells": [
+      {
+        "name": "Elemental Armor",
+        "level": 1
+      }
+    ],
+    "spellSlots": {
+      "1": 1,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0
+    },
+    "savingThrowsProficient": {
+      "Brawn": true,
+      "Dexterity": false,
+      "Vitality": false,
+      "Intelligence": false,
+      "Cunning": false,
+      "Resolve": false,
+      "Presence": true,
+      "Manipulation": false,
+      "Composure": false
+    },
+    "armorProficiencies": {
+      "Light": false,
+      "Medium": false,
+      "Heavy": false,
+      "Shields": false
+    },
+    "weaponProficiencies": [],
+    "poolAOs": [
+      "Power",
+      "Divine Oath"
+    ]
+  },
+  "accomplishmentPointsTotal": 16,
+  "manualHP": false,
+  "finalCharacteristics": {
+    "Brawn": 19,
+    "Dexterity": 16,
+    "Vitality": 16,
+    "Intelligence": 6,
+    "Cunning": 8,
+    "Resolve": 16,
+    "Presence": 18,
+    "Manipulation": 6,
+    "Composure": 10
+  }
+}

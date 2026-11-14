@@ -4,7 +4,7 @@ import { Background, DEFAULT_BACKGROUND } from './Background';
 import { BACKGROUNDS } from '../data/backgrounds';
 import { RACES } from '../data/races';
 import { ORIGINS } from '../data/origins';
-import { getRacialStatBonuses } from '../logic/state';
+import { getRacialStatBonuses, getTotalAccomplishmentPointsLimit, calculateSpentAccomplishmentPoints } from '../logic/state';
 import { getRacialSkillBenefits } from '../logic/racialAbilities';
 import { levelUp } from '../logic/levelUp';
 import { BaseCharacteristics, DEFAULT_BASE_CHARACTERISTICS } from './Ability';
@@ -22,6 +22,9 @@ export interface LockedChoices {
   savingThrowsProficient?: Record<string, boolean>;
   armorProficiencies?: Record<string, boolean>;
   weaponProficiencies?: string[];
+  goldAmount?: number;
+  accomplishmentPointsRemaining?: number;
+  accomplishmentPointsLimit?: number;
   poolAOs?: string[];
   levelSelections?: Record<number | string, {
     primaryAbility?: string;
@@ -337,20 +340,87 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
         manualAbilityScores: p.manualAbilityScores ?? state.manualAbilityScores ?? false,
         manualHP: p.manualHP ?? state.manualHP ?? false,
         customFeatures: p.customFeatures ?? state.customFeatures ?? [],
-        lockedChoices: {
-          ...(p.lockedChoices ?? state.lockedChoices ?? {}),
-          levelSelections: {
-            ...((p.lockedChoices ?? state.lockedChoices)?.levelSelections ?? {}),
-            ...Object.fromEntries(
-              Object.entries(levelSelections).filter(
-                ([lvlStr]) => parseInt(lvlStr, 10) < (p.identity?.level ?? p.level ?? 1)
-              )
-            ),
-          },
-        },
+        lockedChoices: (() => {
+          const resolvedCharLevel = p.identity?.level ?? p.level ?? state.identity?.level ?? 1;
+          const isImported = p.isImported ?? state.isImported ?? false;
+          const hasPastProgression = isImported || resolvedCharLevel > 1 || Boolean(p.importedMetadata) || Boolean(p.lockedChoices);
+
+          const resolvedSkillRanks = (() => {
+            const raw = p.skillRanks ?? p.skills?.skillRanks ?? state.skills?.skillRanks ?? {};
+            const res = { ...raw };
+            if (res['Subtlety'] != null && res['Subterfuge'] == null) {
+              res['Subterfuge'] = res['Subtlety'];
+              delete res['Subtlety'];
+            }
+            return res;
+          })();
+          const resolvedAcademics = (p.academicsEntries && p.academicsEntries.length > 0)
+            ? p.academicsEntries
+            : (p.skills?.academicsEntries && p.skills.academicsEntries.length > 0)
+            ? p.skills.academicsEntries
+            : (p.academicsRanks && Object.keys(p.academicsRanks).length > 0)
+            ? Object.entries(p.academicsRanks).map(([name, rank]) => ({ name, rank: Number(rank) }))
+            : (p.academicsFields && Array.isArray(p.academicsFields))
+            ? p.academicsFields.map((name: string) => ({ name, rank: 1 }))
+            : state.skills?.academicsEntries ?? [];
+          const resolvedArts = p.artsCraftEntries ?? p.skills?.artsCraftEntries ?? state.skills?.artsCraftEntries ?? [];
+          const resolvedSaves = p.savingThrowsProficient ?? p.proficiencies?.savingThrowsProficient ?? (state as any).proficiencies?.savingThrowsProficient ?? {};
+          const resolvedArmor = p.armorProficiencies ?? p.proficiencies?.armorProficiencies ?? (state as any).proficiencies?.armorProficiencies ?? {};
+          const resolvedWeapons = p.weaponProficiencies ?? p.proficiencies?.weaponProficiencies ?? (state as any).proficiencies?.weaponProficiencies ?? [];
+          const resolvedGold = p.goldAmount ?? p.proficiencies?.goldAmount ?? (state as any).proficiencies?.goldAmount ?? 10;
+          const resolvedCantrips = p.spellcasting?.cantrips ?? (state as any).spellcasting?.cantrips ?? [];
+          const resolvedSpells = p.spellcasting?.spells ?? (state as any).spellcasting?.spells ?? [];
+          const resolvedSlots = p.spellcasting?.slots ?? (state as any).spellcasting?.slots ?? {};
+          const resolvedPoolAOs = selectedAOs;
+
+          let resolvedAPRemaining = p.accomplishmentPointsRemaining ?? p.importedMetadata?.accomplishmentPointsRemaining ?? p.lockedChoices?.accomplishmentPointsRemaining ?? state.accomplishmentPointsRemaining;
+          const resolvedAPLimit = p.accomplishmentPointsLimit ?? p.importedMetadata?.accomplishmentPointsLimit ?? p.lockedChoices?.accomplishmentPointsLimit ?? state.accomplishmentPointsLimit ?? getTotalAccomplishmentPointsLimit(p);
+
+          if (typeof resolvedAPRemaining !== 'number' && hasPastProgression) {
+            const apSpent = calculateSpentAccomplishmentPoints(p, BACKGROUNDS, ORIGINS, { ignoreGold: true });
+            resolvedAPRemaining = Math.max(0, resolvedAPLimit - apSpent.totalSpent);
+          }
+
+          if (hasPastProgression) {
+            return {
+              skillRanks: { ...(p.lockedChoices?.skillRanks ?? resolvedSkillRanks) },
+              academicsEntries: [...(p.lockedChoices?.academicsEntries ?? resolvedAcademics)],
+              artsCraftEntries: [...(p.lockedChoices?.artsCraftEntries ?? resolvedArts)],
+              savingThrowsProficient: { ...(p.lockedChoices?.savingThrowsProficient ?? resolvedSaves) },
+              armorProficiencies: { ...(p.lockedChoices?.armorProficiencies ?? resolvedArmor) },
+              weaponProficiencies: [...(p.lockedChoices?.weaponProficiencies ?? resolvedWeapons)],
+              cantrips: Array.from(new Set([...(p.lockedChoices?.cantrips ?? []), ...resolvedCantrips])),
+              spells: [...(p.lockedChoices?.spells ?? resolvedSpells)],
+              spellSlots: { ...(p.lockedChoices?.spellSlots ?? resolvedSlots) },
+              poolAOs: Array.from(new Set([...(p.lockedChoices?.poolAOs ?? []), ...resolvedPoolAOs])),
+              goldAmount: p.lockedChoices?.goldAmount ?? resolvedGold,
+              accomplishmentPointsRemaining: p.lockedChoices?.accomplishmentPointsRemaining ?? resolvedAPRemaining,
+              accomplishmentPointsLimit: p.lockedChoices?.accomplishmentPointsLimit ?? resolvedAPLimit,
+              levelSelections: {
+                ...(p.lockedChoices?.levelSelections ?? {}),
+                ...Object.fromEntries(
+                  Object.entries(levelSelections).filter(
+                    ([lvlStr]) => parseInt(lvlStr, 10) < resolvedCharLevel
+                  )
+                ),
+              },
+            };
+          }
+          return p.lockedChoices ?? state.lockedChoices;
+        })(),
         importedPdfBytes: p.importedPdfBytes ?? state.importedPdfBytes,
         importedMetadata: p.importedMetadata ?? state.importedMetadata,
-        accomplishmentPointsRemaining: p.accomplishmentPointsRemaining ?? p.importedMetadata?.accomplishmentPointsRemaining ?? state.accomplishmentPointsRemaining,
+        accomplishmentPointsRemaining: (() => {
+          let rem = p.accomplishmentPointsRemaining ?? p.importedMetadata?.accomplishmentPointsRemaining ?? p.lockedChoices?.accomplishmentPointsRemaining ?? state.accomplishmentPointsRemaining;
+          const isImp = Boolean(p.isImported ?? state.isImported ?? false);
+          const lvl = p.identity?.level ?? p.level ?? 1;
+          if (typeof rem !== 'number' && (isImp || lvl > 1)) {
+            const limit = p.accomplishmentPointsLimit ?? p.importedMetadata?.accomplishmentPointsLimit ?? getTotalAccomplishmentPointsLimit(p);
+            const apSpent = calculateSpentAccomplishmentPoints(p, BACKGROUNDS, ORIGINS, { ignoreGold: true });
+            rem = Math.max(0, limit - apSpent.totalSpent);
+          }
+          return rem;
+        })(),
         bgFreeRemaining: p.bgFreeRemaining ?? p.importedMetadata?.bgFreeRemaining ?? state.bgFreeRemaining,
         aoFreeRemaining: p.aoFreeRemaining ?? p.importedMetadata?.aoFreeRemaining ?? state.aoFreeRemaining,
         freeSkillPointsRemaining: p.freeSkillPointsRemaining ?? p.importedMetadata?.freeSkillPointsRemaining ?? state.freeSkillPointsRemaining,
@@ -463,8 +533,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
     case 'SET_CHARACTERISTICS':
       return {
         ...state,
-        importedMetadata: undefined,
-        accomplishmentPointsRemaining: undefined,
+        importedMetadata: state.lockedChoices ? state.importedMetadata : undefined,
+        accomplishmentPointsRemaining: state.lockedChoices ? state.accomplishmentPointsRemaining : undefined,
         baseCharacteristics: {
           ...state.baseCharacteristics,
           ...action.payload,
@@ -490,8 +560,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       }
       return {
         ...state,
-        importedMetadata: undefined,
-        accomplishmentPointsRemaining: undefined,
+        importedMetadata: state.lockedChoices ? state.importedMetadata : undefined,
+        accomplishmentPointsRemaining: state.lockedChoices ? state.accomplishmentPointsRemaining : undefined,
         ao: nextAO,
       };
     }
@@ -502,11 +572,11 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       };
       return {
         ...state,
-        importedMetadata: undefined,
-        accomplishmentPointsRemaining: undefined,
-        freeSkillPointsRemaining: undefined,
-        bgFreeRemaining: undefined,
-        aoFreeRemaining: undefined,
+        importedMetadata: state.lockedChoices ? state.importedMetadata : undefined,
+        accomplishmentPointsRemaining: state.lockedChoices ? state.accomplishmentPointsRemaining : undefined,
+        freeSkillPointsRemaining: state.lockedChoices ? state.freeSkillPointsRemaining : undefined,
+        bgFreeRemaining: state.lockedChoices ? state.bgFreeRemaining : undefined,
+        aoFreeRemaining: state.lockedChoices ? state.aoFreeRemaining : undefined,
         skills: updatedSkills,
         skillRanks: updatedSkills.skillRanks,
         manualSkills: updatedSkills.manualSkills ?? state.manualSkills,
@@ -519,8 +589,8 @@ export function characterReducer(state: CharacterState, action: CharacterAction)
       };
       return {
         ...state,
-        importedMetadata: undefined,
-        accomplishmentPointsRemaining: undefined,
+        importedMetadata: state.lockedChoices ? state.importedMetadata : undefined,
+        accomplishmentPointsRemaining: state.lockedChoices ? state.accomplishmentPointsRemaining : undefined,
         proficiencies: updatedProf,
         manualProficiencies: updatedProf.manualProficiencies ?? state.manualProficiencies,
         goldAmount: updatedProf.goldAmount ?? state.goldAmount,

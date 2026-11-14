@@ -10,6 +10,7 @@ import {
 } from './state';
 import { OriginData } from '../data/origins';
 import { CharacterState } from '../types/Character';
+import { getGlobalAPSummary } from '../utils/stateSanitizer';
 
 const DEFAULT_STARTING_AP = 16;
 
@@ -242,7 +243,19 @@ export function levelUp(
       ...(prevLocked.levelSelections ?? {}),
       ...(prevLevelSelections ?? {}),
     },
+    goldAmount: prevLocked.goldAmount ?? ((state as any).proficiencies?.goldAmount ?? (state as any).goldAmount ?? 10),
+    accomplishmentPointsRemaining: (() => {
+      const apSummary = getGlobalAPSummary(state);
+      return apSummary.apRemaining + apGain;
+    })(),
+    accomplishmentPointsLimit: (() => {
+      const apSummary = getGlobalAPSummary(state);
+      return apSummary.apLimit + apGain;
+    })(),
   };
+
+  const nextAPRemaining = nextLockedChoices.accomplishmentPointsRemaining;
+  const nextAPLimit = nextLockedChoices.accomplishmentPointsLimit;
 
   return {
     ...state,
@@ -252,6 +265,8 @@ export function levelUp(
     hpBonus: (state.hpBonus ?? 0) + deltaHP,
     potentialGained: totalPotentialGained,
     accomplishmentPointsTotal: (state.accomplishmentPointsTotal ?? DEFAULT_STARTING_AP) + apGain,
+    accomplishmentPointsRemaining: nextAPRemaining,
+    accomplishmentPointsLimit: nextAPLimit,
     levelSelections: nextLevelSelections,
     ao: {
       ...(state.ao ?? {}),
