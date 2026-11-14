@@ -1,9 +1,27 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HomePage } from '../components/HomePage';
 
 describe('HomePage', () => {
+  let store: Record<string, string> = {};
+
+  beforeEach(() => {
+    store = {};
+    const mockStorage = {
+      getItem: (key: string) => store[key] || null,
+      setItem: (key: string, value: string) => {
+        store[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete store[key];
+      },
+      clear: () => {
+        store = {};
+      },
+    };
+    vi.stubGlobal('localStorage', mockStorage);
+  });
   it('renders homepage title and create new character button', () => {
     const onSelectCharacter = vi.fn();
     const onCreateNew = vi.fn();

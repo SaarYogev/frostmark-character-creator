@@ -665,7 +665,12 @@ export function computeSkillPointsSummary(
   };
 }
 
-export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: any[], originsData: OriginData[] = ORIGINS) {
+export function calculateSpentAccomplishmentPoints(
+  state: any,
+  backgroundsData: any[],
+  originsData: OriginData[] = ORIGINS,
+  options?: { ignoreGold?: boolean }
+) {
   let otherSpent = 0;
 
   const { skillsSpent } = computeSkillPointsSummary(state, backgroundsData, originsData);
@@ -722,7 +727,8 @@ export function calculateSpentAccomplishmentPoints(state: any, backgroundsData: 
   }
 
   const goldAmount = state.proficiencies?.goldAmount ?? state.goldAmount ?? 10;
-  if (goldAmount > bgGold) {
+  const shouldIgnoreGold = Boolean(options?.ignoreGold || state.lockedChoices?.goldAmount !== undefined);
+  if (!shouldIgnoreGold && goldAmount > bgGold) {
     const excess = goldAmount - bgGold;
     otherSpent += Math.ceil(excess / 25);
   }
@@ -834,6 +840,8 @@ export function exportCharacterJSON(state: any, raceData?: any[]): string {
     },
     baseCharacteristics: finalStats,
     finalCharacteristics: finalStats,
+    lockedChoices: state.lockedChoices,
+    accomplishmentPointsRemaining: state.accomplishmentPointsRemaining ?? state.lockedChoices?.accomplishmentPointsRemaining,
   };
   return JSON.stringify(exported, null, 2);
 }
